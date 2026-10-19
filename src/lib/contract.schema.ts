@@ -1,10 +1,22 @@
 import { z } from "zod";
+import { validateStatePair } from "./state-machine";
 
 /**
- * 软件合同 Schema (v1.1.3)
- * 严格对齐《Stagent 系统架构设计规范 v1.1.3》§9.1 与 §9.1.1。
+ * 软件合同 Schema (v1.2.0)
+ * 严格对齐《Stagent 系统架构设计规范 v1.2.1》§9.1 与 §9.1.1。
  * 本文件是全工程唯一合同契约（红线一：Schema 即宪法）。
+ *
+ * v1.2.0 相对 v1.1.3 的增量：
+ *  - 新增 `contract_revision`：任何 Scope/命令/预算/网络/环境/Worker/验证命令变更均递增
+ *  - 新增 `worker_spec`（必填）：声明 adapter 与执行控制模式，承载 GATEWAY_ENFORCED 不变式
+ *  - 新增 `conversation_ref?` / `supervisor_metadata?`：建议溯源与成熟度评估
+ *  - `creator` 由 `"tech_lead"` 改为 `"supervisor"`（ADR-007 双 Agent 术语归一）
+ *  - `approval.approved_revision?`：记录被批准时的合同版本，用于防 TOCTOU
+ *  - 状态组合校验下沉到 state-machine.ts，避免内联逻辑与独立校验器漂移
  */
+
+/** 合同 Schema 版本号（唯一事实源，禁止在别处硬编码） */
+export const SOFTWARE_CONTRACT_SCHEMA_VERSION = "1.2.0" as const;
 
 // --- 1. 生命周期与状态模型 (§9.1 9 态枚举) ---
 
@@ -32,7 +44,8 @@ export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 export const riskLevelSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
-export const creatorSchema = z.enum(["user", "tech_lead"]);
+/** §9.1：`creator` 仅 user / supervisor（v1.1.3 的 tech_lead 已废止） */
+export const creatorSchema = z.enum(["user", "supervisor"]);
 export type Creator = z.infer<typeof creatorSchema>;
 
 // --- 2. 预算与成本硬上限 (§9.1) ---
@@ -122,13 +135,88 @@ export const verificationCommandSchema = z.object({
 });
 export type VerificationCommand = z.infer<typeof verificationCommandSchema>;
 
-// --- 5. 软件合同模式 (§9.1 SoftwareContractV11) ---
+// --- 5. Worker 声明 (§9.1 worker_spec) ---
+
+export const runtimeKindSchema = z.enum([
+  "MANAGED_TOOL_CALLING",
+  "EXTERNAL_CLI",
+]);
+export type RuntimeKind = z.infer<typeof runtimeKindSchema>;
+
+/**
+ * §9.1 Schema 不变式：`UNCONTROLLED_EXTERNAL` 的 Worker 不得进入合同执行状态，
+ * 不得生成可合并 Evidence。`GATEWAY_ENFORCED` 必须绑定经测试的 Adapter 能力。
+ */
+export const workerControlModeSchema = z.enum([
+  "GATEWAY_ENFORCED",
+  "UNCONTROLLED_EXTERNAL",
+]);
+export type WorkerControlMode = z.infer<typeof workerControlModeSchema>;
+
+export const workerSpecSchema = z.object({
+  adapter_id: z.string().min(1),
+  runtime_kind: runtimeKindSchema,
+  model_id: z.string().min(1).optional(),
+  control_mode: workerControlModeSchema,
+  adapter_version: z.string().min(1),
+});
+export type WorkerSpec = z.infer<typeof workerSpecSchema>;
+
+// --- 6. 建议溯源与成熟度评估 (§9.1 conversation_ref / supervisor_metadata) ---
+
+export const contextPolicySchema = z.enum([
+  "USER_SELECTED",
+  "SESSION_SUMMARY",
+  "NO_TRANSCRIPT",
+]);
+export type ContextPolicy = z.infer<typeof contextPolicySchema>;
+
+export const conversationRefSchema = z.object({
+  session_id: z.string().min(1),
+  message_ids: z.array(z.string().min(1)),
+  context_policy: contextPolicySchema,
+});
+export type ConversationRef = z.infer<typeof conversationRefSchema>;
+
+/**
+ * 成熟度评估。
+ *
+ * ⚠️ `score` 是**纯建议性信号**：禁止作为授权门禁，禁止参与
+ * `approval.status` 或 `lifecycle_state` 的任何计算（§9.1 / ADR-007）。
+ * 本 Schema 不对 score 施加任何数值门槛，也不在任何 refine 中引用它。
+ */
+export const maturityAssessmentSchema = z.object({
+  score: z.number().optional(), // 仅建议性信号，禁止作为授权或状态门禁
+  rationale: z.array(z.string()),
+  unresolved_questions: z.array(z.string()),
+  model_id: z.string().min(1).optional(),
+  assessed_at: z.string(),
+});
+export type MaturityAssessment = z.infer<typeof maturityAssessmentSchema>;
+
+export const suggestedScopeSchema = z.object({
+  writable_paths: z.array(safePathString),
+  readonly_paths: z.array(safePathString),
+  strictly_forbidden_paths: z.array(z.string()),
+});
+export type SuggestedScope = z.infer<typeof suggestedScopeSchema>;
+
+export const supervisorMetadataSchema = z.object({
+  suggestion_id: z.string().min(1),
+  maturity_assessment: maturityAssessmentSchema.optional(),
+  suggested_scope: suggestedScopeSchema.optional(),
+});
+export type SupervisorMetadata = z.infer<typeof supervisorMetadataSchema>;
+
+// --- 7. 软件合同模式 (§9.1 SoftwareContractV12) ---
 
 const approvalSchema = z
   .object({
     status: approvalStatusSchema,
     approved_by: z.string().min(1).optional(),
     approved_at: z.string().optional(),
+    /** 被批准时的 contract_revision；与当前 revision 不一致即审批失效 */
+    approved_revision: z.number().int().nonnegative().optional(),
     rejection_reason: z.string().optional(),
   })
   .superRefine((approval, ctx) => {
@@ -144,12 +232,27 @@ const approvalSchema = z
     }
   });
 
+/** 允许执行合同的 lifecycle_state（UNCONTROLLED_EXTERNAL 不得进入） */
+const EXECUTION_CAPABLE_STATES: readonly LifecycleState[] = [
+  "PREPARING",
+  "EXECUTING",
+  "VERIFYING",
+  "PENDING_RESUME",
+  "AUDITED",
+  "MERGED",
+];
+
 export const softwareContractSchema = z
   .object({
     contract_id: z.string().min(1),
-    schema_version: z.literal("1.1.3"),
+    schema_version: z.literal(SOFTWARE_CONTRACT_SCHEMA_VERSION),
+    contract_revision: z.number().int().min(1),
     created_at: z.string(),
     creator: creatorSchema,
+    conversation_ref: conversationRefSchema.optional(),
+    supervisor_metadata: supervisorMetadataSchema.optional(),
+    worker_spec: workerSpecSchema,
+
     lifecycle_state: lifecycleStateSchema,
     intent: z.object({
       title: z.string().min(1).max(200),
@@ -184,43 +287,36 @@ export const softwareContractSchema = z
   })
   .superRefine((contract, ctx) => {
     // §9.1.1 双状态机联动规则：拒绝非法的 lifecycle × approval 组合
-    const ls = contract.lifecycle_state;
-    const as = contract.approval.status;
-    const legal =
-      (ls === "DRAFT" && as === "DRAFT") ||
-      (ls === "PENDING_APPROVAL" && as === "PENDING_REVIEW") ||
-      (
-        [
-          "PREPARING",
-          "EXECUTING",
-          "VERIFYING",
-          "PENDING_RESUME",
-          "AUDITED",
-          "MERGED",
-        ] as LifecycleState[]
-      ).includes(ls) ||
-      (ls === "ABORTED" && (as === "REJECTED" || as === "APPROVED"));
-    // 注意：中间态要求 approval 为 APPROVED
-    const middleStates: LifecycleState[] = [
-      "PREPARING",
-      "EXECUTING",
-      "VERIFYING",
-      "PENDING_RESUME",
-      "AUDITED",
-      "MERGED",
-    ];
-    const legalCombination = middleStates.includes(ls)
-      ? as === "APPROVED"
-      : legal;
-    if (!legalCombination) {
+    // （校验逻辑唯一事实源在 state-machine.ts，此处只做 Schema 层兜底）
+    const pair = validateStatePair({
+      lifecycle_state: contract.lifecycle_state,
+      approval_status: contract.approval.status,
+    });
+    if (!pair.ok) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `Illegal state combination: lifecycle_state=${ls} with approval.status=${as} violates §9.1.1`,
+        message: pair.message,
+      });
+    }
+
+    // §9.1 Schema 不变式：UNCONTROLLED_EXTERNAL 不得进入合同执行状态
+    if (
+      contract.worker_spec.control_mode === "UNCONTROLLED_EXTERNAL" &&
+      EXECUTION_CAPABLE_STATES.includes(contract.lifecycle_state)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          `worker_spec.control_mode=UNCONTROLLED_EXTERNAL cannot reach ` +
+          `lifecycle_state=${contract.lifecycle_state} (§9.1 invariant: ` +
+          `uncontrolled workers must not execute contracts or produce mergeable evidence)`,
       });
     }
   });
 
-export type SoftwareContract = z.infer<typeof softwareContractSchema>;
+export type SoftwareContractV12 = z.infer<typeof softwareContractSchema>;
+/** 兼容别名：全仓既有代码使用 `SoftwareContract` */
+export type SoftwareContract = SoftwareContractV12;
 
 // 兼容导出：Evidence 定义已迁至 evidence.schema.ts（红线五：单一事实源）
 export {
@@ -230,9 +326,18 @@ export {
   reasonCodeSchema,
   type ReasonCode,
   type EvidenceBundle,
+  type EvidenceBundleV11,
 } from "./evidence.schema";
 
-// Helper to create a new Contract Draft adhering to v1.1.3
+/** 默认 Worker 声明：内置受管工具调用，强制经 Scoped Gateway 执行 */
+export const DEFAULT_WORKER_SPEC: WorkerSpec = {
+  adapter_id: "stagent.builtin.ai-sdk",
+  runtime_kind: "MANAGED_TOOL_CALLING",
+  control_mode: "GATEWAY_ENFORCED",
+  adapter_version: "0.1.0",
+};
+
+// Helper to create a new Contract Draft adhering to v1.2.0
 export function createContractDraft(params: {
   title: string;
   description: string;
@@ -252,15 +357,26 @@ export function createContractDraft(params: {
   pricingVersion?: string | undefined;
   accountingMode?: ContractAccountingMode | undefined;
   creator?: Creator | undefined;
-}): SoftwareContract {
+  workerSpec?: Partial<WorkerSpec> | undefined;
+  conversationRef?: ConversationRef | undefined;
+  supervisorMetadata?: SupervisorMetadata | undefined;
+}): SoftwareContractV12 {
   const contractId = `contract_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const baseBranch = params.baseBranch ?? "main";
 
   const raw = {
     contract_id: contractId,
-    schema_version: "1.1.3" as const,
+    schema_version: SOFTWARE_CONTRACT_SCHEMA_VERSION,
+    contract_revision: 1,
     created_at: new Date().toISOString(),
     creator: params.creator ?? ("user" as const),
+    ...(params.conversationRef === undefined
+      ? {}
+      : { conversation_ref: params.conversationRef }),
+    ...(params.supervisorMetadata === undefined
+      ? {}
+      : { supervisor_metadata: params.supervisorMetadata }),
+    worker_spec: { ...DEFAULT_WORKER_SPEC, ...(params.workerSpec ?? {}) },
     lifecycle_state: "DRAFT" as const,
     intent: {
       title: params.title,
@@ -324,4 +440,26 @@ export function createContractDraft(params: {
   };
 
   return softwareContractSchema.parse(raw);
+}
+
+/**
+ * 递增合同版本（§9.1：任何 Scope/命令/预算/网络/环境/Worker/验证命令变更
+ * 均递增 contract_revision 并要求重新批准）。
+ *
+ * 返回新合同，`approval` 一律回置为 `PENDING_REVIEW`——重新批准是不可绕过的。
+ */
+export function bumpContractRevision(
+  contract: SoftwareContractV12,
+): SoftwareContractV12 {
+  return softwareContractSchema.parse({
+    ...contract,
+    contract_revision: contract.contract_revision + 1,
+    lifecycle_state: "PENDING_APPROVAL",
+    approval: {
+      status: "PENDING_REVIEW",
+      ...(contract.approval.rejection_reason === undefined
+        ? {}
+        : { rejection_reason: contract.approval.rejection_reason }),
+    },
+  });
 }

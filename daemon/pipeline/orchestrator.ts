@@ -8,6 +8,7 @@ import type {
 } from "../../src/lib/contract.schema";
 import {
   evidenceBundleSchema,
+  deriveCanMerge,
   type EvidenceBundle,
 } from "../../src/lib/evidence.schema";
 import { ContractStore } from "./contract-store";
@@ -99,12 +100,15 @@ export class ContractOrchestrator {
 
         const approvedAt = new Date().toISOString();
         // 先落审批事实，再进入准备阶段（§9.1.1：避免只更新其中一个字段）
+        // approved_revision 绑定被批准的合同版本：任何后续 Scope/预算变更都会
+        // 递增 contract_revision，从而让本次审批失效（防 TOCTOU，§9.1）
         this.store.transition({
           contractId,
           lifecycleState: "PREPARING",
           approvalStatus: "APPROVED",
           approvedBy: reviewer,
           approvedAt,
+          approvedRevision: current.contract_revision,
         });
 
         try {
@@ -651,10 +655,13 @@ export class ContractOrchestrator {
       },
       verdict: {
         status: input.status,
-        can_merge:
-          input.status === "PASSED" &&
-          input.scopePassed &&
-          input.forbiddenViolations.length === 0,
+        // §9.2：can_merge 必须等于完整合并门禁的派生结果，统一走 deriveCanMerge
+        can_merge: deriveCanMerge({
+          status: input.status,
+          scopePassed: input.scopePassed,
+          budgetExhausted: costMonitor?.isTripped() ?? false,
+          forbiddenViolationCount: input.forbiddenViolations.length,
+        }),
         summary: input.summary,
         ...(input.reasonCode === undefined
           ? {}

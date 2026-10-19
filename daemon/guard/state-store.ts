@@ -1,9 +1,10 @@
 import fs from "node:fs";
-import path from "node:path";
+import { writeJsonAtomic } from "../../src/lib/state-machine";
 
 /**
  * 熔断状态持久化（规范 TASK-A.5 PASS-3：重启 Daemon / 切换模型不得重置计数与累计费用）。
- * 采用「临时文件 + rename」原子写入，避免进程中断产生半截 JSON。
+ * 采用「临时文件 + fsync + rename」原子写入，避免进程中断产生半截 JSON 或掉电丢更新。
+ * 实现在 `src/lib/state-machine.ts` 的 `writeJsonAtomic`（与合同状态写入同一份代码）。
  */
 export function readStateFile<T>(filePath: string | undefined): T | null {
   if (!filePath) return null;
@@ -23,10 +24,7 @@ export function writeStateFile(
 ): void {
   if (!filePath) return;
   try {
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    const tmp = `${filePath}.tmp-${process.pid}`;
-    fs.writeFileSync(tmp, JSON.stringify(value, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, filePath);
+    writeJsonAtomic(filePath, value);
   } catch {
     // 持久化失败不应中断执行主流程；计数仍在内存中生效
   }

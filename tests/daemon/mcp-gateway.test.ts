@@ -36,9 +36,16 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
 
     sampleContract = {
       contract_id: "test-contract-001",
-      schema_version: "1.1.3",
+      schema_version: "1.2.0",
+      contract_revision: 1,
       created_at: new Date().toISOString(),
       creator: "user",
+      worker_spec: {
+        adapter_id: "stagent.builtin.ai-sdk",
+        runtime_kind: "MANAGED_TOOL_CALLING",
+        control_mode: "GATEWAY_ENFORCED",
+        adapter_version: "0.1.0",
+      },
       lifecycle_state: "EXECUTING",
       intent: {
         title: "Test Gateway Scope",
@@ -282,9 +289,16 @@ describe("Test Integrity Guard：测试文件写入门禁", () => {
 
   const makeContract = (writablePaths: string[]): SoftwareContract => ({
     contract_id: "test-integrity-001",
-    schema_version: "1.1.3",
+    schema_version: "1.2.0",
+    contract_revision: 1,
     created_at: new Date().toISOString(),
     creator: "user",
+    worker_spec: {
+      adapter_id: "stagent.builtin.ai-sdk",
+      runtime_kind: "MANAGED_TOOL_CALLING",
+      control_mode: "GATEWAY_ENFORCED",
+      adapter_version: "0.1.0",
+    },
     lifecycle_state: "EXECUTING",
     intent: {
       title: "Test Integrity Guard",
