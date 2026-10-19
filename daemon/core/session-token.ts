@@ -76,3 +76,26 @@ export function isLocalOrigin(origin: string | undefined): boolean {
     return false;
   }
 }
+
+/**
+ * Host 头校验（DNS Rebinding 防线）：
+ * Origin 校验挡不住 DNS 重绑定 —— 重绑定后浏览器把请求视为同源，
+ * GET 根本不携带 Origin。此时唯一可靠的判别是 Host 头必须仍是回环地址。
+ * 所有 HTTP 请求与 WS Upgrade 都必须先过这一关。
+ */
+export function isLocalHostAuthority(hostHeader: string | undefined): boolean {
+  if (!hostHeader) return false;
+  try {
+    // Host 头形如 "127.0.0.1:3001" / "localhost:5173" / "[::1]:3001"
+    const url = new URL(`http://${hostHeader}`);
+    const host = url.hostname;
+    return (
+      host === "127.0.0.1" ||
+      host === "localhost" ||
+      host === "::1" ||
+      host === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}

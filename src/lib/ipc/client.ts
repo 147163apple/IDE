@@ -154,13 +154,19 @@ export class StagentIpcClient {
 
   private startPing(): void {
     this.stopPing();
+    // 规范 §6.1 / TASK-D.1：每 5s 一次 PING，连续 3 次无 PONG（15s）判定断线。
+    // AUTH_OK 后立即发第 1 次 PING，使第 3 次失联恰好落在 15s：
+    //   t=0  ping#1 (miss=1)；t=5 ping#2 (miss=2)；t=10 ping#3 (miss=3)；
+    //   t=15 检查：miss=3 ≥ maxMissedPongs → 关闭并进入重连。
+    this.missedPongs = 1;
+    this.send("PING");
     this.pingTimer = setInterval(() => {
-      this.missedPongs += 1;
-      if (this.missedPongs > this.maxMissedPongs) {
-        // 连续 3 次无响应（约 15s）：判定断线，触发重连
+      if (this.missedPongs >= this.maxMissedPongs) {
+        // 连续 3 次无响应（15s）：判定断线，触发重连（上层据此呈现重连遮罩）
         this.socket?.close();
         return;
       }
+      this.missedPongs += 1;
       this.send("PING");
     }, this.pingIntervalMs);
   }

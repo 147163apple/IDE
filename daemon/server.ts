@@ -11,20 +11,23 @@ import {
   PidLockInfo,
 } from "./core/pid-lock";
 import {
-  createSessionToken,
-  clearSessionToken,
-  verifySessionToken,
-  isLocalOrigin,
-} from "./core/session-token";
-import {
   createFrame,
   chunkWorkerLog,
+  isClientToServerAllowed,
   isIpcFrame,
+  MAX_FRAME_BYTES,
   WS_CLOSE_UNAUTHORIZED,
   type AuthPayload,
   type IpcFrame,
   type IpcFrameType,
 } from "../src/lib/ipc/frames";
+import {
+  createSessionToken,
+  clearSessionToken,
+  verifySessionToken,
+  isLocalOrigin,
+  isLocalHostAuthority,
+} from "./core/session-token";
 
 import {
   recoverDaemonState,
@@ -53,6 +56,12 @@ export interface DaemonServerOptions extends PortFinderOptions {
   enableCrashRecovery?: boolean;
   /** WebSocket 客户端首帧 AUTH 的超时毫秒数，超时未鉴权以 4401 断开（默认 5000） */
   authTimeoutMs?: number;
+  /** 连接速率限制（TASK-D.1 G-12 防 DoS）：单 IP 在窗口内允许的新建连接数（默认 30） */
+  maxConnectionsPerWindow?: number;
+  /** 连接速率限制窗口毫秒数（默认 10_000） */
+  connectionWindowMs?: number;
+  /** 同时在线的最大 WS 客户端数（默认 64） */
+  maxClients?: number;
 }
 
 export interface DaemonStatusResponse {
@@ -74,12 +83,17 @@ export class StagentDaemon {
   readonly autoShutdownSignals: boolean;
   readonly enableCrashRecovery: boolean;
   readonly authTimeoutMs: number;
+  readonly maxConnectionsPerWindow: number;
+  readonly connectionWindowMs: number;
+  readonly maxClients: number;
 
   private server: http.Server | null = null;
   private wss: WebSocketServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private sessionToken: string | null = null;
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  /** 单 IP 新建连接的时间戳滑窗（速率限制） */
+  private connectionWindows: Map<string, number[]> = new Map();
   private currentPort: number | null = null;
   private running: boolean = false;
   private stopping: boolean = false;
@@ -96,11 +110,15 @@ export class StagentDaemon {
     this.repoRoot = path.resolve(options.repoRoot);
     this.host = options.host ?? "127.0.0.1";
     this.version = options.version ?? "0.1.0";
-    this.startPort = options.startPort ?? 41792;
-    this.endPort = options.endPort ?? 41802;
+    // 规范 TASK-D.1：动态端口探测范围 3001~3010
+    this.startPort = options.startPort ?? 3001;
+    this.endPort = options.endPort ?? 3010;
     this.autoShutdownSignals = options.autoShutdownSignals ?? false;
     this.enableCrashRecovery = options.enableCrashRecovery ?? true;
     this.authTimeoutMs = options.authTimeoutMs ?? 5_000;
+    this.maxConnectionsPerWindow = options.maxConnectionsPerWindow ?? 30;
+    this.connectionWindowMs = options.connectionWindowMs ?? 10_000;
+    this.maxClients = options.maxClients ?? 64;
     this.orchestrator = new ContractOrchestrator({ repoRoot: this.repoRoot });
   }
 
@@ -167,7 +185,11 @@ export class StagentDaemon {
 
     // 规范 TASK-D.1 PASS-2：单次随机会话 Token，独立于 PID 文件
     this.sessionToken = createSessionToken(this.repoRoot);
-    this.wss = new WebSocketServer({ noServer: true });
+    // 规范 TASK-D.1 G-12：单连接帧大小硬上限 2MB（ws 超限自动以 1009 关闭）
+    this.wss = new WebSocketServer({
+      noServer: true,
+      maxPayload: MAX_FRAME_BYTES,
+    });
     this.wss.on("connection", (ws) => {
       this.handleConnection(ws);
     });
@@ -257,6 +279,7 @@ export class StagentDaemon {
       }
     }
     this.clients.clear();
+    this.connectionWindows.clear();
     this.wss?.close();
     this.wss = null;
     clearSessionToken(this.repoRoot);
@@ -351,10 +374,38 @@ export class StagentDaemon {
     socket: import("node:net").Socket,
     head: Buffer,
   ): void {
+    // Host 头必须是回环地址（DNS Rebinding 防线：重绑定后请求不带 Origin，
+    // 唯一可靠的判别是 Host 头）
+    if (!isLocalHostAuthority(req.headers.host)) {
+      this.rejectUpgrade(socket, 403, "Forbidden");
+      return;
+    }
+
     // Origin 校验仍在 Upgrade 阶段硬阻断（防跨站 WS 劫持）
     const origin = req.headers.origin;
     if (!isLocalOrigin(origin)) {
       this.rejectUpgrade(socket, 403, "Forbidden");
+      return;
+    }
+
+    // 连接速率限制（G-12 防 DoS）：单 IP 滑窗计数，超限拒绝
+    const remote = req.socket.remoteAddress ?? "unknown";
+    const now = Date.now();
+    const windowStart = now - this.connectionWindowMs;
+    const recent = (this.connectionWindows.get(remote) ?? []).filter(
+      (t) => t >= windowStart,
+    );
+    if (recent.length >= this.maxConnectionsPerWindow) {
+      this.connectionWindows.set(remote, recent);
+      this.rejectUpgrade(socket, 429, "Too Many Requests");
+      return;
+    }
+    recent.push(now);
+    this.connectionWindows.set(remote, recent);
+
+    // 并发客户端总数上限
+    if (this.clients.size >= this.maxClients) {
+      this.rejectUpgrade(socket, 503, "Service Unavailable");
       return;
     }
 
@@ -437,6 +488,17 @@ export class StagentDaemon {
         return;
       }
 
+      // 已鉴权连接：帧方向门禁（§6.1 帧字典的收发方约束）。
+      // 客户端只允许发送 direction 含 client->server 的帧（PING、CHAT_EVENT），
+      // 伪造 server->client 帧（如 PONG / CONTRACT_UPDATE）拒绝并保持连接。
+      if (!isClientToServerAllowed(parsed.type)) {
+        sendError(
+          "FRAME_DIRECTION_FORBIDDEN",
+          `Frame type ${parsed.type} is server->client only`,
+        );
+        return;
+      }
+
       // 规范 PASS-4：客户端每 5s 发送 PING，服务端立即回 PONG
       if (parsed.type === "PING") {
         ws.send(JSON.stringify(createFrame("PONG")));
@@ -454,14 +516,14 @@ export class StagentDaemon {
   }
 
   private isAuthorized(req: http.IncomingMessage): boolean {
+    // HTTP API 仅接受 Authorization: Bearer（非浏览器客户端可用）。
+    // 绝不接受 ?token= query（规范 TASK-D.1 FAIL：query 会进入访问日志与浏览器历史）
     const authHeader = req.headers.authorization;
     const headerToken =
       typeof authHeader === "string" && authHeader.startsWith("Bearer ")
         ? authHeader.slice("Bearer ".length).trim()
         : null;
-    const url = new URL(req.url ?? "/", `http://${this.host}`);
-    const token = headerToken ?? url.searchParams.get("token");
-    return verifySessionToken(token, this.sessionToken);
+    return verifySessionToken(headerToken, this.sessionToken);
   }
 
   private readJsonBody(req: http.IncomingMessage): Promise<unknown> {
@@ -546,6 +608,16 @@ export class StagentDaemon {
         const results = engine.handleChanges(changed);
         for (const hit of results) {
           if (!hit.stale) continue;
+          // 规范 §6.1 帧：证据失效的权威通知通道
+          this.broadcast("EVIDENCE_STATUS_CHANGED", {
+            contract_id: hit.contractId,
+            evidence_id: evidenceId,
+            status: "STALE",
+            reason_code: "EVIDENCE_STALE",
+            message:
+              "Worktree changed after verification; evidence marked STALE and merge disabled",
+          });
+          // 历史扩展帧：保留至 C.x 完成迁移（协议"至少包括"允许扩展帧并存）
           this.broadcast("SCOPE_ALERT", {
             contract_id: hit.contractId,
             code: "E_EVIDENCE_STALE",
@@ -571,6 +643,12 @@ export class StagentDaemon {
     req: http.IncomingMessage,
     res: http.ServerResponse,
   ): Promise<void> {
+    // Host 头必须是回环地址（DNS Rebinding 防线，与 WS Upgrade 同理）
+    if (!isLocalHostAuthority(req.headers.host)) {
+      this.sendJson(res, 403, { error: "Forbidden" });
+      return;
+    }
+
     const parsedUrl = new URL(req.url ?? "/", `http://${this.host}`);
     const pathname = parsedUrl.pathname;
     const method = req.method ?? "GET";

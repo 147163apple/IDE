@@ -219,6 +219,75 @@ describe("useDaemonStream：控制台实时流", () => {
     }
   });
 
+  it("PASS-3 心跳：AUTH_OK 立即 PING，连续 3 次无 PONG（15s）进入 reconnecting（遮罩触发条件）", () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useDaemonStream({ port: 41792, token: "t", enabled: true }),
+      );
+      const socket = FakeWebSocket.instances[0] as FakeWebSocket;
+      act(() => {
+        socket.open();
+        socket.receive({ type: "AUTH_OK" });
+      });
+      expect(result.current.status).toBe("connected");
+
+      // t=0：AUTH_OK 后立即发第 1 次 PING
+      const pingsSent = () =>
+        socket.sent.filter((s) => JSON.parse(s).type === "PING").length;
+      expect(pingsSent()).toBe(1);
+
+      // t=5s / t=10s：无 PONG 时继续发第 2 / 3 次
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      expect(pingsSent()).toBe(2);
+      expect(result.current.status).toBe("connected");
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      expect(pingsSent()).toBe(3);
+      expect(result.current.status).toBe("connected");
+
+      // t=15s：连续 3 次未收到 PONG → 判定断线，关闭 socket 并进入重连
+      act(() => {
+        vi.advanceTimersByTime(5_000);
+      });
+      expect(result.current.status).toBe("reconnecting");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("心跳：每次 PONG 都会重置失联计数", () => {
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() =>
+        useDaemonStream({ port: 41792, token: "t", enabled: true }),
+      );
+      const socket = FakeWebSocket.instances[0] as FakeWebSocket;
+      act(() => {
+        socket.open();
+        socket.receive({ type: "AUTH_OK" });
+      });
+
+      // 每次即将达到 3 次失联前收到 PONG，长时间运行不断线
+      for (let round = 0; round < 5; round += 1) {
+        act(() => {
+          vi.advanceTimersByTime(10_000); // 2 次未答
+        });
+        act(() => socket.receive({ type: "PONG" })); // 计数清零
+        act(() => {
+          vi.advanceTimersByTime(1_000);
+        });
+        expect(result.current.status).toBe("connected");
+      }
+      expect(FakeWebSocket.instances).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("未启用或端口未知时不建立连接", () => {
     renderHook(() => useDaemonStream({ port: null, token: "t" }));
     expect(FakeWebSocket.instances).toHaveLength(0);

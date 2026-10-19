@@ -5,7 +5,7 @@ import type { EvidenceBundle } from "./evidence.schema";
  * Daemon REST 客户端（浏览器侧唯一数据入口）。
  * 规范 §1：浏览器不维护虚拟仓库、不执行命令，只呈现 Daemon 状态。
  */
-export const DEFAULT_DAEMON_URL = "http://127.0.0.1:41792";
+export const DEFAULT_DAEMON_URL = "http://127.0.0.1:3001";
 export const TOKEN_STORAGE_KEY = "stagent.sessionToken";
 
 export interface DaemonConnection {
@@ -36,9 +36,23 @@ export function loadConnection(): DaemonConnection {
   if (typeof window === "undefined") {
     return { baseUrl: DEFAULT_DAEMON_URL, token: "" };
   }
-  const url = new URL(window.location.href);
-  const urlToken = url.searchParams.get("token");
-  if (urlToken) sessionStorage.setItem(TOKEN_STORAGE_KEY, urlToken);
+
+  // Token 引导仅允许 URL fragment（#token=...）：fragment 不随请求发往服务端、
+  // 不进访问日志；读取后立即从地址栏抹除，避免滞留浏览器历史。
+  // 规范 TASK-D.1 FAIL：严禁 URL query（?token=）传递 Token —— 这里明确不读 query。
+  const hash = window.location.hash;
+  if (hash.startsWith("#token=")) {
+    const fragmentToken = hash.slice("#token=".length).trim();
+    if (fragmentToken) {
+      sessionStorage.setItem(TOKEN_STORAGE_KEY, fragmentToken);
+    }
+    // 从地址栏移除 Token，只保留路径（不进历史记录）
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    );
+  }
 
   return {
     baseUrl:
