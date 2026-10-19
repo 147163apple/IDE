@@ -1,0 +1,25 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/lib/**/*.ts",
+    "src/components/**/*.tsx",
+    "src/routes/**/*.tsx",
+    "daemon/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/lib/scope.test.ts",
+    "src/lib/pipeline.test.ts",
+    "src/lib/git-guard.test.ts",
+    "src/lib/stage3.test.ts",
+    "src/lib/dual-agent.test.ts",
+    "src/lib/arch-map.test.ts",
+    "src/lib/mcp/gateway.test.ts",
+    "src/lib/contract.schema.test.ts"
+  ]
+}

@@ -1,0 +1,763 @@
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
+import type {
+  LifecycleState,
+  SoftwareContract,
+} from "../../src/lib/contract.schema";
+import {
+  evidenceBundleSchema,
+  type EvidenceBundle,
+} from "../../src/lib/evidence.schema";
+import { ContractStore } from "./contract-store";
+import { ScopedWorktreeGateway } from "../mcp/gateway";
+import { CostMonitor } from "../guard/cost-monitor";
+import { LoopGuard } from "../guard/loop-guard";
+import { isTestPath } from "../guard/test-integrity";
+import { computeWorktreeFingerprint } from "../guard/evidence-integrity";
+import {
+  contractLockPath,
+  withContractLock,
+  InvalidStateTransitionError,
+} from "../core/contract-mutex";
+import { killProcessTree } from "../runner/process-tree";
+import { writeStateFile } from "../guard/state-store";
+import {
+  AiWorker,
+  type WorkerModelClient,
+  type WorkerRunResult,
+} from "../worker/ai-worker";
+import { OpenAiWorkerClient } from "../worker/openai-client";
+import { planDependencyStrategy, runIsolatedInstall } from "../deps/strategy";
+import { mountDependencySymlink } from "../deps/resolver";
+import {
+  createTaskWorktree,
+  execGit,
+  getWorktreePath,
+  removeTaskWorktree,
+  type WorktreeInfo,
+} from "../git/worktree-manager";
+
+/**
+ * 服务端合同编排器（规范 §1 / §5.2 / §6）：
+ * 审批 → PREPARING（真实 Worktree）→ EXECUTING → VERIFYING（真实命令）
+ * → Evidence 生成 → AUDITED（可合并）或 PENDING_RESUME（熔断）。
+ */
+export interface OrchestratorOptions {
+  repoRoot: string;
+  /** 主工作区脏时是否已获用户确认 */
+  acknowledgeDirty?: boolean;
+}
+
+export interface ExecutionOutcome {
+  contract: SoftwareContract;
+  evidence: EvidenceBundle;
+  worktree: WorktreeInfo;
+}
+
+export class ContractOrchestrator {
+  private readonly repoRoot: string;
+  private readonly store: ContractStore;
+  private readonly acknowledgeDirty: boolean;
+  /** 在途执行（execute/runWorker）的中止控制器：abort 端点凭此强杀子进程树 */
+  private readonly abortControllers = new Map<string, AbortController>();
+  /** 已请求中止但执行尚未开始的合同：注册控制器时立即进入已中止态 */
+  private readonly abortRequested = new Set<string>();
+
+  constructor(options: OrchestratorOptions) {
+    this.repoRoot = path.resolve(options.repoRoot);
+    this.store = new ContractStore(this.repoRoot);
+    this.acknowledgeDirty = options.acknowledgeDirty ?? false;
+  }
+
+  getStore(): ContractStore {
+    return this.store;
+  }
+
+  /**
+   * 用户审批：PENDING_APPROVAL/PENDING_REVIEW → APPROVED → PREPARING → EXECUTING。
+   * 全程持有合同排他锁：并发的第二次审批会在锁内读到已推进的状态，
+   * 抛 E_INVALID_STATE_TRANSITION，杜绝重复建 Worktree / 重复分支。
+   */
+  async approve(
+    contractId: string,
+    reviewer: string,
+  ): Promise<SoftwareContract> {
+    return withContractLock(
+      contractLockPath(this.repoRoot, contractId),
+      async () => {
+        const current = this.store.get(contractId);
+        if (!current) throw new Error(`Contract not found: ${contractId}`);
+        if (current.lifecycle_state !== "PENDING_APPROVAL") {
+          throw new InvalidStateTransitionError(
+            current.lifecycle_state,
+            ["PENDING_APPROVAL"],
+            "approve",
+          );
+        }
+
+        const approvedAt = new Date().toISOString();
+        // 先落审批事实，再进入准备阶段（§9.1.1：避免只更新其中一个字段）
+        this.store.transition({
+          contractId,
+          lifecycleState: "PREPARING",
+          approvalStatus: "APPROVED",
+          approvedBy: reviewer,
+          approvedAt,
+        });
+
+        try {
+          await createTaskWorktree({
+            repoRoot: this.repoRoot,
+            contractId,
+            baseBranch: current.authorization.git.base_branch,
+            acknowledgeDirty: this.acknowledgeDirty,
+          });
+          // 依赖复用/隔离决策（ADR-002）
+          await this.prepareDependencies(contractId);
+          return this.store.transition({
+            contractId,
+            lifecycleState: "EXECUTING",
+          });
+        } catch (err) {
+          // 准备中断：回退等待重新审批，并留存原因
+          await this.writeEvidence(current, {
+            status: "BLOCKED",
+            reasonCode: "PREPARATION_INTERRUPTED",
+            summary: `Preparation failed: ${(err as Error).message}`,
+            verificationResults: [],
+            scopePassed: false,
+            forbiddenViolations: [],
+            modifiedFiles: [],
+          });
+          return this.store.transition({
+            contractId,
+            lifecycleState: "PENDING_APPROVAL",
+            approvalStatus: "PENDING_REVIEW",
+          });
+        }
+      },
+    );
+  }
+
+  /**
+   * 断点续跑（Chaos 场景 1）：崩溃恢复把 EXECUTING/VERIFYING 挂起到 PENDING_RESUME 后，
+   * 必须由用户显式确认才能回到 EXECUTING；Worktree 已丢失则拒绝续跑。
+   * 没有这个出口，PENDING_RESUME 就是事实上的永久卡死态。
+   */
+  async resume(contractId: string): Promise<SoftwareContract> {
+    return withContractLock(
+      contractLockPath(this.repoRoot, contractId),
+      async () => {
+        const current = this.store.get(contractId);
+        if (!current) throw new Error(`Contract not found: ${contractId}`);
+        if (current.lifecycle_state !== "PENDING_RESUME") {
+          throw new InvalidStateTransitionError(
+            current.lifecycle_state,
+            ["PENDING_RESUME"],
+            "resume",
+          );
+        }
+
+        const worktreePath = getWorktreePath(this.repoRoot, contractId);
+        if (!fs.existsSync(worktreePath)) {
+          throw new Error(
+            `Cannot resume ${contractId}: worktree lost at ${worktreePath}`,
+          );
+        }
+        // Worktree 必须仍然是健康的 Git 工作区（崩溃可能留下 index.lock / 断头）
+        const head = await execGit(["rev-parse", "HEAD"], worktreePath);
+        if (head.exitCode !== 0) {
+          throw new Error(
+            `Cannot resume ${contractId}: worktree is not a healthy git workspace (${head.stderr || head.stdout})`,
+          );
+        }
+
+        return this.store.transition({
+          contractId,
+          lifecycleState: "EXECUTING",
+        });
+      },
+    );
+  }
+
+  /**
+   * 用户主动中止/驳回（终态 ABORTED）：
+   * 1. 不持锁先触发 AbortSignal —— 在途验证命令整树 SIGTERM→3s→SIGKILL 强杀，
+   *    后续命令被网关 E_TASK_ABORTED 拒绝，execute 循环立即收尾并释放合同锁；
+   * 2. 持锁后合规流转：待审批态走驳回语义（REJECTED），已批准任务保留 APPROVED
+   *    （§9.1.1 允许 ABORTED × REJECTED/APPROVED 两种组合）；
+   * 3. 清理 Worktree 与任务分支，终态不留现场。
+   */
+  async abort(
+    contractId: string,
+    options: { reviewer?: string; reason?: string } = {},
+  ): Promise<SoftwareContract> {
+    const reviewer = options.reviewer ?? "local-user";
+    this.abortRequested.add(contractId);
+    this.abortControllers.get(contractId)?.abort();
+    try {
+      return await withContractLock(
+        contractLockPath(this.repoRoot, contractId),
+        async () => {
+          const current = this.store.get(contractId);
+          if (!current) throw new Error(`Contract not found: ${contractId}`);
+          const abortable: LifecycleState[] = [
+            "DRAFT",
+            "PENDING_APPROVAL",
+            "PREPARING",
+            "EXECUTING",
+            "VERIFYING",
+            "PENDING_RESUME",
+            "AUDITED",
+          ];
+          if (!abortable.includes(current.lifecycle_state)) {
+            throw new InvalidStateTransitionError(
+              current.lifecycle_state,
+              abortable,
+              "abort",
+            );
+          }
+
+          const worktreePath = getWorktreePath(this.repoRoot, contractId);
+          if (fs.existsSync(worktreePath)) {
+            await removeTaskWorktree({
+              repoRoot: this.repoRoot,
+              contractId,
+              force: true,
+              deleteBranch: true,
+            });
+          }
+
+          const rejected = current.approval.status !== "APPROVED";
+          return this.store.transition({
+            contractId,
+            lifecycleState: "ABORTED",
+            ...(rejected ? { approvalStatus: "REJECTED" as const } : {}),
+            rejectionReason: options.reason ?? `Aborted by ${reviewer}`,
+          });
+        },
+      );
+    } finally {
+      this.abortRequested.delete(contractId);
+    }
+  }
+
+  /** 注册本次执行的中止控制器；若 abort 已先行到达则直接以中止态注册 */
+  private beginAbortable(contractId: string): AbortSignal {
+    const controller = new AbortController();
+    if (this.abortRequested.has(contractId)) controller.abort();
+    this.abortControllers.set(contractId, controller);
+    return controller.signal;
+  }
+
+  private endAbortable(contractId: string): void {
+    this.abortControllers.delete(contractId);
+  }
+
+  /**
+   * 执行合同验证命令并生成 Evidence。
+   * 合同排他锁 + 锁内重读状态：并发的第二次 execute 会看到 VERIFYING/AUDITED，
+   * 抛 E_INVALID_STATE_TRANSITION，不会产生两份 Evidence 或重复提交。
+   */
+  async execute(contractId: string): Promise<ExecutionOutcome> {
+    return withContractLock(contractLockPath(this.repoRoot, contractId), () =>
+      this.executeInternal(contractId),
+    );
+  }
+
+  private async executeInternal(contractId: string): Promise<ExecutionOutcome> {
+    const signal = this.beginAbortable(contractId);
+    try {
+      return await this.executeWithSignal(contractId, signal);
+    } finally {
+      this.endAbortable(contractId);
+    }
+  }
+
+  private async executeWithSignal(
+    contractId: string,
+    signal: AbortSignal,
+  ): Promise<ExecutionOutcome> {
+    const current = this.store.get(contractId);
+    if (!current) throw new Error(`Contract not found: ${contractId}`);
+    if (current.lifecycle_state !== "EXECUTING") {
+      throw new InvalidStateTransitionError(
+        current.lifecycle_state,
+        ["EXECUTING"],
+        "execute",
+      );
+    }
+
+    const { gateway, costMonitor, loopGuard, worktreePath } = this.buildRuntime(
+      current,
+      signal,
+    );
+
+    this.store.transition({ contractId, lifecycleState: "VERIFYING" });
+
+    // 测试完整性留痕：提交前捕获 Worktree 改动（覆盖外部编辑器等旁路写入）
+    // -uall：未跟踪目录不折叠，否则 tests/ 会被折叠成 "tests" 而识别不出测试文件
+    const preCommitStatus = await execGit(
+      ["status", "--porcelain", "-uall"],
+      worktreePath,
+    );
+
+    // 规范 §5.2：Evidence 必须对应真实任务提交；合并前将 Worktree 改动固化到任务分支
+    await this.commitWorktree(worktreePath, contractId);
+
+    const verificationResults: Array<{
+      alias: string;
+      exitCode: number;
+      stdout: string;
+      stderr: string;
+      durationMs: number;
+      passed: boolean;
+    }> = [];
+
+    for (const command of current.verification_spec.commands) {
+      const res = await gateway.callTool("stagent_exec_command", {
+        executable: command.executable,
+        args: command.args,
+      });
+      const data = (res.data ?? {}) as {
+        exitCode?: number;
+        stdout?: string;
+        stderr?: string;
+        durationMs?: number;
+      };
+      verificationResults.push({
+        alias: command.alias,
+        exitCode: data.exitCode ?? 1,
+        stdout: data.stdout ?? "",
+        stderr: data.stderr ?? (res.error?.message || ""),
+        durationMs: data.durationMs ?? 0,
+        passed: !res.isError,
+      });
+    }
+
+    // 验证命令也可能在 Worktree 内写文件（commit 之后），再次捕获并取并集
+    const postVerifyStatus = await execGit(
+      ["status", "--porcelain", "-uall"],
+      worktreePath,
+    );
+    const worktreeChanged = [
+      ...parsePorcelainPaths(preCommitStatus.stdout),
+      ...parsePorcelainPaths(postVerifyStatus.stdout),
+    ];
+
+    const modifiedFiles = [...gateway.getModifiedFiles()];
+    const testsModified =
+      gateway.wasTestsModified() || worktreeChanged.some(isTestPath);
+    const allPassed = verificationResults.every((r) => r.passed);
+    const tripped = loopGuard.isTripped() || costMonitor.isTripped();
+
+    const status = allPassed ? "PASSED" : tripped ? "BLOCKED" : "FAILED";
+    const reasonCode = allPassed
+      ? undefined
+      : costMonitor.isTripped()
+        ? ("BUDGET_EXHAUSTED" as const)
+        : loopGuard.isTripped()
+          ? ("VERIFICATION_RETRY_LIMIT" as const)
+          : ("UNSAFE_EXECUTION" as const);
+
+    const evidence = await this.writeEvidence(
+      current,
+      {
+        status,
+        ...(reasonCode === undefined ? {} : { reasonCode }),
+        summary: allPassed
+          ? `All ${verificationResults.length} verification command(s) passed`
+          : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
+        verificationResults,
+        scopePassed: true,
+        forbiddenViolations: [],
+        modifiedFiles,
+        testsModified,
+      },
+      costMonitor,
+      worktreePath,
+    );
+
+    const nextState = allPassed
+      ? "AUDITED"
+      : tripped
+        ? "PENDING_RESUME"
+        : "EXECUTING";
+
+    const contract = this.store.transition({
+      contractId,
+      lifecycleState: nextState,
+    });
+    const worktree = await this.readWorktreeInfo(contractId, worktreePath);
+
+    return { contract, evidence, worktree };
+  }
+
+  /**
+   * 运行受控 AI Worker：生成代码改动并经网关写入 Worktree。
+   * 失败（越权/预算）时整批拒绝；预算耗尽进入 PENDING_RESUME。
+   */
+  async runWorker(
+    contractId: string,
+    options: { modelClient?: WorkerModelClient } = {},
+  ): Promise<WorkerRunResult> {
+    return withContractLock(contractLockPath(this.repoRoot, contractId), () =>
+      this.runWorkerInternal(contractId, options),
+    );
+  }
+
+  private async runWorkerInternal(
+    contractId: string,
+    options: { modelClient?: WorkerModelClient } = {},
+  ): Promise<WorkerRunResult> {
+    const signal = this.beginAbortable(contractId);
+    try {
+      const current = this.store.get(contractId);
+      if (!current) throw new Error(`Contract not found: ${contractId}`);
+      if (current.lifecycle_state !== "EXECUTING") {
+        throw new InvalidStateTransitionError(
+          current.lifecycle_state,
+          ["EXECUTING"],
+          "run-worker",
+        );
+      }
+
+      const { gateway, costMonitor } = this.buildRuntime(current, signal);
+      const modelClient = options.modelClient ?? new OpenAiWorkerClient();
+      const worker = new AiWorker({ gateway, costMonitor, modelClient });
+
+      try {
+        return await worker.run();
+      } catch (err) {
+        if (costMonitor.isTripped()) {
+          this.store.transition({
+            contractId,
+            lifecycleState: "PENDING_RESUME",
+          });
+          await this.writeEvidence(
+            current,
+            {
+              status: "BLOCKED",
+              reasonCode: "BUDGET_EXHAUSTED",
+              summary: `Worker aborted: ${(err as Error).message}`,
+              verificationResults: [],
+              scopePassed: false,
+              forbiddenViolations: [],
+              modifiedFiles: [...gateway.getModifiedFiles()],
+              testsModified: gateway.wasTestsModified(),
+            },
+            costMonitor,
+            gateway.getWorktreeRoot(),
+          );
+        }
+        throw err;
+      }
+    } finally {
+      this.endAbortable(contractId);
+    }
+  }
+
+  /** 将 Worktree 内全部改动提交到任务分支（无改动时静默跳过） */
+  private async commitWorktree(
+    worktreePath: string,
+    contractId: string,
+  ): Promise<void> {
+    const status = await execGit(["status", "--porcelain"], worktreePath);
+    if (status.exitCode !== 0 || status.stdout.trim().length === 0) return;
+
+    await execGit(["add", "-A"], worktreePath);
+    const commit = await execGit(
+      ["commit", "-m", `chore(stagent): contract ${contractId} changes`],
+      worktreePath,
+    );
+    if (commit.exitCode !== 0) {
+      throw new Error(
+        `Failed to commit worktree changes: ${commit.stderr || commit.stdout}`,
+      );
+    }
+  }
+
+  /**
+   * 依赖准备（ADR-002）：
+   * - 锁文件一致 + 写保护可证明 → 建立只读共享 symlink 视图
+   * - 锁文件不一致（需变更依赖）→ 等待用户授权，不自动安装
+   * - 写保护不可证明 → 在 Worktree 内隔离安装（不污染主工程）
+   */
+  private async prepareDependencies(contractId: string): Promise<void> {
+    const worktreePath = getWorktreePath(this.repoRoot, contractId);
+    const plan = await planDependencyStrategy({
+      repoRoot: this.repoRoot,
+      worktreePath,
+    });
+
+    if (plan.strategy === "SHARED_SYMLINK") {
+      await mountDependencySymlink({
+        repoRoot: this.repoRoot,
+        worktreePath,
+      });
+      return;
+    }
+
+    // 需要变更依赖时必须由用户显式授权，先不安装
+    if (plan.requiresAuthorization || !plan.lockfile.name) return;
+
+    await runIsolatedInstall({
+      worktreePath,
+      runner: (command, args, cwd) =>
+        new Promise((resolve) => {
+          // 独立进程组：包管理器的后代进程（postinstall、node-gyp 等）
+          // 必须整树回收，否则会残留占用 Worktree 文件锁
+          const child = spawn(command, args, {
+            cwd,
+            stdio: "ignore",
+            env: { ...process.env, CI: "true" },
+            detached: true,
+          });
+          const timer = setTimeout(() => {
+            void killProcessTree(child.pid ?? 0, { graceMs: 1_000 }).finally(
+              () => resolve({ code: 124 }),
+            );
+          }, 300_000);
+          child.on("close", (code) => {
+            clearTimeout(timer);
+            resolve({ code: code ?? 1 });
+          });
+          child.on("error", () => {
+            clearTimeout(timer);
+            resolve({ code: 1 });
+          });
+        }),
+    });
+  }
+
+  private buildRuntime(
+    contract: SoftwareContract,
+    signal?: AbortSignal,
+  ): {
+    gateway: ScopedWorktreeGateway;
+    costMonitor: CostMonitor;
+    loopGuard: LoopGuard;
+    worktreePath: string;
+  } {
+    const worktreePath = getWorktreePath(this.repoRoot, contract.contract_id);
+    const guardDir = path.join(this.repoRoot, ".stagent", "guard");
+    const costMonitor = new CostMonitor({
+      maxCostMinorUnits:
+        contract.authorization.cost_limits.max_cost_minor_units,
+      currency: contract.authorization.cost_limits.currency,
+      ...(contract.authorization.cost_limits.max_input_tokens === undefined
+        ? {}
+        : {
+            maxTotalTokens: contract.authorization.cost_limits.max_input_tokens,
+          }),
+      statePath: path.join(guardDir, "cost.json"),
+    });
+    const loopGuard = new LoopGuard({
+      maxRetries: contract.authorization.budget_limits.max_verification_retries,
+      statePath: path.join(guardDir, "loop.json"),
+    });
+    const gateway = new ScopedWorktreeGateway(worktreePath, contract, {
+      costMonitor,
+      loopGuard,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    return { gateway, costMonitor, loopGuard, worktreePath };
+  }
+
+  private async readWorktreeInfo(
+    contractId: string,
+    worktreePath: string,
+  ): Promise<WorktreeInfo> {
+    return {
+      contractId,
+      worktreePath,
+      branch: `task/${contractId}`,
+      baseBranch: "main",
+      createdAt: new Date().toISOString(),
+      warnings: [],
+    };
+  }
+
+  private async writeEvidence(
+    contract: SoftwareContract,
+    input: {
+      status: EvidenceBundle["verdict"]["status"];
+      reasonCode?: EvidenceBundle["verdict"]["reason_code"];
+      summary: string;
+      verificationResults: Array<{
+        alias: string;
+        exitCode: number;
+        stdout: string;
+        stderr: string;
+        durationMs: number;
+        passed: boolean;
+      }>;
+      scopePassed: boolean;
+      forbiddenViolations: string[];
+      modifiedFiles: string[];
+      /** 本任务是否修改过测试文件（写入 Evidence 供核销人预警复核） */
+      testsModified?: boolean;
+    },
+    costMonitor?: CostMonitor,
+    worktreePath?: string,
+  ): Promise<EvidenceBundle> {
+    const evidenceId = `evi_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const totals = costMonitor?.getTotals();
+    const headSha = worktreePath
+      ? this.syncGit(worktreePath, ["rev-parse", "HEAD"]) || "unknown"
+      : "unknown";
+    // 防篡改指纹：HEAD + porcelain 状态 + 变更文件内容哈希。
+    // 合并前会重算比对；用户在 Evidence 生成后偷改 Worktree 必然导致指纹不符。
+    const fingerprint = worktreePath
+      ? await computeWorktreeFingerprint(worktreePath)
+      : createHash("sha256").update("no-worktree").digest("hex");
+    const patch = worktreePath
+      ? this.syncGit(worktreePath, ["diff", "HEAD"]) || ""
+      : "";
+    const diffStat = worktreePath
+      ? this.syncGit(worktreePath, ["diff", "--stat", "HEAD"]) || ""
+      : "";
+
+    const bundle: EvidenceBundle = {
+      evidence_id: evidenceId,
+      contract_id: contract.contract_id,
+      generated_at: new Date().toISOString(),
+      usage:
+        totals && totals.totalTokens > 0
+          ? {
+              input_tokens: totals.inputTokens,
+              output_tokens: totals.outputTokens,
+              currency: totals.currency,
+              pricing_version:
+                contract.authorization.cost_limits.pricing_version,
+              accounting_mode: "ESTIMATED",
+              estimated_cost_minor_units: totals.totalCostMinorUnits,
+              limit_reached: totals.tripped,
+              cumulative_cost_minor_units: totals.totalCostMinorUnits,
+            }
+          : {
+              currency: contract.authorization.cost_limits.currency,
+              pricing_version:
+                contract.authorization.cost_limits.pricing_version,
+              accounting_mode: "UNAVAILABLE",
+              limit_reached: costMonitor?.isTripped() ?? false,
+            },
+      worktree_snapshot: {
+        head_sha: headSha,
+        snapshot_fingerprint: fingerprint,
+        captured_at: new Date().toISOString(),
+      },
+      verdict: {
+        status: input.status,
+        can_merge:
+          input.status === "PASSED" &&
+          input.scopePassed &&
+          input.forbiddenViolations.length === 0,
+        summary: input.summary,
+        ...(input.reasonCode === undefined
+          ? {}
+          : { reason_code: input.reasonCode }),
+        verification_retry_count: input.verificationResults.filter(
+          (r) => !r.passed,
+        ).length,
+      },
+      scope_audit: {
+        passed: input.scopePassed,
+        files_changed: input.modifiedFiles.map((p) => ({
+          path: p,
+          additions: 0,
+          deletions: 0,
+          binary: false,
+        })),
+        forbidden_violations: input.forbiddenViolations,
+        budget_exhausted: costMonitor?.isTripped() ?? false,
+      },
+      verification_results: input.verificationResults
+        .slice(-MAX_EVIDENCE_VERIFICATION_RESULTS)
+        .map((r) => ({
+          command_alias: r.alias,
+          exit_code: r.exitCode,
+          stdout_tail: r.stdout.slice(-MAX_EVIDENCE_TAIL_CHARS),
+          stderr_tail: r.stderr.slice(-MAX_EVIDENCE_TAIL_CHARS),
+          duration_ms: r.durationMs,
+          passed: r.passed,
+        })),
+      tests_modified: input.testsModified ?? false,
+      git_info: {
+        base_commit_sha:
+          this.syncGit(this.repoRoot, [
+            "rev-parse",
+            contract.authorization.git.base_branch,
+          ]) || "unknown",
+        task_commit_sha: headSha,
+        diff_stat: diffStat,
+        patch_fingerprint: createHash("sha256").update(patch).digest("hex"),
+      },
+    };
+
+    const validated = evidenceBundleSchema.parse(clampEvidenceSize(bundle));
+    const evidenceDir = path.join(this.repoRoot, ".stagent", "evidence");
+    fs.mkdirSync(evidenceDir, { recursive: true });
+    writeStateFile(
+      path.join(
+        evidenceDir,
+        `${contract.contract_id}-${validated.evidence_id}.json`,
+      ),
+      validated,
+    );
+    return validated;
+  }
+
+  private syncGit(cwd: string, args: string[]): string | null {
+    try {
+      return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+    } catch {
+      return null;
+    }
+  }
+}
+
+/** 单条验证命令在 Evidence 中保留的日志尾巴字符数 */
+export const MAX_EVIDENCE_TAIL_CHARS = 2_000;
+/** Evidence 最多保留的验证命令条数（防止狂暴命令把日志灌进存证） */
+export const MAX_EVIDENCE_VERIFICATION_RESULTS = 20;
+/** Evidence JSON 硬上限：超过则逐级收缩日志尾巴，绝不把几十兆文本塞进存证 */
+export const MAX_EVIDENCE_JSON_BYTES = 512 * 1024;
+
+/** 收缩 Evidence 体积直至低于硬上限（保底 200 字符尾巴） */
+function clampEvidenceSize(bundle: EvidenceBundle): EvidenceBundle {
+  const sizeOf = (b: EvidenceBundle): number =>
+    Buffer.byteLength(JSON.stringify(b), "utf-8");
+
+  let tail = MAX_EVIDENCE_TAIL_CHARS;
+  let current = bundle;
+  while (sizeOf(current) > MAX_EVIDENCE_JSON_BYTES && tail > 200) {
+    tail = Math.max(200, Math.floor(tail / 2));
+    current = {
+      ...current,
+      verification_results: current.verification_results.map((r) => ({
+        ...r,
+        stdout_tail: r.stdout_tail.slice(-tail),
+        stderr_tail: r.stderr_tail.slice(-tail),
+      })),
+    };
+  }
+  return current;
+}
+
+/** 解析 git status --porcelain 输出为相对路径列表（含重命名目标路径） */
+function parsePorcelainPaths(stdout: string): string[] {
+  return stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      let p = line.slice(3);
+      const arrow = p.indexOf(" -> ");
+      if (arrow >= 0) p = p.slice(arrow + 4);
+      return p.replace(/^"|"$/g, "").replace(/\/$/, "");
+    })
+    .filter((p) => p !== "");
+}

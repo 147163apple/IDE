@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": [
+    "src/lib/contract.schema.ts",
+    "src/lib/evidence.schema.ts",
+    "src/lib/git-guard.ts",
+    "src/lib/git-workspace.ts",
+    "src/lib/report.ts",
+    "src/lib/scope.ts",
+    "src/lib/history.ts",
+    "daemon/mcp/gateway.ts",
+    "daemon/mcp/path-resolver.ts",
+    "daemon/guard/loop-guard.ts",
+    "daemon/guard/cost-monitor.ts"
+  ],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,44 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+.output
+.vinxi
+.tanstack/**
+.nitro
+*.local
+
+# Wrangler / Cloudflare
+.wrangler/
+.dev.vars
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Stagent runtime
+.stagent/
+
+# Local build / test scratch (not part of source)
+.tmp/
+.deps/
+.npm-cache/
+coverage/
+
+# Stray mkstemp-style artifact left by an editor/atomic-write test (4-byte, unreferenced)
+/uyrvtqhd
