@@ -19,6 +19,7 @@ export * from "./guard/state-store";
 export * from "./recovery/crash-recovery";
 export * from "./pipeline/contract-store";
 export * from "./pipeline/orchestrator";
+export * from "./supervisor";
 export * from "./worker/ai-worker";
 export * from "./worker/openai-client";
 export * from "./arch/parser";
