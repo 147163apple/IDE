@@ -13,9 +13,14 @@
 | 1 | 初始化 Git 基线 | ✅ 完成 | `84dcfc2`，180 文件，`git status` = clean |
 | 2 | 定位并修复 Vitest 超时 | ✅ 完成 | 38 files / 212 tests 全绿（`74553a1`） |
 | 3 | 目录映射约定 | ✅ 确认 | 保留 `daemon/` 顶层，`worker/`、`supervisor/` 作为其子目录 |
-| 4 | TASK-0.2b 实施 | ✅ 代码完成 / ⚠️ 全量回归待复跑 | 单元测试 5 文件 127 用例全绿；`typecheck` 通过 |
+| 4 | TASK-0.2b 实施 | ✅ 完成（已提交 `52c807c`） | 全量 43 文件 / 339 用例全绿；typecheck ✅；eslint 全目录 ✅ |
 
-**唯一未完成项**：Task 0.2b 的**全量**回归（`npm test` 43 文件 / 339 用例）未能在本会话跑完 —— 原因见 §5「环境故障」，与代码无关。
+> **2026-10-20 复跑更新**：上一会话因沙箱故障未完成的收尾项已全部闭环 ——
+> 全量 `npm test` **43 files / 339 tests 全绿（exit 0，357.5s）**，此前 141 个环境性失败全部消除；
+> `tsc --noEmit` exit 0；eslint 逐目录（src/lib、components、hooks、routes、tests、daemon、bin、tests、scripts + 根配置）全部 exit 0
+> （`eslint .` 单进程整仓运行在 WorkBuddy broker IPC 上仍有 EPIPE 崩溃，属环境 shim 问题，逐目录等价覆盖已证明无 lint 违规；
+> 另修复新文件 30 处 `prettier/prettier` 格式违规，修复后单元测试 127/127 复验通过）。
+> 变更已提交为 `52c807c feat(contract): TASK-0.2b schema v1.2.0 upgrade`，工作树干净。
 
 ---
 
