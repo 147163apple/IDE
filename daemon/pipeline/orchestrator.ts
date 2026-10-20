@@ -25,6 +25,10 @@ import {
 import { killProcessTree } from "../runner/process-tree";
 import { writeStateFile } from "../guard/state-store";
 import {
+  loadCurrentGatewayViolation,
+  saveGatewayViolation,
+} from "../guard/gateway-violation-store";
+import {
   AiWorker,
   type WorkerModelClient,
   type WorkerRunResult,
@@ -427,9 +431,11 @@ export class ContractOrchestrator {
     const interceptorBlocked =
       interceptor.isStopped() ||
       !interceptor.canProduceEvidence() ||
-      fs.existsSync(
-        path.join(this.repoRoot, ".stagent", "guard", "gateway-violation.json"),
-      );
+      loadCurrentGatewayViolation(
+        this.repoRoot,
+        current.contract_id,
+        current.contract_revision,
+      ) !== null;
 
     // 端口冲突属于环境问题，不按断言失败处理：BLOCKED + E_PORT_CONFLICT，
     // 由用户清理端口后重跑，而不是让 Worker 误以为用例写错去改代码。
@@ -676,12 +682,12 @@ export class ContractOrchestrator {
       worktreeRoot: worktreePath,
       allowedAliases: contract.verification_spec.commands.map((c) => c.alias),
       onDowngrade: (violation) => {
-        // 降级事实落盘：后续 execute 即使重建 Gateway 也必须保持 BLOCKED
-        const dir = path.join(this.repoRoot, ".stagent", "guard");
-        fs.mkdirSync(dir, { recursive: true });
-        fs.writeFileSync(
-          path.join(dir, "gateway-violation.json"),
-          JSON.stringify(violation, null, 2),
+        // 按合同隔离落盘；revision 变化后旧记录自动失效
+        saveGatewayViolation(
+          this.repoRoot,
+          contract.contract_id,
+          contract.contract_revision,
+          violation,
         );
         this.onGatewayViolation?.(violation);
       },

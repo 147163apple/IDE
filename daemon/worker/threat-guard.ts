@@ -116,61 +116,90 @@ function normalizeExecutable(executable: string): string {
   return base.toLowerCase().replace(/\.(exe|cmd|bat)$/, "");
 }
 
+function shellScriptIndex(args: readonly string[]): number {
+  for (let i = 0; i < args.length; i += 1) {
+    // -c / -lc / -ec 等合并短选项
+    if (/^-[A-Za-z]*c[A-Za-z]*$/.test(args[i] as string)) return i + 1;
+  }
+  return -1;
+}
+
+/** 按 ; && || | 拆分，并跳过脚本开头的 VAR=value 赋值 */
+function splitShellSegments(script: string): string[][] {
+  const withoutAssignments = script.replace(
+    /^(\s*[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|[^\s;|&]+)\s*)+/,
+    "",
+  );
+  return withoutAssignments
+    .split(/(?:;|&&|\|\||\|)/)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0)
+    .map((segment) => segment.split(/\s+/));
+}
+
+/** 包装器自身需要吞掉值的选项 */
+const OPTION_VALUE_FLAGS: Record<string, Set<string>> = {
+  timeout: new Set(["-s", "--signal", "-k", "--kill-after"]),
+  env: new Set(["-u", "--unset", "-C", "--chdir"]),
+  nice: new Set(["-n", "--adjustment"]),
+  xargs: new Set(["-I", "-n", "-P", "-L", "-s"]),
+};
+
 /**
  * 取包装命令/shell -c 后面的真实命令词。
  * 支持 env/xargs/nice/timeout/caffeinate/command 的常见选项形态；
- * shell 的 `-c "sudo ls"` 取字符串里的第一个词。
+ * shell 的 `-c`/`-lc`/`-ec` 会拆段并逐段检查，脚本内包装命令继续展开。
  */
 function effectiveExecutables(
   executable: string,
   args: readonly string[],
+  depth = 0,
 ): string[] {
+  if (depth > 6) return [];
   const names: string[] = [];
-  let current = normalizeExecutable(executable);
-  let rest = [...args];
-  const seen = new Set<string>();
+  const current = normalizeExecutable(executable);
+  names.push(current);
 
-  for (let depth = 0; depth < 5; depth += 1) {
-    names.push(current);
-    if (seen.has(current)) break;
-    seen.add(current);
-
-    if (SHELLS.has(current)) {
-      const cIndex = rest.indexOf("-c");
-      if (cIndex >= 0) {
-        const script = rest[cIndex + 1] ?? "";
-        const inner = script.trim().split(/\s+/)[0] ?? "";
-        if (inner) {
-          current = normalizeExecutable(inner);
-          rest = [];
-          continue;
-        }
+  if (SHELLS.has(current)) {
+    const scriptIndex = shellScriptIndex(args);
+    if (scriptIndex >= 0) {
+      const script = args[scriptIndex] ?? "";
+      for (const tokens of splitShellSegments(script)) {
+        const [inner, ...rest] = tokens;
+        if (!inner) continue;
+        names.push(...effectiveExecutables(inner, rest, depth + 1));
       }
-      break;
     }
+    return names;
+  }
 
-    if (!WRAPPERS.has(current)) break;
+  if (!WRAPPERS.has(current)) {
+    // npx/bunx 后面的包名同样按可执行命令检查
+    if (current === "npx" || current === "bunx") {
+      const pkg = args.find((arg) => !arg.startsWith("-"));
+      if (pkg) names.push(normalizeExecutable(pkg));
+    }
+    return names;
+  }
 
-    // 跳过包装器自身选项与变长参数
-    let index = 0;
-    while (index < rest.length && rest[index]?.startsWith("-")) {
+  let index = 0;
+  const valueFlags = OPTION_VALUE_FLAGS[current] ?? new Set<string>();
+  while (index < args.length && args[index]?.startsWith("-")) {
+    const flag = args[index] as string;
+    index += valueFlags.has(flag) ? 2 : 1;
+  }
+  if (current === "timeout") {
+    // timeout 的第一个位置参数是时长，之后才是命令
+    index += 1;
+  }
+  if (current === "env") {
+    while (index < args.length && (args[index] as string).includes("=")) {
       index += 1;
     }
-    if (current === "timeout") {
-      // 第一个位置参数是时长，第二个才是命令
-      index += 1;
-    }
-    if (current === "nice" && rest[index - 1] === "-n") {
-      index += 1;
-    }
-    if (current === "env") {
-      // 跳过 VAR=value
-      while (index < rest.length && rest[index]?.includes("=")) index += 1;
-    }
-    const next = rest[index];
-    if (!next) break;
-    current = normalizeExecutable(next);
-    rest = rest.slice(index + 1);
+  }
+  const next = args[index];
+  if (next) {
+    names.push(...effectiveExecutables(next, args.slice(index + 1), depth + 1));
   }
   return names;
 }
@@ -204,8 +233,9 @@ export function assessCommandThreat(params: {
   }
 
   const names = effectiveExecutables(params.executable, params.args);
+  const viaLauncher = names[0] === "npx" || names[0] === "bunx";
   for (const name of names) {
-    if (PRIVILEGED.has(name)) {
+    if (PRIVILEGED.has(name) || (viaLauncher && name === "chmod")) {
       return {
         allowed: false,
         category: "PRIVILEGED_COMMAND",
@@ -248,7 +278,13 @@ export function assessCommandThreat(params: {
     return { allowed: true, reason: "ok" };
   }
 
-  for (const rawArg of params.args) {
+  for (let index = 0; index < params.args.length; index += 1) {
+    const rawArg = params.args[index] as string;
+    // vitest -t / --grep 后紧跟的是测试名模式，不是路径
+    if (rawArg === "-t" || rawArg === "--grep") {
+      index += 1;
+      continue;
+    }
     // 选项值也可能带主机路径（--prefix=/tmp），先取出 = 之后的部分
     const arg = rawArg.includes("=")
       ? (rawArg.split("=").slice(1).join("=") ?? rawArg)

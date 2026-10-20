@@ -164,16 +164,65 @@ describe("W.4 威胁守卫：命令启动前校验", () => {
     expect(res.category).toBe("PRIVILEGED_COMMAND");
   });
 
-  it("sh/bash/zsh -c 后的第一个词同样过特权检查", () => {
+  it("sh/bash/zsh -c 及 -lc/-ec：拆段、跳过 VAR=、逐段检查并展开包装", () => {
+    const scripts = [
+      "sudo ls",
+      "FOO=1 sudo ls",
+      "echo ok; sudo ls",
+      "echo ok && env FOO=1 sudo ls",
+      "echo ok || timeout -s KILL 5 sudo ls",
+      "echo ok | xargs sudo ls",
+    ];
     for (const shell of ["sh", "bash", "zsh"]) {
+      for (const flag of ["-c", "-lc", "-ec"]) {
+        for (const script of scripts) {
+          const res = assessCommandThreat({
+            executable: shell,
+            args: [flag, script],
+            worktreeRoot: worktree,
+            repoTrusted: true,
+          });
+          expect(res.allowed, `${shell} ${flag} ${script}`).toBe(false);
+          expect(res.category, `${shell} ${flag} ${script}`).toBe(
+            "PRIVILEGED_COMMAND",
+          );
+        }
+      }
+    }
+  });
+
+  it("timeout -s/-k 与 env -u 会跳过参数值，npx 包名也过特权检查", () => {
+    for (const line of [
+      "timeout -s KILL -k 5 10 sudo ls",
+      "env -u FOO sudo ls",
+      "npx sudo ls",
+      "bunx sudo ls",
+      "npx chmod 755 src/a.ts",
+    ]) {
+      const [executable, ...args] = line.split(" ");
       const res = assessCommandThreat({
-        executable: shell,
-        args: ["-c", "sudo ls /"],
+        executable: executable as string,
+        args,
         worktreeRoot: worktree,
         repoTrusted: true,
       });
-      expect(res.allowed, shell).toBe(false);
-      expect(res.category, shell).toBe("PRIVILEGED_COMMAND");
+      expect(res.allowed, line).toBe(false);
+      expect(res.category, line).toBe("PRIVILEGED_COMMAND");
+    }
+  });
+
+  it("vitest -t/--grep 后的模式参数不按主机路径判定", () => {
+    for (const args of [
+      ["run", "-t", "/etc/passwd"],
+      ["run", "--grep", "/tmp/secret.txt"],
+    ]) {
+      const res = assessCommandThreat({
+        executable: "vitest",
+        args,
+        worktreeRoot: worktree,
+        repoTrusted: true,
+      });
+      expect(res.allowed, args.join(" ")).toBe(true);
     }
   });
 

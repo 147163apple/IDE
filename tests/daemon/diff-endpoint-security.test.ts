@@ -4,6 +4,12 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
+import { ContractStore } from "../../daemon/pipeline/contract-store";
+import { saveGatewayViolation } from "../../daemon/guard/gateway-violation-store";
+import {
+  createContractDraft,
+  softwareContractSchema,
+} from "../../src/lib/contract.schema";
 
 /**
  * C.5 安全修复回归：/diff 与 /diff-files 的合同 ID 必须是白名单字符，
@@ -33,6 +39,37 @@ function getJson<T>(
       },
     );
     req.on("error", reject);
+  });
+}
+
+function requestJson<T>(
+  method: string,
+  url: string,
+  token?: string,
+): Promise<{ statusCode: number; body: T }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      url,
+      {
+        method,
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      },
+      (res) => {
+        let raw = "";
+        res.on("data", (c) => (raw += c));
+        res.on("end", () => {
+          let body: unknown = {};
+          try {
+            body = JSON.parse(raw);
+          } catch {
+            body = raw;
+          }
+          resolve({ statusCode: res.statusCode ?? 0, body: body as T });
+        });
+      },
+    );
+    req.on("error", reject);
+    req.end();
   });
 }
 
@@ -98,5 +135,55 @@ describe("C.5 Diff 端点：合同 ID 与路径包含性", () => {
       expect(res.statusCode).toBe(404);
       expect(JSON.stringify(res.body)).not.toContain("/.stagent/worktrees");
     }
+  });
+
+  it("违规记录可按合同查看，且只能由带 token 的用户清除", async () => {
+    const draft = createContractDraft({
+      title: "violation api",
+      description: "gateway violation",
+      acceptanceCriteria: ["ok"],
+      writablePaths: ["src/**"],
+    });
+    const contract = softwareContractSchema.parse({
+      ...draft,
+      lifecycle_state: "PENDING_APPROVAL",
+      approval: { status: "PENDING_REVIEW" },
+    });
+    new ContractStore(repo).save(contract);
+    saveGatewayViolation(
+      repo,
+      contract.contract_id,
+      contract.contract_revision,
+      {
+        type: "GATEWAY_VIOLATION",
+        code: "UNKNOWN_CHANNEL",
+        reason: "native tool",
+        adapter_id: "a",
+        at: new Date().toISOString(),
+      },
+    );
+
+    const url = `${baseUrl}/api/contracts/${contract.contract_id}/gateway-violation`;
+    const seen = await requestJson<{ violation: { code: string } | null }>(
+      "GET",
+      url,
+      token,
+    );
+    expect(seen.statusCode).toBe(200);
+    expect(seen.body.violation?.code).toBe("UNKNOWN_CHANNEL");
+
+    const unauthorized = await requestJson<{ error?: string }>("DELETE", url);
+    expect(unauthorized.statusCode).toBe(401);
+
+    const cleared = await requestJson<{ cleared: boolean }>(
+      "DELETE",
+      url,
+      token,
+    );
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.body.cleared).toBe(true);
+
+    const after = await requestJson<{ violation: unknown }>("GET", url, token);
+    expect(after.body.violation).toBeNull();
   });
 });

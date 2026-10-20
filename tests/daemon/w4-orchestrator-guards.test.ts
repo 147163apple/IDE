@@ -10,6 +10,10 @@ import type { RuntimeInterceptor } from "../../daemon/worker/runtime-interceptor
 import type { GatewayViolation } from "../../daemon/worker/runtime-interceptor";
 import type { ScopedWorktreeGateway } from "../../daemon/mcp/gateway";
 import {
+  loadCurrentGatewayViolation,
+  saveGatewayViolation,
+} from "../../daemon/guard/gateway-violation-store";
+import {
   createContractDraft,
   softwareContractSchema,
   type SoftwareContract,
@@ -143,5 +147,56 @@ describe("W.4 / 编排器威胁守卫与证据门禁", () => {
     expect(outcome.evidence.verdict.status).toBe("BLOCKED");
     expect(outcome.evidence.verdict.reason_code).toBe("UNSAFE_EXECUTION");
     expect(outcome.evidence.worker_control_mode).toBe("UNCONTROLLED_EXTERNAL");
+  });
+
+  it("违规按合同隔离：合同 A 违规不影响合同 B 通过", async () => {
+    const a = makeContract("A", {
+      executable: "node",
+      args: ["-e", "process.exit(0)"],
+    });
+    const b = makeContract("B", {
+      executable: "node",
+      args: ["-e", "process.exit(0)"],
+    });
+    store.save(a);
+    store.save(b);
+    await orchestrator.approve(a.contract_id, "tina");
+    await orchestrator.approve(b.contract_id, "tina");
+
+    const events: GatewayViolation[] = [];
+    const watching = new ContractOrchestrator({
+      repoRoot: repo,
+      onGatewayViolation: (v) => events.push(v),
+    });
+    const runtime = (
+      watching as unknown as {
+        buildRuntime: (c: SoftwareContract) => {
+          gateway: ScopedWorktreeGateway;
+        };
+      }
+    ).buildRuntime(store.get(a.contract_id) as SoftwareContract);
+    await runtime.gateway.callTool("native_fs_write", { path: "src/a.ts" });
+    expect(events).toHaveLength(1);
+
+    const outcomeB = await orchestrator.execute(b.contract_id);
+    expect(outcomeB.evidence.verdict.status).toBe("PASSED");
+
+    const outcomeA = await orchestrator.execute(a.contract_id);
+    expect(outcomeA.evidence.verdict.status).toBe("BLOCKED");
+  });
+
+  it("revision 变化后旧违规记录不再生效", () => {
+    const violation: GatewayViolation = {
+      type: "GATEWAY_VIOLATION",
+      code: "UNKNOWN_CHANNEL",
+      reason: "test",
+      adapter_id: "a",
+      at: new Date().toISOString(),
+    };
+    saveGatewayViolation(repo, "c1", 1, violation);
+    expect(loadCurrentGatewayViolation(repo, "c1", 1)?.code).toBe(
+      "UNKNOWN_CHANNEL",
+    );
+    expect(loadCurrentGatewayViolation(repo, "c1", 2)).toBeNull();
   });
 });
