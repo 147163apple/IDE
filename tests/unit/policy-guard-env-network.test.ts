@@ -99,6 +99,39 @@ describe("W.3 policy-guard：环境与网络", () => {
     expect(passive["HTTP_PROXY"]).toBeUndefined();
   });
 
+  it("未传 resolvedEnv 的旧调用分支也走 policy-guard（隔离 + DENY 同时生效）", async () => {
+    const previousToken = process.env["HOST_SECRET_TOKEN"];
+    const previousFlag = process.env["ALLOWED_FLAG"];
+    process.env["HOST_SECRET_TOKEN"] = "host-secret-do-not-leak";
+    process.env["ALLOWED_FLAG"] = "allowed-value";
+    try {
+      const script =
+        "console.log(JSON.stringify({" +
+        "host:process.env.HOST_SECRET_TOKEN??null," +
+        "allowed:process.env.ALLOWED_FLAG??null," +
+        "offline:process.env.npm_config_offline??null}))";
+      const result = await runCommand("node", {
+        cwd: worktree,
+        argv: { executable: "node", args: ["-e", script] },
+        envOptions: { allowedKeyOverrides: ["ALLOWED_FLAG"] },
+        networkPolicy: "DENY",
+        timeoutMs: 30_000,
+      });
+      const parsed = JSON.parse(result.stdout.trim()) as Record<
+        string,
+        string | null
+      >;
+      expect(parsed["host"]).toBeNull();
+      expect(parsed["allowed"]).toBe("allowed-value");
+      expect(parsed["offline"]).toBe("true");
+    } finally {
+      if (previousToken === undefined) delete process.env["HOST_SECRET_TOKEN"];
+      else process.env["HOST_SECRET_TOKEN"] = previousToken;
+      if (previousFlag === undefined) delete process.env["ALLOWED_FLAG"];
+      else process.env["ALLOWED_FLAG"] = previousFlag;
+    }
+  });
+
   it("秘密在截断前已遮蔽：超长输出里也看不到秘密值", async () => {
     const secret = "super-secret-value-123456";
     const script =

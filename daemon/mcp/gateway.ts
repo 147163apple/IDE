@@ -48,6 +48,27 @@ import {
 } from "../guard/test-integrity";
 import { guardAgentFileOperation } from "../protection/protection-list";
 
+/**
+ * 端口冲突判定（W.4 收紧）：
+ * 1. 同一行必须同时出现「EADDRINUSE / address already in use」与 listen/bind 语义；
+ * 2. 输出里不能出现断言失败标记（AssertionError / Tests failed / FAIL 等）；
+ * 仅「提到这句话」不足以归因，避免把真正的断言失败误判成环境问题。
+ */
+const PORT_CONFLICT_LINE = /EADDRINUSE|address already in use/i;
+const PORT_LISTEN_BIND_LINE = /\b(listen|listening|bind|binding)\b/i;
+const ASSERTION_FAILURE = /AssertionError|\bTests?\s+failed\b|\bFAIL\b|[✕✗]/i;
+
+export function isPortConflictOutput(stdout: string, stderr: string): boolean {
+  const text = `${stdout}\n${stderr}`;
+  if (ASSERTION_FAILURE.test(text)) return false;
+  return text
+    .split("\n")
+    .some(
+      (line) =>
+        PORT_CONFLICT_LINE.test(line) && PORT_LISTEN_BIND_LINE.test(line),
+    );
+}
+
 /** 从 Worktree 路径反推主仓库根（保护清单/快照始终归属主仓库） */
 function mainRepoRootOf(worktreeRoot: string): string {
   const marker = `${path.sep}.stagent${path.sep}worktrees${path.sep}`;
@@ -1282,9 +1303,7 @@ export class ScopedWorktreeGateway {
       // 识别后返回 E_PORT_CONFLICT + 白话说明，且不计入连续失败熔断。
       const portConflict =
         result.exitCode !== 0 &&
-        /EADDRINUSE|address already in use/i.test(
-          `${result.stdout}\n${result.stderr}`,
-        );
+        isPortConflictOutput(result.stdout, result.stderr);
 
       // Update loop guard if this matches a verification test command
       const isTestCommand = allowedCommands.some(

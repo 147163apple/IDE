@@ -94,6 +94,22 @@ export function collectGrantedEnv(params: {
   return { extraEnv, secretValues };
 }
 
+/**
+ * 组装最终子进程环境（白名单 → 网络策略）。
+ * 供 `buildCommandEnvironment` 与 command-runner 的旧调用分支共用，
+ * 保证「无论是否传 resolvedEnv，都走同一套策略」。
+ */
+export function resolveEnvironment(
+  baseEnv: NodeJS.ProcessEnv,
+  envOptions: EnvSanitizerOptions | undefined,
+  networkPolicy: NetworkPolicy | undefined,
+): Record<string, string> {
+  return applyNetworkPolicy(
+    sanitizeEnvironment(baseEnv, envOptions),
+    networkPolicy,
+  );
+}
+
 /** 组装子进程环境：白名单 → 合同授权注入 → 网络策略 */
 export function buildCommandEnvironment(
   params: BuildCommandEnvironmentParams,
@@ -105,8 +121,9 @@ export function buildCommandEnvironment(
       ...(params.permissions.allowed_environment_variable_names ?? []),
     ],
   };
-  const env = applyNetworkPolicy(
-    sanitizeEnvironment(params.baseEnv ?? process.env, envOptions),
+  const env = resolveEnvironment(
+    params.baseEnv ?? process.env,
+    envOptions,
     params.permissions.network_policy,
   );
   return { env, envOptions, secretValues };

@@ -372,7 +372,12 @@ export class ContractOrchestrator {
       gateway.wasTestsModified() || worktreeChanged.some(isTestPath);
     const allPassed = verificationResults.every((r) => r.passed);
     const tripped = loopGuard.isTripped() || costMonitor.isTripped();
-    const portConflict = portConflictAliases.length > 0;
+    // 只有「除端口冲突外没有别的失败」时，才把整轮归因为端口冲突；
+    // 若同时存在断言失败，仍按 FAILED/UNSAFE_EXECUTION 处理。
+    const failedNonPort = verificationResults.some(
+      (r) => !r.passed && !portConflictAliases.includes(r.alias),
+    );
+    const portConflict = portConflictAliases.length > 0 && !failedNonPort;
 
     // 端口冲突属于环境问题，不按断言失败处理：BLOCKED + E_PORT_CONFLICT，
     // 由用户清理端口后重跑，而不是让 Worker 误以为用例写错去改代码。
