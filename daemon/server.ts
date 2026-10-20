@@ -172,6 +172,10 @@ export class StagentDaemon {
           line,
         });
       },
+      // TASK-W.4：运行时违规广播（能力漂移 / 未知通道 / 越界路径）
+      onGatewayViolation: (violation) => {
+        this.broadcast("GATEWAY_VIOLATION", violation);
+      },
     });
     this.chat = new ChatSessionManager({
       repoRoot: this.repoRoot,

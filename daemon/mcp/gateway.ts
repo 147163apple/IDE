@@ -36,6 +36,7 @@ import {
 } from "../runner/command-policy";
 import { type EnvSanitizerOptions } from "../runner/env-filter";
 import { buildCommandEnvironment } from "../worker/policy-guard";
+import type { RuntimeInterceptor } from "../worker/runtime-interceptor";
 import {
   CostMonitor,
   E_COST_CAP_EXCEEDED,
@@ -125,6 +126,8 @@ export interface ScopedGatewayOptions {
   /** TASK-C.5：命令输出的逐行实时回放（行内容已脱敏） */
   onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
+  /** TASK-W.4：运行时复检（能力漂移 / 未知通道 / 越界路径） */
+  runtimeInterceptor?: RuntimeInterceptor | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -150,6 +153,7 @@ export class ScopedWorktreeGateway {
   private readonly signal?: AbortSignal | undefined;
   private readonly onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
+  private readonly runtimeInterceptor?: RuntimeInterceptor | undefined;
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -176,6 +180,7 @@ export class ScopedWorktreeGateway {
     this.loopGuard = options.loopGuard;
     this.signal = options.signal;
     this.onTerminalLine = options.onTerminalLine;
+    this.runtimeInterceptor = options.runtimeInterceptor;
   }
 
   public getWorktreeRoot(): string {
@@ -455,6 +460,28 @@ export class ScopedWorktreeGateway {
     // G-09：任何工具调用先记账；熔断后一律拒绝（含未知工具名）
     const budgetDenial = this.consumeToolCallBudget(name);
     if (budgetDenial) return budgetDenial;
+
+    // W.4：每个工具调用前复检通道与路径；内部验证调用（orchestrator）不受 Worker 通道限制
+    if (this.runtimeInterceptor && options.internal !== true) {
+      const guard = this.runtimeInterceptor.checkToolCall(name, rawInput);
+      if (!guard.allowed) {
+        const violation = guard.violation;
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[E_UNSAFE_EXECUTION] ${violation?.reason ?? "运行时复检失败"}`,
+            },
+          ],
+          error: {
+            code: "E_UNSAFE_EXECUTION",
+            message: violation?.reason ?? "运行时复检失败",
+            details: { violation: violation?.code },
+          },
+        };
+      }
+    }
 
     switch (name) {
       case "stagent_read_file":
