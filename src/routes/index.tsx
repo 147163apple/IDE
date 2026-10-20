@@ -481,7 +481,9 @@ function Console() {
         repoName={repoName}
         repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
         baseBranch={currentBranch}
-        runMode={protection?.mode ?? "VIBE"}
+        runMode={
+          protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+        }
         workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
         daemonConnected={connected}
         contract={workspaceContract}
@@ -581,6 +583,17 @@ function Console() {
         }
         banner={
           <>
+            {protection?.corrupt && (
+              <div
+                data-testid="protection-corrupt-banner"
+                role="alert"
+                className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+              >
+                保护清单损坏，AI 所有改动暂时被拦。请修复或删除{" "}
+                <code>.stagent/protection.json</code> 后刷新页面（原因：
+                {protection.corrupt}）
+              </div>
+            )}
             {protection?.round.pending[0] && (
               <ProtectionApprovalCard
                 card={protection.round.pending[0]}

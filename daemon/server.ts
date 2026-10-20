@@ -779,7 +779,8 @@ export class StagentDaemon {
         const state = loadRoundState(this.repoRoot);
         const cp = getCheckpoint(this.repoRoot);
         this.sendJson(res, 200, {
-          mode: entries.length > 0 ? "PROTECTED" : "VIBE",
+          // 清单损坏时门卫按全拦截运行，不能显示成自由模式 VIBE
+          mode: corrupt ? "CORRUPT" : entries.length > 0 ? "PROTECTED" : "VIBE",
           entries,
           corrupt,
           round: {

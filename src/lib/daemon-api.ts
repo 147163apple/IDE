@@ -461,7 +461,8 @@ export interface ProtectionCardView {
 }
 
 export interface ProtectionStateView {
-  mode: "VIBE" | "PROTECTED";
+  /** CORRUPT：清单损坏，门卫按全拦截运行（不能显示为自由模式） */
+  mode: "VIBE" | "PROTECTED" | "CORRUPT";
   entries: ProtectionEntryView[];
   corrupt: string | null;
   round: {

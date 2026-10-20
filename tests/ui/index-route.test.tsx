@@ -11,6 +11,7 @@ import {
   createContractDraft,
   softwareContractSchema,
 } from "../../src/lib/contract.schema";
+import { fetchProtection } from "../../src/lib/daemon-api";
 
 const contract = softwareContractSchema.parse({
   ...createContractDraft({
@@ -119,6 +120,32 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     );
     expect(screen.getByText("架构雷达", { exact: false })).toBeInTheDocument();
   });
+  it("保护清单损坏：显示白话警告，顶栏不再假装自由模式", async () => {
+    vi.mocked(fetchProtection).mockResolvedValueOnce({
+      mode: "CORRUPT",
+      entries: [],
+      corrupt: "保护清单已损坏（结构不合法）",
+      round: {
+        roundId: "round-corrupt",
+        startedAt: "2026-10-21T00:00:00.000Z",
+        pending: [],
+        approvedFiles: [],
+      },
+      checkpoint: null,
+    });
+    render(<Console />);
+
+    expect(
+      await screen.findByTestId("protection-corrupt-banner"),
+    ).toHaveTextContent("保护清单损坏，AI 所有改动暂时被拦");
+    await waitFor(() =>
+      expect(screen.getByTestId("run-mode")).toHaveAttribute(
+        "data-mode",
+        "PROTECTED",
+      ),
+    );
+  });
+
   it("Sprint 1 门禁（假数据）：Agent 改文件 → 中栏自动打开 Monaco；Evidence STALE → 横幅", async () => {
     render(<Console />);
     fireEvent.click(await screen.findByText("主页面接线测试"));
