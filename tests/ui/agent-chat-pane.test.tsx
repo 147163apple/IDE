@@ -144,7 +144,7 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
 
   it("未连接时显示提示", () => {
     render(<AgentChatPane transport={null} />);
-    expect(screen.getByTestId("agent-chat")).toHaveTextContent("连接 Daemon");
+    expect(screen.getByTestId("agent-chat")).toHaveTextContent("还没连上后台");
   });
 });
 
@@ -173,5 +173,21 @@ describe("foldChatEvents", () => {
     const cards = messages.filter((m) => m.role === "tool");
     expect(new Set(cards.map((c) => c.id)).size).toBe(2);
     expect(cards.map((c) => c.tool?.output)).toEqual(["一", "二"]);
+  });
+});
+
+describe("TASK-C.6 未连接与可见标签（白话）", () => {
+  it("未连接时给出白话提示：用带钥匙的链接打开，或粘贴到 Session Token", () => {
+    render(<AgentChatPane transport={null} />);
+    const box = screen.getByRole("status");
+    expect(box.textContent).toContain("还没连上后台");
+    expect(box.textContent).toContain("#token=");
+    expect(box.textContent).toContain("Session");
+  });
+  it("Agent 下拉框旁有可见文字「AI 助手：」", async () => {
+    const { t } = fakeTransport();
+    render(<AgentChatPane transport={t} />);
+    expect(await screen.findByText("AI 助手：")).toBeTruthy();
+    expect(screen.getByLabelText("选择 Agent")).toBeTruthy();
   });
 });

@@ -19,8 +19,22 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
 
   if (!transport) {
     return (
-      <div data-testid="agent-chat" className="p-3 text-xs opacity-70">
-        连接 Daemon 后即可和 Agent 对话
+      <div
+        data-testid="agent-chat"
+        role="status"
+        className="m-3 rounded border border-amber-500/60 bg-amber-500/10 p-3 text-sm leading-relaxed"
+      >
+        <p className="font-semibold">
+          还没连上后台，所以这里暂时不能和 AI 助手对话。
+        </p>
+        <p className="mt-2">
+          请用我发给你的「带钥匙的链接」打开本页（地址以 <code>#token=</code>{" "}
+          结尾）。
+        </p>
+        <p className="mt-2 opacity-80">
+          为了安全，钥匙只在当前这个浏览器标签页里有效；新开标签页或手动输入地址时需要重新用带钥匙的链接打开。也可以把钥匙粘贴到页面顶部的「Session
+          Token」框里，再点「应用」。
+        </p>
       </div>
     );
   }
@@ -38,6 +52,7 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
       className="flex h-full flex-col gap-2 text-xs"
     >
       <div className="flex flex-wrap items-center gap-1">
+        <span className="font-semibold">AI 助手：</span>
         <select
           aria-label="选择 Agent"
           value={adapterChoice}
@@ -60,6 +75,7 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
         >
           新会话
         </button>
+        <span className="opacity-70">历史会话：</span>
         <select
           aria-label="历史会话"
           value={chat.sessionId ?? ""}
