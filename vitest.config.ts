@@ -72,6 +72,7 @@ export default defineConfig({
           setupFiles: ["./src/tests/setup.ts"],
           include: [
             "tests/components/**/*.{test,spec}.tsx",
+            "tests/ui/**/*.{test,spec}.tsx",
             "src/hooks/**/*.{test,spec}.tsx",
             "src/tests/**/*.{test,spec}.tsx",
           ],
