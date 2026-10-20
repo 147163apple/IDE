@@ -34,7 +34,8 @@ import {
   assertAliasExtraArgsAllowed,
   CommandPolicyError,
 } from "../runner/command-policy";
-import { parseEnvFile, type EnvSanitizerOptions } from "../runner/env-filter";
+import { type EnvSanitizerOptions } from "../runner/env-filter";
+import { buildCommandEnvironment } from "../worker/policy-guard";
 import {
   CostMonitor,
   E_COST_CAP_EXCEEDED,
@@ -287,40 +288,14 @@ export class ScopedWorktreeGateway {
   private buildCommandEnv(alias: string | undefined): {
     envOptions: EnvSanitizerOptions;
     secretValues: string[];
+    env: Record<string, string>;
   } {
-    const permissions = this.contract.authorization.execution_permissions;
-    const extraEnv: Record<string, string> = {};
-    const secretValues: string[] = [];
-
-    if (alias !== undefined) {
-      for (const grant of permissions.env_file_grants ?? []) {
-        if (!grant.command_aliases.includes(alias)) continue;
-        try {
-          const safe = resolveSafeWorktreePath(this.worktreeRoot, grant.file);
-          const parsedFile = parseEnvFile(
-            fs.readFileSync(safe.absolutePath, "utf-8"),
-          );
-          for (const name of grant.variable_names) {
-            const value = parsedFile[name];
-            if (value === undefined) continue;
-            extraEnv[name] = value;
-            if (value.length >= 6) secretValues.push(value);
-          }
-        } catch {
-          // 文件缺失/越界：该命令拿不到这些变量，但不阻断执行
-        }
-      }
-    }
-
-    return {
-      envOptions: {
-        extraEnv,
-        allowedKeyOverrides: [
-          ...permissions.allowed_environment_variable_names,
-        ],
-      },
-      secretValues,
-    };
+    // W.3：环境白名单 / env_file_grants / 网络策略统一由 policy-guard 组装
+    return buildCommandEnvironment({
+      permissions: this.contract.authorization.execution_permissions,
+      worktreeRoot: this.worktreeRoot,
+      alias,
+    });
   }
 
   private logAudit(entry: {
@@ -1292,6 +1267,7 @@ export class ScopedWorktreeGateway {
         networkPolicy:
           this.contract.authorization.execution_permissions.network_policy,
         envOptions: commandEnv.envOptions,
+        resolvedEnv: commandEnv.env,
         ...(commandEnv.secretValues.length === 0
           ? {}
           : { secretValues: commandEnv.secretValues }),
@@ -1302,12 +1278,20 @@ export class ScopedWorktreeGateway {
           : { onLine: this.onTerminalLine }),
       });
 
+      // 端口冲突诊断：验证脚本启动服务时常见，属于环境问题而非断言失败。
+      // 识别后返回 E_PORT_CONFLICT + 白话说明，且不计入连续失败熔断。
+      const portConflict =
+        result.exitCode !== 0 &&
+        /EADDRINUSE|address already in use/i.test(
+          `${result.stdout}\n${result.stderr}`,
+        );
+
       // Update loop guard if this matches a verification test command
       const isTestCommand = allowedCommands.some(
         (tc) => command === tc || command.startsWith(tc + " "),
       );
-      // 用户主动中止（exit 130）不算验证失败，避免误触连续失败熔断
-      if (this.loopGuard && isTestCommand && !result.aborted) {
+      // 用户主动中止（exit 130）与端口冲突都不算验证失败，避免误触熔断
+      if (this.loopGuard && isTestCommand && !result.aborted && !portConflict) {
         this.loopGuard.recordAttempt({
           passed: result.exitCode === 0,
           exitCode: result.exitCode,
@@ -1320,11 +1304,13 @@ export class ScopedWorktreeGateway {
 
       const errorCode = taskBudgetExhausted
         ? "E_TASK_TIMEOUT"
-        : result.timedOut
-          ? "E_COMMAND_TIMEOUT"
-          : result.exitCode === 0
-            ? undefined
-            : "E_VERIFICATION_FAILED";
+        : portConflict
+          ? "E_PORT_CONFLICT"
+          : result.timedOut
+            ? "E_COMMAND_TIMEOUT"
+            : result.exitCode === 0
+              ? undefined
+              : "E_VERIFICATION_FAILED";
 
       this.logAudit({
         tool: "stagent_exec_command",
@@ -1349,9 +1335,11 @@ export class ScopedWorktreeGateway {
                 code: errorCode,
                 message: taskBudgetExhausted
                   ? "Task total duration budget exhausted (max_duration_seconds)"
-                  : result.timedOut
-                    ? "Command exceeded timeout_seconds and was terminated (124)"
-                    : "Verification command returned a non-zero exit code",
+                  : portConflict
+                    ? "端口被占用，验证未完成。这属于环境冲突，不是测试断言失败；请先停止占用该端口的进程（macOS/Linux 可用 lsof -i :<端口> 查看），再重试。"
+                    : result.timedOut
+                      ? "Command exceeded timeout_seconds and was terminated (124)"
+                      : "Verification command returned a non-zero exit code",
               },
             }
           : {}),

@@ -327,6 +327,7 @@ export class ContractOrchestrator {
       durationMs: number;
       passed: boolean;
     }> = [];
+    const portConflictAliases: string[] = [];
 
     for (const command of current.verification_spec.commands) {
       const res = await gateway.callTool(
@@ -343,6 +344,9 @@ export class ContractOrchestrator {
         stderr?: string;
         durationMs?: number;
       };
+      if (res.error?.code === "E_PORT_CONFLICT") {
+        portConflictAliases.push(command.alias);
+      }
       verificationResults.push({
         alias: command.alias,
         exitCode: data.exitCode ?? 1,
@@ -368,24 +372,37 @@ export class ContractOrchestrator {
       gateway.wasTestsModified() || worktreeChanged.some(isTestPath);
     const allPassed = verificationResults.every((r) => r.passed);
     const tripped = loopGuard.isTripped() || costMonitor.isTripped();
+    const portConflict = portConflictAliases.length > 0;
 
-    const status = allPassed ? "PASSED" : tripped ? "BLOCKED" : "FAILED";
-    const reasonCode = allPassed
-      ? undefined
-      : costMonitor.isTripped()
-        ? ("BUDGET_EXHAUSTED" as const)
-        : loopGuard.isTripped()
-          ? ("VERIFICATION_RETRY_LIMIT" as const)
-          : ("UNSAFE_EXECUTION" as const);
+    // 端口冲突属于环境问题，不按断言失败处理：BLOCKED + E_PORT_CONFLICT，
+    // 由用户清理端口后重跑，而不是让 Worker 误以为用例写错去改代码。
+    const status = portConflict
+      ? "BLOCKED"
+      : allPassed
+        ? "PASSED"
+        : tripped
+          ? "BLOCKED"
+          : "FAILED";
+    const reasonCode = portConflict
+      ? ("UNSAFE_EXECUTION" as const)
+      : allPassed
+        ? undefined
+        : costMonitor.isTripped()
+          ? ("BUDGET_EXHAUSTED" as const)
+          : loopGuard.isTripped()
+            ? ("VERIFICATION_RETRY_LIMIT" as const)
+            : ("UNSAFE_EXECUTION" as const);
 
     const evidence = await this.writeEvidence(
       current,
       {
         status,
         ...(reasonCode === undefined ? {} : { reasonCode }),
-        summary: allPassed
-          ? `All ${verificationResults.length} verification command(s) passed`
-          : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
+        summary: portConflict
+          ? `验证被端口占用阻断（${portConflictAliases.join(", ")}）：这是环境冲突，不是断言失败。请停止占用端口的进程后重试`
+          : allPassed
+            ? `All ${verificationResults.length} verification command(s) passed`
+            : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
         verificationResults,
         scopePassed: true,
         forbiddenViolations: [],

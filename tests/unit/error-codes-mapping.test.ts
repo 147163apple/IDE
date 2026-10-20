@@ -16,7 +16,7 @@ import {
 /**
  * TASK-0.2b / ErrorCode Catalog 完备性（G-15）。
  *
- * 判据：A §9.3 的 13 个 error_code → 9 个 reason_code 全量映射，正反向均可闭环。
+ * 判据：A §9.3 的 13 个基础 error_code + W.3 增补 E_PORT_CONFLICT = 14 个 → 9 个 reason_code，正反向均可闭环。
  */
 
 /** A §9.3 表格的逐行期望值（手工登记，不以实现反推） */
@@ -34,12 +34,13 @@ const EXPECTED_MAPPING: Record<ErrorCode, string> = {
   E_EVIDENCE_STALE: "EVIDENCE_STALE",
   E_PREPARATION_FAILED: "PREPARATION_INTERRUPTED",
   E_WORKTREE_LOST: "WORKTREE_LOST",
+  E_PORT_CONFLICT: "UNSAFE_EXECUTION",
 };
 
-describe("目录基数：13 个 error_code → 9 个 reason_code", () => {
-  it("恰好 13 个错误码且无重复", () => {
-    expect(ERROR_CODES).toHaveLength(13);
-    expect(new Set(ERROR_CODES).size).toBe(13);
+describe("目录基数：14 个 error_code → 9 个 reason_code", () => {
+  it("恰好 14 个错误码且无重复", () => {
+    expect(ERROR_CODES).toHaveLength(14);
+    expect(new Set(ERROR_CODES).size).toBe(14);
   });
 
   it("恰好 9 个原因码，且与 evidence.schema 的 reasonCodeSchema 同集合", () => {
@@ -105,11 +106,11 @@ describe("反向映射：reason_code → error_code[]（一对多）", () => {
     }
   });
 
-  it("反向映射覆盖全部 13 个错误码，无遗漏", () => {
+  it("反向映射覆盖全部 14 个错误码，无遗漏", () => {
     const covered = new Set(
       REASON_CODES.flatMap((reason) => errorCodesForReasonCode(reason)),
     );
-    expect(covered.size).toBe(13);
+    expect(covered.size).toBe(14);
     for (const code of ERROR_CODES) {
       expect(covered.has(code), `uncovered error_code: ${code}`).toBe(true);
     }
@@ -123,12 +124,11 @@ describe("反向映射：reason_code → error_code[]（一对多）", () => {
     }
   });
 
-  it("单射的七个原因码反向只有唯一错误码", () => {
+  it("单射的六个原因码反向只有唯一错误码（UNSAFE_EXECUTION 现有端口冲突并入）", () => {
     const singleValued = [
       "UNAUTHORIZED_COMMAND",
       "VERIFICATION_RETRY_LIMIT",
       "WORKSPACE_LOCKED",
-      "UNSAFE_EXECUTION",
       "EVIDENCE_STALE",
       "PREPARATION_INTERRUPTED",
       "WORKTREE_LOST",

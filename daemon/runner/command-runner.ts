@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+import { applyNetworkPolicy } from "../worker/policy-guard";
 import { sanitizeEnvironment, type EnvSanitizerOptions } from "./env-filter";
 import { killProcessTree, type ProcessTreeKillResult } from "./process-tree";
 
@@ -49,11 +50,10 @@ export interface CommandRunnerOptions {
   secretValues?: string[];
   /** 用户手动中止信号：触发后同样执行全进程树回收（超时路径一致） */
   signal?: AbortSignal | undefined;
-  /**
-   * 逐行实时回调（TASK-C.5 结构化终端回放）。
-   * 每行在回调前已完成脱敏，且单行长度有上限；调用方不得在脱敏前截断。
-   */
+  /** 逐行实时回调（TASK-C.5 结构化终端回放）。 */
   onLine?: (stream: "stdout" | "stderr", line: string) => void;
+  /** W.3：由 policy-guard 组装好的最终环境（提供后跳过内部白名单/网络注入） */
+  resolvedEnv?: Record<string, string>;
 }
 
 export interface CommandResult {
@@ -324,23 +324,6 @@ export function truncateOutput(
 }
 
 /** DENY 策略下的离线环境约束（非对抗性沙箱，见 ADR-003） */
-function applyNetworkPolicy(
-  env: Record<string, string>,
-  policy: CommandRunnerOptions["networkPolicy"],
-): Record<string, string> {
-  if (policy !== "DENY") return env;
-  return {
-    ...env,
-    HTTP_PROXY: "http://127.0.0.1:9",
-    HTTPS_PROXY: "http://127.0.0.1:9",
-    ALL_PROXY: "http://127.0.0.1:9",
-    NO_PROXY: "",
-    npm_config_offline: "true",
-    YARN_ENABLE_NETWORK: "0",
-    PIP_NO_INDEX: "1",
-  };
-}
-
 function stripQuotedStrings(str: string): string {
   return str
     .replace(/"(?:[^"\\]|\\.)*"/g, '""')
@@ -413,10 +396,12 @@ export async function runCommand(
 
   const timeoutMs = options.timeoutMs ?? 120_000;
   const maxOutputChars = options.maxOutputChars ?? 100_000;
-  const env = applyNetworkPolicy(
-    sanitizeEnvironment(process.env, options.envOptions),
-    options.networkPolicy,
-  );
+  const env =
+    options.resolvedEnv ??
+    applyNetworkPolicy(
+      sanitizeEnvironment(process.env, options.envOptions),
+      options.networkPolicy,
+    );
 
   const startTime = Date.now();
   let timedOut = false;

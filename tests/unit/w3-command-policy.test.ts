@@ -52,6 +52,23 @@ const COMMANDS: CommandSpec[] = [
     expected_exit_code: 0,
     timeout_seconds: 30,
   },
+  {
+    alias: "port",
+    executable: "node",
+    args: [
+      "-e",
+      "console.error('Error: listen EADDRINUSE: address already in use :::3000'); process.exit(1);",
+    ],
+    expected_exit_code: 1,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "npmExec",
+    executable: "npm",
+    args: ["exec", "--", "echo"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
 ];
 
 function makeContract() {
@@ -146,6 +163,38 @@ describe("W.3 命令白名单与参数策略", () => {
     expect(
       (res.error?.details as { violation?: string } | undefined)?.violation,
     ).toBe("BARE_INTERPRETER");
+  });
+
+  it("端口被占用时返回 E_PORT_CONFLICT 与白话说明", async () => {
+    const res = await gateway.callTool(
+      "stagent_exec_command",
+      { command_alias: "port" },
+      { internal: true },
+    );
+    expect(res.isError).toBe(true);
+    expect(res.error?.code).toBe("E_PORT_CONFLICT");
+    expect(res.error?.message).toContain("端口被占用");
+    expect(res.error?.message).toContain("不是测试断言失败");
+  });
+
+  it("包启动器（npx/npm exec 等）拒绝追加位置参数", async () => {
+    const npxRes = await gateway.callTool("stagent_exec_command", {
+      command_alias: "test",
+      args: ["extra.spec.ts"],
+    });
+    expect(npxRes.isError).toBe(true);
+    expect(
+      (npxRes.error?.details as { violation?: string } | undefined)?.violation,
+    ).toBe("LAUNCHER_POSITIONAL_ARGS");
+
+    const npmRes = await gateway.callTool("stagent_exec_command", {
+      command_alias: "npmExec",
+      args: ["some-package"],
+    });
+    expect(npmRes.isError).toBe(true);
+    expect(
+      (npmRes.error?.details as { violation?: string } | undefined)?.violation,
+    ).toBe("LAUNCHER_POSITIONAL_ARGS");
   });
 
   it("runCommand 白名单只做精确匹配，不再按前缀放行", async () => {

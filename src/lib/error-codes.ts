@@ -3,7 +3,7 @@ import type { ReasonCode } from "./evidence.schema";
 /**
  * 运行时错误码目录 (ErrorCode Catalog) —— 《Stagent 系统架构设计规范 v1.2.1》§9.3。
  *
- * 关系：13 个 `error_code`（触发点事实，由具体组件抛出）
+ * 关系：14 个 `error_code`（触发点事实，由具体组件抛出）
  *       → 9 个 `reason_code`（证据包结论归因，写入 EvidenceBundle.verdict.reason_code）。
  *
  * 多对一是规范刻意设计：同一个 reason_code 可由多个不同组件在不同阶段触发
@@ -31,6 +31,7 @@ export const ERROR_CODES = [
   "E_EVIDENCE_STALE",
   "E_PREPARATION_FAILED",
   "E_WORKTREE_LOST",
+  "E_PORT_CONFLICT",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -166,6 +167,14 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     component: "Crash Recovery",
     task: "TASK-A.6",
     condition: "处于中间态的合同在自愈重启时检测到磁盘物理 Worktree 丢失",
+  },
+  E_PORT_CONFLICT: {
+    code: "E_PORT_CONFLICT",
+    reason_code: "UNSAFE_EXECUTION",
+    component: "Scoped Gateway",
+    task: "TASK-W.3",
+    condition:
+      "验证命令输出出现 EADDRINUSE / address already in use：环境端口冲突，不是断言失败，需清理占用后重试",
   },
 };
 
