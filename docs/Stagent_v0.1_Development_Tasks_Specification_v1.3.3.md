@@ -502,16 +502,21 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task W.5a】Claude Code 适配器与 cli-host 黑盒实测 (v1.3.3 新增)
 * **任务编号**：`TASK-W.5a`
 * **前置依赖**：`TASK-W.2`, `TASK-C.6`（右栏会话通道）
-* **任务状态**：**[PARTIAL]**（分支 `feat/w5a-claude-code`，未合并。已完成：cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL，假 CLI 实测 <2s）；用户决定一律 API Key + `--bare --settings <Stagent 生成> --mcp-config <空集> --strict-mcp-config`；permissions.deny + --disallowedTools 硬限制 + PreToolUse hook（异常一律拒绝，onFailure:block）；只用 `--resume <session_id>`；永不 bypassPermissions；Key 仅注入子进程且报错脱敏。hook 层 4 类绕过负例确定性测试通过。真实 CLI 2.1.296 仅用无效 Key 做过参数/流格式冒烟（403，未计费）。**未完成**：Daemon 环境无 ANTHROPIC_API_KEY，未做真实编辑/打断/续接实测；4 类绕过未在真实 CLI 上实测；Gateway MCP 端点依赖 W.4。故 `verified_on` 为空，control_mode=UNCONTROLLED_EXTERNAL。）
+* **任务状态**：**[PASS · verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20`]**（分支 `feat/w5a-claude-code`。cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL）；一律 API Key；隔离启动见核心目标 2；真实 CLI 上流式输出、工具卡片、打断（约 0.5s）、跨 Daemon 重启 `--resume` 续接、4 类绕过负例均实测通过，证据见 `docs/reports/W5a-isolation-design.md`。**后续回归项（不阻塞）**：用官方 Anthropic 原装模型 + 官方 CLI 重跑负例；每次升级 CLI 重跑 `STAGENT_REAL_CLAUDE=1` 真实测试；Gateway MCP 端点依赖 W.4。）
 * **核心目标**：
   1. 在 `daemon/worker/cli-host/` 专用子进程隔离模块中以 spawn 挂载 Claude Code CLI（结构化 argv、`shell:false`、进程树托管回收）；**全仓其余位置维持零 `child_process` 静态禁令**。
-  2. **收敛策略（待实机验证，verified_on: 空）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。
+  2. **收敛策略（已实测，verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20`）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。**隔离启动（`[用户已确认 · 2026-10-20]`，替代 `--bare`——实测 2.1.296 的 `--bare` 会跳过 `--settings` 中的 hooks）**：
+     - argv：`claude --setting-sources "" --tools Read,Glob,Grep,LS,Edit,Write,MultiEdit,TodoWrite -p <prompt> --output-format stream-json --verbose --include-partial-messages --settings <Stagent 生成> --mcp-config <Stagent 生成> --strict-mcp-config --permission-mode acceptEdits --allowedTools <同 --tools> --disallowedTools WebFetch,WebSearch,NotebookEdit,Task,Bash [--resume <session_id>]`（允许 Bash 时 `--tools`/`--allowedTools` 加 Bash、`--disallowedTools` 去掉 Bash）；永不 `--bare`、永不 bypassPermissions、永不 `--continue`。
+     - `permissions.deny`：`WebFetch, WebSearch, NotebookEdit, Task, Bash, Edit/Write(./.git/**), Edit/Write(./.stagent/**), Edit/Write(./.claude/**), Read(./.stagent/claude-config/**), Read(./.stagent/session-token)`；PreToolUse hook `matcher:"*"`、`onFailure:"block"`。
+     - 子进程 env 白名单：`PATH, HOME, LANG, STAGENT_HOOK_ROOT, STAGENT_HOOK_LOG, [STAGENT_HOOK_ALLOW_BASH], ANTHROPIC_API_KEY, CLAUDE_CONFIG_DIR`，另仅转发 `ANTHROPIC_BASE_URL, ANTHROPIC_MODEL, ANTHROPIC_SMALL_FAST_MODEL, ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL, API_TIMEOUT_MS, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`。
+     - 专用配置目录：`CLAUDE_CONFIG_DIR=<repo>/.stagent/claude-config`（0700、gitignored、Agent 不可读写），会话记录不写用户 `~/.claude`。
+     - 备选：`--restricted`（实测不跳过 hook，但不收窄工具、默认 auto 模式），仅在 `--setting-sources ""` 行为变化时启用。
   3. 接入其 Headless 模式与结构化输出（流式 JSON）对接右栏会话（TASK-C.6）；接入其会话续接能力实现 resume。
   4. 在 cli-host 中对**真实 CLI 版本**执行 W.4 的 4 类绕过负例实测，全部失败关闭后填写 `verified_on`（CLI 版本号 + 日期），方标记 `GATEWAY_ENFORCED`。
 * **涉及核心文件**：
   - 新增：`daemon/worker/cli-host/claude-code-adapter.ts`
   - 新增：`daemon/worker/cli-host/process-host.ts`（spawn 托管与进程树回收）
-  - 测试：`tests/unit/cli-host-claude-code.test.ts`（黑盒实测，含 4 类绕过负例）
+  - 测试：`tests/unit/cli-host-claude-code.test.ts`（确定性，含 hook 层 4 类绕过负例）；`tests/e2e/claude-code-isolation.real.test.ts`（真实 CLI，`STAGENT_REAL_CLAUDE=1` 时运行：配置注入负例、4 类绕过、专用配置目录续接）
 * **Pass/Fail 验收判定**：
   - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭；`verified_on` 非空；流式输出与打断/续接实测达标。
   - **FAIL**：任一绕过路径可用；未实测即标记受控。
@@ -856,7 +861,7 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 | 模块 | 路径 | 说明 |
 |---|---|---|
 | 成熟 Agent 子进程隔离 | `daemon/worker/cli-host/` | **全仓唯一允许 `child_process`/spawn 的位置**；强制结构化 argv + `shell:false` + 进程树托管回收 |
-| Claude Code 适配器 | `daemon/worker/cli-host/claude-code-adapter.ts` | Headless 结构化输出、Pre-tool hook 拦截、会话续接；`verified_on` 为空即待实机验证 |
+| Claude Code 适配器 | `daemon/worker/cli-host/claude-code-adapter.ts` | Headless 结构化输出、Pre-tool hook 拦截、会话续接；`verified_on`: Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20（官方 Anthropic 复测为后续回归项） |
 | 全局保护清单 | `daemon/protection/protection-list.ts` + `.stagent/protection.json` | 路径 glob + 白话名称；任何模式下规则拦截 |
 | Vibe 自动快照 | `daemon/protection/auto-checkpoint.ts` | Agent 改动前自动快照，支撑【撤销本轮改动】 |
 | Supervisor 独立预算 | `.stagent/supervisor-budget.json` | 与合同/Worker 预算分账，不互相侵占 |
