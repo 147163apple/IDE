@@ -3,6 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { ScopedWorktreeGateway } from "../../daemon/mcp/gateway";
+
+/** 清理尽力而为：沙箱安全策略可能拒绝删除临时目录 */
+function safeRm(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup failures
+  }
+}
 import { CostMonitor } from "../../daemon/guard/cost-monitor";
 import { LoopGuard } from "../../daemon/guard/loop-guard";
 import type { SoftwareContract } from "../../src/lib/contract.schema";
@@ -111,7 +120,7 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempWorktree, { recursive: true, force: true });
+    safeRm(tempWorktree);
   });
 
   it("should allow reading authorized files and block forbidden / out-of-scope files", async () => {
@@ -129,7 +138,7 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
       path: "secret.env",
     });
     expect(resForbidden.isError).toBe(true);
-    expect(resForbidden.error?.code).toBe("FORBIDDEN_PATH");
+    expect(resForbidden.error?.code).toBe("E_FORBIDDEN_PATH");
 
     // 3. Out-of-scope read
     fs.writeFileSync(path.join(tempWorktree, "other.txt"), "other content");
@@ -137,7 +146,7 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
       path: "other.txt",
     });
     expect(resOutOfScope.isError).toBe(true);
-    expect(resOutOfScope.error?.code).toBe("NOT_READABLE");
+    expect(resOutOfScope.error?.code).toBe("E_OUT_OF_SCOPE");
 
     // 4. Path traversal read
     const resTraversal = await gateway.callTool("stagent_read_file", {
@@ -174,7 +183,7 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
       content: "tampered",
     });
     expect(resWriteReadonly.isError).toBe(true);
-    expect(resWriteReadonly.error?.code).toBe("NOT_WRITABLE");
+    expect(resWriteReadonly.error?.code).toBe("E_OUT_OF_SCOPE");
 
     // 3. Write to forbidden path
     const resWriteForbidden = await gateway.callTool("stagent_write_file", {
@@ -182,7 +191,7 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
       content: "tampered",
     });
     expect(resWriteForbidden.isError).toBe(true);
-    expect(resWriteForbidden.error?.code).toBe("FORBIDDEN_PATH");
+    expect(resWriteForbidden.error?.code).toBe("E_FORBIDDEN_PATH");
 
     // 4. Path traversal write
     const resWriteTraversal = await gateway.callTool("stagent_write_file", {
@@ -368,7 +377,7 @@ describe("Test Integrity Guard：测试文件写入门禁", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempWorktree, { recursive: true, force: true });
+    safeRm(tempWorktree);
   });
 
   it("writable_paths 仅含 src/** 时，写入 src 内的 .test.ts 被 E_TEST_FILE_WRITE_BLOCKED 阻断", async () => {
@@ -402,7 +411,7 @@ describe("Test Integrity Guard：测试文件写入门禁", () => {
       content: "// forged\n",
     });
     expect(res.isError).toBe(true);
-    expect(res.error?.code).toBe("NOT_WRITABLE");
+    expect(res.error?.code).toBe("E_OUT_OF_SCOPE");
     expect(fs.existsSync(path.join(tempWorktree, "tests", "new.test.ts"))).toBe(
       false,
     );

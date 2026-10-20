@@ -383,6 +383,23 @@ export interface GateResult {
  */
 export function guardAgentWrite(repoRoot: string, relPath: string): GateResult {
   const rel = normalizePath(relPath);
+
+  // 清单为空时零副作用放行：不写 protection-state.json。
+  // 合同 Worktree / 未启用保护的项目不应因为一次写入就在工作区落 .stagent 状态，
+  // 否则既污染被测仓库，也会让测试清理与安全删除策略互相打架。
+  let entryCount: number;
+  try {
+    entryCount = loadProtectionList(repoRoot).entries.length;
+  } catch (err) {
+    return {
+      allowed: false,
+      reason: `门卫读取保护清单失败，按拒绝处理：${(err as Error).message}`,
+    };
+  }
+  if (entryCount === 0 && rel !== normalizePath(PROTECTION_FILE_REL)) {
+    return { allowed: true, reason: "ok" };
+  }
+
   let match: ProtectionMatch;
   try {
     match = matchProtected(repoRoot, rel);

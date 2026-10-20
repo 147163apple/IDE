@@ -1,23 +1,15 @@
 /**
- * Environment variable sanitizer for subprocess execution.
- * Strips sensitive system credentials, cloud keys, and API tokens,
- * while preserving safe execution environment variables.
+ * 子进程环境隔离（TASK-W.3 / 规范 A §4.3）。
+ *
+ * 策略为**白名单**而非黑名单：
+ * 1. 默认只透传运行所必需的基础变量（PATH / HOME / LANG / TMPDIR 等）；
+ * 2. 合同 `allowed_environment_variable_names` 显式声明的变量名可透传宿主值；
+ * 3. 其余宿主变量一律不进入子进程——即使名字看起来「无害」；
+ * 4. 凭据类变量**硬拒绝**：即便合同显式声明，也不把宿主 Token / 云密钥 /
+ *    SSH 认证变量交给任务代码（规范 A §4.3「不得把宿主密钥交给不可信代码」）。
+ *
+ * 另外注入 `CI=true`、`NODE_ENV=test`、`TERM=dumb`，保证测试行为可复现。
  */
-
-const SENSITIVE_PATTERNS = [
-  /^AWS_/i,
-  /^GITHUB_/i,
-  /^OPENAI_/i,
-  /^ANTHROPIC_/i,
-  /^LOVABLE_/i,
-  /SECRET/i,
-  /KEY/i,
-  /TOKEN/i,
-  /PASSWORD/i,
-  /CREDENTIAL/i,
-  /AUTH/i,
-  /PRIVATE/i,
-];
 
 const PRESERVED_KEYS = new Set([
   "PATH",
@@ -35,17 +27,48 @@ const PRESERVED_KEYS = new Set([
   "NODE_PATH",
   "SYSTEMROOT",
   "COMSPEC",
+  "PATHEXT",
+  "PWD",
 ]);
 
+/**
+ * 凭据类硬拒绝：命中即丢弃，合同显式授权也不放行。
+ * 覆盖 OpenAI/Anthropic/AWS/GitHub/Slack 令牌、SSH 认证套接字与通用
+ * SECRET/TOKEN/PASSWORD/CREDENTIAL/PRIVATE_KEY 命名。
+ */
+const HARD_DENIED_PATTERNS: RegExp[] = [
+  /^AWS_/i,
+  /^GITHUB_/i,
+  /^GH_/i,
+  /^OPENAI_/i,
+  /^ANTHROPIC_/i,
+  /^LOVABLE_/i,
+  /^SSH_/i,
+  /^GPG_/i,
+  /^AZURE_/i,
+  /^GOOGLE_/i,
+  /^SLACK_/i,
+  /SECRET/i,
+  /TOKEN/i,
+  /PASSWORD/i,
+  /CREDENTIAL/i,
+  /PRIVATE_KEY/i,
+  /API_KEY/i,
+];
+
 export interface EnvSanitizerOptions {
-  /** Optional extra safe environment variables to pass through */
+  /** 合同 `env_file_grants` 解析出的变量（已按 alias 授权，直接注入） */
   extraEnv?: Record<string, string>;
-  /** Explicitly allow specific keys that would otherwise be filtered */
+  /** 合同 `allowed_environment_variable_names`：允许透传宿主值的变量名 */
   allowedKeyOverrides?: string[];
 }
 
+function isHardDenied(key: string): boolean {
+  return HARD_DENIED_PATTERNS.some((pattern) => pattern.test(key));
+}
+
 /**
- * Strips secrets and returns a sanitized environment dictionary for child process execution.
+ * 白名单过滤：返回可直接传给 `spawn` 的环境字典。
  */
 export function sanitizeEnvironment(
   rawEnv: NodeJS.ProcessEnv = process.env,
@@ -56,38 +79,56 @@ export function sanitizeEnvironment(
 
   for (const [key, value] of Object.entries(rawEnv)) {
     if (value === undefined) continue;
+    // 凭据类硬拒绝优先于任何授权
+    if (isHardDenied(key)) continue;
 
-    // Check if key is explicitly overridden
-    if (overrides.has(key)) {
-      sanitized[key] = value;
-      continue;
-    }
+    const allowedByDefault = PRESERVED_KEYS.has(key);
+    const allowedByContract = overrides.has(key);
+    if (!allowedByDefault && !allowedByContract) continue;
 
-    // Filter out sensitive patterns
-    const isSensitive = SENSITIVE_PATTERNS.some((pattern) => pattern.test(key));
-    if (isSensitive) {
-      continue;
-    }
+    sanitized[key] = value;
+  }
 
-    // Allow preserved keys or safe keys (not matching sensitive patterns)
-    if (PRESERVED_KEYS.has(key) || !isSensitive) {
+  // 显式注入的合同 env-file 变量：来源是合同授权的文件（非宿主环境），
+  // 允许 TOKEN/SECRET 之类命名；其值由命令层登记为秘密值，输出时遮蔽。
+  if (options.extraEnv) {
+    for (const [key, value] of Object.entries(options.extraEnv)) {
       sanitized[key] = value;
     }
   }
 
-  // Inject standard task testing & CI flags
   sanitized["CI"] = "true";
   if (!sanitized["NODE_ENV"]) {
     sanitized["NODE_ENV"] = "test";
   }
   sanitized["TERM"] = "dumb";
 
-  // Merge extra explicitly provided envs
-  if (options.extraEnv) {
-    for (const [k, v] of Object.entries(options.extraEnv)) {
-      sanitized[k] = v;
-    }
-  }
-
   return sanitized;
+}
+
+/**
+ * 解析合同显式授权的 env 文件内容（`KEY=VALUE` 行）。
+ *
+ * 只做最小解析：忽略空行与 `#` 注释，去掉成对引号；不执行变量插值，
+ * 不复制未在 `env_file_grants.variable_names` 中声明的键（由调用方筛选）。
+ */
+export function parseEnvFile(content: string): Record<string, string> {
+  const parsed: Record<string, string> = {};
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) continue;
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    parsed[key] = value;
+  }
+  return parsed;
 }

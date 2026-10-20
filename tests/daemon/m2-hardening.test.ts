@@ -4,6 +4,15 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
+/** 清理尽力而为：沙箱安全策略可能拒绝删除临时目录，不影响断言 */
+function safeRm(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup failures
+  }
+}
+
 import { ScopedWorktreeGateway } from "../../daemon/mcp/gateway";
 import {
   runCommand,
@@ -45,7 +54,11 @@ describe("M2 / TASK-A.2 stagent_read_file 大小与二进制保护", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      safeRm(root);
+    } catch {
+      // 沙箱环境可能拒绝删除临时目录：清理尽力而为，不影响断言
+    }
   });
 
   it("超过 1 MiB 的文本被截断并标记 truncated", async () => {
@@ -105,14 +118,19 @@ describe("M2 / TASK-A.2 stagent_declare_complete", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    try {
+      safeRm(root);
+    } catch {
+      // 沙箱环境可能拒绝删除临时目录：清理尽力而为，不影响断言
+    }
   });
 
-  it("暴露第 5 个工具", () => {
+  it("暴露 6 个受控工具（W.2 新增 delete_file）", () => {
     const gateway = new ScopedWorktreeGateway(root, contract);
     const names = gateway.getToolDefinitions().map((t) => t.name);
     expect(names).toContain("stagent_declare_complete");
-    expect(names).toHaveLength(5);
+    expect(names).toContain("stagent_delete_file");
+    expect(names).toHaveLength(6);
   });
 
   it("未运行验证时返回 VERIFICATION_NOT_RUN blocker", async () => {
@@ -181,7 +199,7 @@ describe("M2 / TASK-A.4 输出脱敏、截断与网络策略", () => {
       expect(res.sanitizedEnvKeys).toContain("HTTP_PROXY");
       expect(res.sanitizedEnvKeys).toContain("npm_config_offline");
     } finally {
-      fs.rmSync(cwd, { recursive: true, force: true });
+      safeRm(cwd);
     }
   });
 
@@ -216,7 +234,7 @@ describe("M2 / TASK-A.5 熔断持久化与状态联动", () => {
       const third = new LoopGuard({ maxRetries: 3, statePath });
       expect(third.isTripped()).toBe(true);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRm(dir);
     }
   });
 
@@ -241,7 +259,7 @@ describe("M2 / TASK-A.5 熔断持久化与状态联动", () => {
       second.recordUsage(1000, 1000, 1.0); // 200 > 150
       expect(second.isTripped()).toBe(true);
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRm(dir);
     }
   });
 
@@ -273,7 +291,7 @@ describe("M2 / TASK-A.1 脏工作区确认", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRm(repo);
   });
 
   it("检测脏工作区并给出文件清单与警告", async () => {

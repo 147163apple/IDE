@@ -68,6 +68,10 @@ export const budgetLimitsSchema = z.object({
   max_duration_seconds: z.number().int().positive().default(1800), // 任务级总时长，默认 1800s
   max_agent_turns: z.number().int().positive().optional(),
   max_verification_retries: z.number().int().nonnegative().default(3), // 默认 3
+  /** A §9.1 v1.3.2：最大命令执行次数上限（可选，超限触发 E_BUDGET_EXCEEDED 熔断） */
+  max_command_executions: z.number().int().positive().optional(),
+  /** A §9.1 v1.3.2：最大工具调用次数上限（可选，超限触发 E_BUDGET_EXCEEDED 熔断） */
+  max_tool_calls: z.number().int().positive().optional(),
 });
 export type BudgetLimits = z.infer<typeof budgetLimitsSchema>;
 
