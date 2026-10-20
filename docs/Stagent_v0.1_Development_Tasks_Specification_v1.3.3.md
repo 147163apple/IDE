@@ -520,7 +520,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 * **任务编号**：`TASK-W.5b`
 * **前置依赖**：`TASK-W.5a`
 * **任务状态**：**[NEW_TASK]**
-* **核心目标**：实测 cursor-agent 权限配置能否完全 deny shell/写文件并仅挂 Stagent MCP；凭证途径仅限官方登录或 API Key。**不能完全关闭原生写能力者只能登记为 `UNCONTROLLED_EXTERNAL`，仅 Vibe 模式可用，UI 显示"未受控"**。
+* **核心目标**：实测 cursor-agent 权限配置能否完全 deny shell/写文件并仅挂 Stagent MCP；凭证途径**仅限 API Key**（`[用户已确认 · 2026-10-20]` 所有 Worker 模式统一，不使用官方登录/订阅会话），注入规则见 架构 §0.6.6。**不能完全关闭原生写能力者只能登记为 `UNCONTROLLED_EXTERNAL`，仅 Vibe 模式可用，UI 显示"未受控"**。
 * **Pass/Fail 验收判定**：同 W.5a 的实测纪律；`verified_on` 按实测结果填写或明确标注"未通过，仅 Vibe"。
 
 #### 【Task W.5c】OpenHands 适配器（容器隔离，SANDBOX_ENFORCED）(v1.3.3 新增)
@@ -575,7 +575,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
      - 结构化合同编辑：可写 Scope (`writable_paths`)、只读路径、强禁区、测试命令、Token 预算上限；
      - 执行期转为实时监控面板（Token 水表、改动文件列表、MCP 事件流、紧急暂停按钮）。
   2. **模式指示**：Header 显示当前模式（自由模式 VIBE / 保护模式 PROTECTED）与入口按钮，点击打开 Studio Tab。（原「HUD 胶囊 + 成熟度徽章 + 风险气泡」推迟 v0.2+。）
-  3. **审批交互（v1.3.3 减负）**：合同 Scope 与保护清单无交集时由 Daemon 自动批准并记录备案（前端不弹窗）；有交集时仅向用户展示一个白话是/否卡片（"AI 想修改被保护的『登录』代码，同意吗？【是 / 否】"），用户点击后才发起签署请求 (`POST /api/contracts/:id/approve`)。
+  3. **审批交互（v1.3.3 减负）**：合同 Scope 与保护清单无交集时由 Daemon 自动批准并记录备案（前端不弹窗）；有交集时仅向用户展示一个白话是/否卡片（列出本轮全部受保护文件，同意后本轮清单内不再弹窗，超出清单才重新询问）（"AI 想修改被保护的『登录』代码，同意吗？【是 / 否】"），用户点击后才发起签署请求 (`POST /api/contracts/:id/approve`)。
 * **涉及核心文件**：
   - 新增：`src/components/SupervisorStudioPane.tsx`
   - 新增：`src/components/ContractEditorForm.tsx`
@@ -710,14 +710,18 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   4. **静默合同（Silent Contract）**：Worker 改动未触碰保护清单时，Daemon 后台静默生成合同与快照，前端不弹窗；触碰保护清单时抛出极简白话是/否卡片；
   5. **Vibe 安全网**：Agent 执行改动前 Daemon 自动生成轻量 Git 快照（Auto-Checkpoint）；UI 顶层常驻白话按钮【撤销本轮改动】；
   6. **User-First Discard Rule**：合并冲突永远以用户主分支版本为准，丢弃 Worktree 冲突改动并提示 AI 重新修改；不向用户展示 Git 冲突界面。
+  7. **命中行为（任何模式，见架构 §0.6.5）** `[用户已确认 · 2026-10-20]`：先拦后写；多路径合并为一张卡并列出文件清单；同意仅覆盖本轮清单内文件，超出清单才弹补充卡（超出清单时弹出的补充卡属于同一次是/否授权的**补充授权**，计入"≤2"规则内，不另算一次交互）；不同意则拒写并让 AI 换方案；待审批状态跨断线/重启持久化、永不自动放行；验证全绿后一键合并、无二次确认。总交互 ≤ 2。
+  8. **保护清单自锁**：`.stagent/protection.json` 本身恒受保护，仅可经 UI 开关修改；快照失败则本轮不开工。
+  9. **撤销范围（v0.1 定稿）**：v0.1 撤销 = 回滚整轮快照：本轮开始后这些文件的所有改动（**包括用户本轮的手动修改**）一并撤回；撤销确认文案必须白话写明这一点。细粒度撤销（只撤 Agent 改动、保留手改）推迟至后续版本。
+  10. **范围外说明**：锁定 AI 配置文件（`.claude/`、`.mcp.json`、`.cursor/`）不属于本卡验收项，若要纳入须另行更新任务卡与路径规则。
 * **涉及核心文件**：
   - 新增：`daemon/protection/protection-list.ts`
   - 新增：`daemon/protection/auto-checkpoint.ts`
   - 新增：`src/components/ProtectionCard.tsx`
   - 测试：`tests/unit/protection-silent-contract.test.ts`
 * **Pass/Fail 验收判定**：
-  - **PASS**：保护路径在 VIBE 与 PROTECTED 下写入均被规则拦截（零模型调用）；无保护清单全程零弹窗；撤销按钮一键恢复现场；冲突时主分支版本永远胜出。
-  - **FAIL**：保护路径被静默写入；出现 Git 冲突解决界面；弹窗超过一个是/否问题。
+  - **PASS**：保护路径在 VIBE 与 PROTECTED 下写入均被规则拦截（零模型调用）；无保护清单全程零弹窗；撤销按钮一键恢复现场；冲突时主分支版本永远胜出；触保护区任务交互 ≤ 2（一张清单卡 + 一键合并），同轮清单内不重复弹窗；待审批断线/重启后不自动放行；门卫出错/超时按拒绝处理，且原生工具、Shell、改名/删除、符号链接四类绕过负例均失败关闭。
+  - **FAIL**：保护路径被静默写入；出现 Git 冲突解决界面；弹窗超过一个是/否问题；同轮清单内文件重复弹窗；待审批被自动放行；合并出现二次确认。
 
 ---
 
