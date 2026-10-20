@@ -322,3 +322,80 @@ export async function mergeContract(
   );
   return body.result;
 }
+
+// ---- TASK-C.6 右栏会话 ----
+import type {
+  ChatAdapterInfo,
+  ChatSessionDetail,
+  ChatSessionSummary,
+} from "./chat-events";
+
+export async function listChatAdapters(
+  conn: DaemonConnection,
+): Promise<ChatAdapterInfo[]> {
+  return (
+    await request<{ adapters: ChatAdapterInfo[] }>(conn, "/api/chat/adapters")
+  ).adapters;
+}
+
+export async function listChatSessions(
+  conn: DaemonConnection,
+): Promise<ChatSessionSummary[]> {
+  return (
+    await request<{ sessions: ChatSessionSummary[] }>(
+      conn,
+      "/api/chat/sessions",
+    )
+  ).sessions;
+}
+
+export async function createChatSession(
+  conn: DaemonConnection,
+  adapterId: string,
+): Promise<ChatSessionSummary> {
+  return (
+    await request<{ session: ChatSessionSummary }>(conn, "/api/chat/sessions", {
+      method: "POST",
+      body: JSON.stringify({ adapter_id: adapterId }),
+    })
+  ).session;
+}
+
+export async function getChatSession(
+  conn: DaemonConnection,
+  id: string,
+): Promise<ChatSessionDetail> {
+  return (
+    await request<{ session: ChatSessionDetail }>(
+      conn,
+      `/api/chat/sessions/${encodeURIComponent(id)}`,
+    )
+  ).session;
+}
+
+export async function sendChatMessage(
+  conn: DaemonConnection,
+  id: string,
+  text: string,
+): Promise<"started" | "queued"> {
+  return (
+    await request<{ result: "started" | "queued" }>(
+      conn,
+      `/api/chat/sessions/${encodeURIComponent(id)}/messages`,
+      { method: "POST", body: JSON.stringify({ text }) },
+    )
+  ).result;
+}
+
+export async function interruptChat(
+  conn: DaemonConnection,
+  id: string,
+): Promise<boolean> {
+  return (
+    await request<{ interrupted: boolean }>(
+      conn,
+      `/api/chat/sessions/${encodeURIComponent(id)}/interrupt`,
+      { method: "POST" },
+    )
+  ).interrupted;
+}

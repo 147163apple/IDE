@@ -47,6 +47,10 @@ import { EvidenceInvalidationEngine } from "./watcher/invalidation-engine";
 import { buildDependencyGraph } from "./arch/graph";
 import { launchEditor } from "./editor/launcher";
 import { getModelSettings, setRuntimeKey } from "./worker/key-store";
+import { ChatSessionManager } from "./chat/session-manager";
+import type { ChatAdapter } from "./chat/types";
+import { BaselineChatAdapter } from "./chat/baseline-adapter";
+import { DemoChatAdapter } from "./chat/demo-adapter";
 
 export interface DaemonServerOptions extends PortFinderOptions {
   repoRoot: string;
@@ -62,6 +66,8 @@ export interface DaemonServerOptions extends PortFinderOptions {
   connectionWindowMs?: number;
   /** 同时在线的最大 WS 客户端数（默认 64） */
   maxClients?: number;
+  /** 右栏会话适配器（TASK-C.6）；缺省为 保底 + 演示 */
+  chatAdapters?: ChatAdapter[];
 }
 
 export interface DaemonStatusResponse {
@@ -101,6 +107,7 @@ export class StagentDaemon {
   private signalCleanupFn: (() => void) | null = null;
   private lastRecoveryReport: RecoveryReport | null = null;
   private readonly orchestrator: ContractOrchestrator;
+  readonly chat: ChatSessionManager;
   private worktreeWatcher: WorktreeWatcher | null = null;
   private invalidationEngine: EvidenceInvalidationEngine | null = null;
   /** 当前武装监听的合同（用于 abort 时精确解除，避免误停其他任务的监听） */
@@ -120,6 +127,13 @@ export class StagentDaemon {
     this.connectionWindowMs = options.connectionWindowMs ?? 10_000;
     this.maxClients = options.maxClients ?? 64;
     this.orchestrator = new ContractOrchestrator({ repoRoot: this.repoRoot });
+    this.chat = new ChatSessionManager({
+      repoRoot: this.repoRoot,
+      adapters: options.chatAdapters ?? defaultChatAdapters(),
+      publish: (event) => {
+        this.broadcast("CHAT_EVENT", event);
+      },
+    });
   }
 
   /** 最近一次启动时的崩溃自愈报告（便于状态端点与测试观测） */
@@ -270,6 +284,7 @@ export class StagentDaemon {
     }
 
     await this.stopEvidenceWatcher();
+    await this.chat.shutdown();
 
     for (const client of this.clients) {
       try {
@@ -639,6 +654,57 @@ export class StagentDaemon {
     this.armedContractId = null;
   }
 
+  /** TASK-C.6 右栏会话 REST；流式事件经 WS CHAT_EVENT 推送 */
+  private async handleChat(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+  ): Promise<void> {
+    try {
+      if (method === "GET" && pathname === "/api/chat/adapters") {
+        this.sendJson(res, 200, { adapters: this.chat.listAdapters() });
+        return;
+      }
+      if (method === "GET" && pathname === "/api/chat/sessions") {
+        this.sendJson(res, 200, { sessions: this.chat.listSessions() });
+        return;
+      }
+      if (method === "POST" && pathname === "/api/chat/sessions") {
+        const body = (await this.readJsonBody(req)) as { adapter_id?: string };
+        const session = this.chat.createSession(body.adapter_id ?? "demo");
+        this.sendJson(res, 201, { session });
+        return;
+      }
+      const m = pathname.match(
+        /^\/api\/chat\/sessions\/([A-Za-z0-9_-]+)(?:\/(messages|interrupt))?$/,
+      );
+      if (m) {
+        const id = m[1] ?? "";
+        const action = m[2];
+        if (method === "GET" && !action) {
+          const session = this.chat.getSession(id);
+          if (!session) this.sendJson(res, 404, { error: "session not found" });
+          else this.sendJson(res, 200, { session });
+          return;
+        }
+        if (method === "POST" && action === "messages") {
+          const body = (await this.readJsonBody(req)) as { text?: string };
+          const result = this.chat.send(id, String(body.text ?? ""));
+          this.sendJson(res, 202, { result });
+          return;
+        }
+        if (method === "POST" && action === "interrupt") {
+          this.sendJson(res, 200, { interrupted: this.chat.interrupt(id) });
+          return;
+        }
+      }
+      this.sendJson(res, 404, { error: "Not Found", path: pathname });
+    } catch (err) {
+      this.sendJson(res, 400, { error: (err as Error).message });
+    }
+  }
+
   private async handleHttpRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -737,6 +803,15 @@ export class StagentDaemon {
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }
+      return;
+    }
+
+    if (pathname.startsWith("/api/chat")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleChat(req, res, method, pathname);
       return;
     }
 
@@ -1018,6 +1093,10 @@ export class StagentDaemon {
       process.removeListener("SIGTERM", handleSignal);
     };
   }
+}
+
+function defaultChatAdapters(): ChatAdapter[] {
+  return [new BaselineChatAdapter(), new DemoChatAdapter()];
 }
 
 export function createDaemon(options: DaemonServerOptions): StagentDaemon {
