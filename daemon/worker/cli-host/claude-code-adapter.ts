@@ -38,6 +38,23 @@ export interface ClaudeCodeAdapterOptions {
   spawn?: typeof spawnManaged;
   /** 临时配置目录 */
   tmpRoot?: string;
+  /**
+   * Claude Code 专用配置目录（CLAUDE_CONFIG_DIR），默认不设置。
+   * Daemon 传入 `<repo>/.stagent/claude-config`：会话记录、自动记忆、.claude.json 都写在这里，
+   * 不写用户个人的 ~/.claude；目录固定（不是临时目录），否则 --resume 跨重启找不到会话。
+   */
+  configDir?: string;
+}
+
+/** 实测记录（Tina 2026-10-20 批准）：官方 Anthropic 原装模型复测为后续回归项，不阻塞 */
+export const CLAUDE_CODE_VERIFIED_ON =
+  "Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20";
+
+/** 准备专用配置目录：不存在则创建，权限恒为 0700 */
+export function ensureConfigDir(dir: string): string {
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(dir, 0o700);
+  return dir;
 }
 
 export const HOOK_SCRIPT = fileURLToPath(
@@ -110,6 +127,9 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       "Write(./.git/**)",
       "Write(./.stagent/**)",
       "Write(./.claude/**)",
+      // 专用配置目录（含会话记录）：不许读，也不许写（写已被 .stagent/** 覆盖）
+      "Read(./.stagent/claude-config/**)",
+      "Read(./.stagent/session-token)",
     ];
     const settings = {
       permissions: { deny, defaultMode: "acceptEdits" },
@@ -176,6 +196,9 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
       // 兼容端点（如 DeepSeek 的 Anthropic 兼容接口）：只转发这几个白名单变量
       ...pickEnv(FORWARD_ENV),
+      ...(this.opts.configDir
+        ? { CLAUDE_CONFIG_DIR: ensureConfigDir(this.opts.configDir) }
+        : {}),
     };
     return {
       command: this.opts.command ?? "claude",

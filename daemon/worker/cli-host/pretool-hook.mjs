@@ -84,6 +84,13 @@ try {
       }
       if (!inside(realRoot, real)) deny(`路径在工作目录之外：${target}`);
       const rel = path.relative(realRoot, real).split(path.sep);
+      // 读写都不许碰 Claude Code 专用配置目录（会话记录）和 Daemon 会话令牌
+      if (
+        rel[0] === ".stagent" &&
+        (rel[1] === "claude-config" || rel[1] === "session-token")
+      ) {
+        deny(`受保护路径：${target}`);
+      }
       if (WRITE_TOOLS.has(tool)) {
         if (
           rel.some((seg) => PROTECTED_SEGMENTS.includes(seg)) ||

@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  CLAUDE_CODE_VERIFIED_ON,
   ClaudeCodeAdapter,
   FORWARD_ENV,
   HOOK_SCRIPT,
@@ -202,6 +203,16 @@ describe("TASK-W.5a PreToolUse hook：4 类绕过在 hook 层失败关闭（确�
     expect(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision).toBe(
       "deny",
     );
+  });
+  it("专用配置目录与会话令牌：读、写都拒绝", () => {
+    for (const [tool, file] of [
+      ["Read", ".stagent/claude-config/projects/x.jsonl"],
+      ["Write", ".stagent/claude-config/settings.json"],
+      ["Read", ".stagent/session-token"],
+    ] as const) {
+      const r = runHook({ tool_name: tool, tool_input: { file_path: file } });
+      expect(r.status).toBe(2);
+    }
   });
   it("绕过 2：未授权 Shell → 拒绝", () => {
     expect(
@@ -427,5 +438,54 @@ describe("TASK-W.5a 兼容端点环境转发", () => {
     } finally {
       process.env = saved;
     }
+  });
+});
+
+describe("TASK-W.5a 专用 CLAUDE_CONFIG_DIR 与实测记录", () => {
+  it("配置目录：注入 CLAUDE_CONFIG_DIR，目录自动创建且权限 0700；deny 禁读该目录", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-cfg-"));
+    const dir = path.join(root, ".stagent", "claude-config");
+    const a = new ClaudeCodeAdapter({
+      apiKey: () => "k",
+      tmpRoot: root,
+      configDir: dir,
+    });
+    const l = a.buildLaunch({ prompt: "x", cwd: root, nativeSessionId: null });
+    expect(l.env["CLAUDE_CONFIG_DIR"]).toBe(dir);
+    expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+    // 已存在但权限过宽的目录会被收紧
+    fs.chmodSync(dir, 0o755);
+    a.buildLaunch({ prompt: "x", cwd: root, nativeSessionId: null });
+    expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+    const settings = JSON.parse(fs.readFileSync(l.settingsPath, "utf8"));
+    expect(settings.permissions.deny).toEqual(
+      expect.arrayContaining([
+        "Read(./.stagent/claude-config/**)",
+        "Edit(./.stagent/**)",
+        "Write(./.stagent/**)",
+      ]),
+    );
+  });
+  it("未传 configDir 时不设置 CLAUDE_CONFIG_DIR", () => {
+    const a = new ClaudeCodeAdapter({
+      apiKey: () => "k",
+      tmpRoot: os.tmpdir(),
+    });
+    const l = a.buildLaunch({
+      prompt: "x",
+      cwd: "/repo",
+      nativeSessionId: null,
+    });
+    expect(l.env["CLAUDE_CONFIG_DIR"]).toBeUndefined();
+  });
+  it("verified_on 填写实测记录后 control_mode 为 GATEWAY_ENFORCED", () => {
+    const info = new ClaudeCodeAdapter({
+      apiKey: () => "k",
+      verifiedOn: CLAUDE_CODE_VERIFIED_ON,
+    }).info();
+    expect(info.verified_on).toBe(
+      "Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20",
+    );
+    expect(info.control_mode).toBe("GATEWAY_ENFORCED");
   });
 });

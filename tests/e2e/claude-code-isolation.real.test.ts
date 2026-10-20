@@ -181,3 +181,71 @@ describe.skipIf(!REAL)("TASK-W.5a 真实 CLI 隔离负例", () => {
     expect(o.hookLog.some((h) => h.decision === "deny")).toBe(true);
   }, 300_000);
 });
+
+describe.skipIf(!REAL)(
+  "TASK-W.5a 专用 CLAUDE_CONFIG_DIR：续接可用且不写用户 ~/.claude",
+  () => {
+    it("两次独立进程 + --resume 记得上一轮；会话只写在 .stagent/claude-config", () => {
+      const proj = fs.mkdtempSync(path.join(os.tmpdir(), "w5a-cfg-"));
+      spawnSync("git", ["init", "-q"], { cwd: proj });
+      const cfgDir = path.join(proj, ".stagent", "claude-config");
+      const home = os.homedir();
+      const projectsDir = path.join(home, ".claude", "projects");
+      const listProjects = () =>
+        fs.existsSync(projectsDir) ? fs.readdirSync(projectsDir) : [];
+      const before = new Set(listProjects());
+      const once = (prompt: string, sid: string | null) => {
+        const a = new ClaudeCodeAdapter({
+          tmpRoot: os.tmpdir(),
+          configDir: cfgDir,
+        });
+        const l = a.buildLaunch({ prompt, cwd: proj, nativeSessionId: sid });
+        // 子进程不继承 CLAUDE_CONFIG_DIR 以外的配置位置：只靠适配器给的 env
+        const r = spawnSync(l.command, l.args, {
+          cwd: proj,
+          env: l.env,
+          encoding: "utf8",
+          timeout: 240_000,
+          maxBuffer: 256 * 1024 * 1024,
+        });
+        let session = "";
+        let result = "";
+        for (const line of r.stdout.split("\n")) {
+          try {
+            const d = JSON.parse(line) as Record<string, unknown>;
+            if (d["type"] === "result") {
+              session = String(d["session_id"] ?? "");
+              result = String(d["result"] ?? "");
+            }
+          } catch {
+            // 非 JSON 行忽略
+          }
+        }
+        return { session, result };
+      };
+      const first = once(
+        "Remember this code word: KIWI-9. Reply only with OK.",
+        null,
+      );
+      expect(first.session).not.toBe("");
+      const second = once(
+        "Without using tools: what code word did I ask you to remember?",
+        first.session,
+      );
+      expect(second.result).toMatch(/KIWI-9/);
+      expect(fs.statSync(cfgDir).mode & 0o777).toBe(0o700);
+      const transcripts = fs.readdirSync(path.join(cfgDir, "projects"));
+      expect(transcripts.length).toBeGreaterThan(0);
+      // 用户 ~/.claude/projects 下没有为这个项目新增目录
+      const added = listProjects().filter(
+        (p) => !before.has(p) && p.includes("w5a-cfg"),
+      );
+      expect(added).toEqual([]);
+      const userJson = path.join(home, ".claude.json");
+      if (fs.existsSync(userJson))
+        expect(fs.readFileSync(userJson, "utf8")).not.toContain(
+          path.basename(proj),
+        );
+    }, 600_000);
+  },
+);
