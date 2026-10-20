@@ -134,7 +134,7 @@ Stagent 是面向独立开发者与外包工程师的 **AI 开发工作台与工
 
 - 所有 Worker 模式（VIBE / PROTECTED）一律使用 API Key，不使用官方登录或订阅会话。
 - Key 由 Stagent Daemon 在 cli-host 启动子进程时经环境变量注入；**不得**写入仓库文件、Agent 配置文件、`.stagent/protection.json`、日志、事件帧或 Git 提交。
-- 各 Adapter 须实测自己的 Key 注入路径；Claude Code `--bare` 等隔离启动参数为**待实机验证方案**，未验证前不得视为已定。
+- 各 Adapter 须实测自己的 Key 注入路径。Claude Code 已实测（`[用户已确认 · 2026-10-20]`）：**不使用 `--bare`**（2.1.296 实测会跳过 `--settings` 中的 hooks），改用 `--setting-sources ""` + `--tools` + `--strict-mcp-config` + deny/disallowed 清单 + 子进程环境变量白名单 + 专用 `CLAUDE_CONFIG_DIR`，完整 argv 见任务规范 TASK-W.5a；Key 只经子进程环境变量注入。
 
 ### 0.6.4 确定性冲突仲裁（User-First Discard Rule）
 
