@@ -1243,10 +1243,13 @@ export class StagentDaemon {
               evidence: snapshot,
               reviewer: body.reviewer ?? "local-user",
             });
-            // P.1：合并完成即关闭本轮（授权作废、快照不再可撤，避免撤掉已合并提交）
-            closeRound(this.repoRoot, "MERGED");
-            clearCheckpoint(this.repoRoot);
-            this.emitContractUpdate(result.contract);
+            // P.1：真正产生提交才关轮（授权作废、快照不再可撤）；
+            // AI 改动全部被用户版本覆盖时没有提交，保留本轮与 Worktree 供 AI 重做。
+            if (!result.nothingToMerge) {
+              closeRound(this.repoRoot, "MERGED");
+              clearCheckpoint(this.repoRoot);
+              this.emitContractUpdate(result.contract);
+            }
             this.sendJson(res, 200, { result });
           } catch (err) {
             this.sendActionError(res, err);

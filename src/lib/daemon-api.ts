@@ -308,6 +308,10 @@ export interface MergeResult {
   worktreeRemoved: boolean;
   /** P.1 User-First Discard：发生冲突时是否以用户主分支版本为准自动仲裁 */
   conflictResolution?: "USER_FIRST_DISCARD" | null;
+  /** AI 改动全部被用户版本覆盖，没有可提交内容（不是错误） */
+  nothingToMerge?: boolean;
+  /** nothingToMerge 时的白话提示 */
+  message?: string;
 }
 
 export async function mergeContract(

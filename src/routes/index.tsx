@@ -953,13 +953,17 @@ function Console() {
                             "local-user",
                           );
                           setMergeInfo(
-                            `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
-                              result.worktreeRemoved ? "已清理" : "保留"
-                            }${
-                              result.conflictResolution === "USER_FIRST_DISCARD"
-                                ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
-                                : ""
-                            }`,
+                            result.nothingToMerge
+                              ? (result.message ??
+                                  "本轮改动与你的修改冲突，已全部以你为准")
+                              : `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
+                                  result.worktreeRemoved ? "已清理" : "保留"
+                                }${
+                                  result.conflictResolution ===
+                                  "USER_FIRST_DISCARD"
+                                    ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
+                                    : ""
+                                }`,
                           );
                         })
                       }

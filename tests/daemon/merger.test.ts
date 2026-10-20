@@ -377,4 +377,112 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
     expect(error.code).toBe("E_CANNOT_MERGE");
     expect(error.message).toContain("[E_CANNOT_MERGE]");
   });
+
+  /**
+   * P.1 回归：`git merge --squash` 不产生 MERGE_HEAD，冲突后用 `merge --abort`
+   * 必然失败（fatal: There is no merge to abort），冲突标记会留在 main。
+   * 修复后必须用 `reset --merge` 清场，并保证最终文件是用户版本、无冲突标记。
+   */
+  async function setupWorkerChange(
+    title: string,
+    writeWorker: (worktree: string) => void,
+  ) {
+    const contract = makeContract(title);
+    store.save(contract);
+    await orchestrator.approve(contract.contract_id, "tina");
+    const worktree = path.join(
+      repo,
+      ".stagent",
+      "worktrees",
+      `task-${contract.contract_id}`,
+    );
+    writeWorker(worktree);
+    const outcome = await orchestrator.execute(contract.contract_id);
+    expect(outcome.contract.lifecycle_state).toBe("AUDITED");
+    return { contract, worktree, evidence: outcome.evidence };
+  }
+
+  it("冲突后用 reset --merge 清场：部分冲突时保留用户版本且无冲突标记", async () => {
+    const { contract, evidence } = await setupWorkerChange(
+      "直改同一行 + 新增文件",
+      (worktree) => {
+        fs.mkdirSync(path.join(worktree, "src"), { recursive: true });
+        fs.writeFileSync(
+          path.join(worktree, "src", "a.ts"),
+          "export const a = 2; // worker\n",
+        );
+        fs.writeFileSync(
+          path.join(worktree, "src", "b.ts"),
+          "export const b = 2;\n",
+        );
+      },
+    );
+
+    // 用户在主分支提交了同一行的新版本（真实冲突）
+    fs.writeFileSync(
+      path.join(repo, "src", "a.ts"),
+      "export const a = 3; // user\n",
+    );
+    git(repo, ["commit", "-q", "-am", "user change"]);
+
+    const result = await squashMerge({
+      repoRoot: repo,
+      contractId: contract.contract_id,
+      evidence,
+      reviewer: "tina",
+    });
+
+    expect(result.conflictResolution).toBe("USER_FIRST_DISCARD");
+    expect(result.nothingToMerge).toBe(false);
+    expect(result.commitSha).toMatch(/^[a-f0-9]{40}$/);
+
+    const merged = fs.readFileSync(path.join(repo, "src", "a.ts"), "utf8");
+    expect(merged).toBe("export const a = 3; // user\n");
+    expect(merged).not.toContain("<<<<<<<");
+    expect(merged).not.toContain(">>>>>>>");
+    // 非冲突部分照常合入
+    expect(fs.existsSync(path.join(repo, "src", "b.ts"))).toBe(true);
+    // 工作区干净，没有遗留冲突状态
+    expect(git(repo, ["status", "--porcelain"]).trim()).toBe("");
+  });
+
+  it("AI 改动全部被用户版本覆盖：不报错、不提交，白话告知以用户为准", async () => {
+    const { contract, worktree, evidence } = await setupWorkerChange(
+      "只改同一行",
+      (wt) => {
+        fs.writeFileSync(
+          path.join(wt, "src", "a.ts"),
+          "export const a = 2; // worker\n",
+        );
+      },
+    );
+
+    fs.writeFileSync(
+      path.join(repo, "src", "a.ts"),
+      "export const a = 3; // user\n",
+    );
+    git(repo, ["commit", "-q", "-am", "user change"]);
+    const headBefore = git(repo, ["rev-parse", "HEAD"]).trim();
+
+    const result = await squashMerge({
+      repoRoot: repo,
+      contractId: contract.contract_id,
+      evidence,
+      reviewer: "tina",
+    });
+
+    expect(result.nothingToMerge).toBe(true);
+    expect(result.conflictResolution).toBe("USER_FIRST_DISCARD");
+    expect(result.commitSha).toBe("");
+    expect(result.message).toContain("已全部以你为准");
+    // 没有产生新提交，主分支内容 = 用户版本
+    expect(git(repo, ["rev-parse", "HEAD"]).trim()).toBe(headBefore);
+    const content = fs.readFileSync(path.join(repo, "src", "a.ts"), "utf8");
+    expect(content).toBe("export const a = 3; // user\n");
+    expect(content).not.toContain("<<<<<<<");
+    expect(git(repo, ["status", "--porcelain"]).trim()).toBe("");
+    // 合同仍在 AUDITED，Worktree 保留供 AI 基于最新代码重做
+    expect(store.get(contract.contract_id)?.lifecycle_state).toBe("AUDITED");
+    expect(fs.existsSync(worktree)).toBe(true);
+  });
 });

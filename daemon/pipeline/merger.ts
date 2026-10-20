@@ -37,6 +37,10 @@ export interface MergeResult {
   worktreeRemoved: boolean;
   /** P.1 User-First Discard：发生冲突时是否按「用户主分支永远胜出」自动仲裁 */
   conflictResolution: "USER_FIRST_DISCARD" | null;
+  /** AI 改动全部被用户版本覆盖，没有可提交内容（不是错误，需向用户白话说明） */
+  nothingToMerge: boolean;
+  /** nothingToMerge 时的白话提示 */
+  message?: string | undefined;
 }
 
 export class MergeGateError extends Error {
@@ -225,11 +229,13 @@ async function mergeInternal(
   // 3.5 主工作区脏状态门禁：脏树会污染审计提交，直接阻断
   await assertMainTreeClean(repoRoot);
 
-  // 4. Squash merge（先确认主分支无未完成 merge 状态）
+  // 4. Squash merge（-X ours 兜底用户优先；冲突清场用 reset --merge）
   let merge = await execGit(["merge", "--squash", branch], repoRoot);
   let conflictResolution: "USER_FIRST_DISCARD" | null = null;
   if (merge.exitCode !== 0) {
-    await execGit(["merge", "--abort"], repoRoot);
+    // `git merge --squash` 不产生 MERGE_HEAD，`merge --abort` 必然失败
+    // （fatal: There is no merge to abort），必须用 `reset --merge` 清掉冲突标记。
+    await execGit(["reset", "--merge"], repoRoot);
     // P.1 User-First Discard Rule（架构 §0.6.4）：不向用户抛 Git 冲突界面，
     // 冲突处永远以用户当前主分支版本为准，丢弃 Worker 的冲突改动，AI 需基于最新代码重做。
     merge = await execGit(
@@ -239,12 +245,34 @@ async function mergeInternal(
     if (merge.exitCode === 0) {
       conflictResolution = "USER_FIRST_DISCARD";
     } else {
-      await execGit(["merge", "--abort"], repoRoot);
+      await execGit(["reset", "--merge"], repoRoot);
       throw new MergeGateError(
         "E_MERGE_CONFLICT",
         `git merge --squash failed: ${merge.stderr || merge.stdout}`,
       );
     }
+  }
+
+  // 4.5 全部丢弃兜底：AI 的改动与主分支冲突且全部以用户版本为准时，
+  // 暂存区没有任何变化，`git commit` 会因 "nothing to commit" 失败。
+  // 这不是错误：明确告诉用户本轮全部以他为准，保留合同与 Worktree 供 AI 重做。
+  const staged = await execGit(["diff", "--cached", "--quiet"], repoRoot);
+  if (staged.exitCode === 0) {
+    return {
+      commitSha: "",
+      commitMessage: "",
+      contract,
+      worktreeRemoved: false,
+      conflictResolution,
+      nothingToMerge: true,
+      message: "本轮改动与你的修改冲突，已全部以你为准",
+    };
+  }
+  if (staged.exitCode > 1) {
+    throw new MergeGateError(
+      "E_GIT_DIFF_FAILED",
+      `git diff --cached failed: ${staged.stderr || staged.stdout}`,
+    );
   }
 
   // 5. 生成 Trailer 提交
@@ -290,6 +318,7 @@ async function mergeInternal(
     contract: merged,
     worktreeRemoved,
     conflictResolution,
+    nothingToMerge: false,
   };
 }
 
