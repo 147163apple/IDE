@@ -46,10 +46,12 @@ export interface WorktreeListEntry {
 
 /**
  * Execute Git command in target working directory.
+ * raw=true 时保留 stdout 原始内容（含末尾换行/二进制文本），供 Diff 原文读取使用。
  */
 export function execGit(
   args: string[],
   cwd: string,
+  options: { raw?: boolean } = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
   return new Promise((resolve, reject) => {
     const child = spawn("git", args, {
@@ -75,8 +77,8 @@ export function execGit(
 
     child.on("close", (code) => {
       resolve({
-        stdout: stdout.trim(),
-        stderr: stderr.trim(),
+        stdout: options.raw ? stdout : stdout.trim(),
+        stderr: options.raw ? stderr : stderr.trim(),
         exitCode: code ?? 0,
       });
     });

@@ -63,6 +63,7 @@ import type { EvidenceBundle } from "../src/lib/evidence.schema";
 import { WorktreeWatcher } from "./watcher/fs-watcher";
 import { EvidenceInvalidationEngine } from "./watcher/invalidation-engine";
 import { buildDependencyGraph } from "./arch/graph";
+import { readDiffFiles } from "./diff/diff-files";
 import { launchEditor } from "./editor/launcher";
 import { getModelSettings, setRuntimeKey } from "./worker/key-store";
 import { ChatSessionManager } from "./chat/session-manager";
@@ -157,7 +158,17 @@ export class StagentDaemon {
     this.maxConnectionsPerWindow = options.maxConnectionsPerWindow ?? 30;
     this.connectionWindowMs = options.connectionWindowMs ?? 10_000;
     this.maxClients = options.maxClients ?? 64;
-    this.orchestrator = new ContractOrchestrator({ repoRoot: this.repoRoot });
+    this.orchestrator = new ContractOrchestrator({
+      repoRoot: this.repoRoot,
+      // TASK-C.5：验证命令的逐行输出实时推给页面（脱敏在 runner 内完成）
+      onTerminalLine: (contractId, stream, line) => {
+        this.broadcast("TERMINAL_STREAM", {
+          contract_id: contractId,
+          stream,
+          line,
+        });
+      },
+    });
     this.chat = new ChatSessionManager({
       repoRoot: this.repoRoot,
       adapters: options.chatAdapters ?? defaultChatAdapters(this.repoRoot),
@@ -1153,7 +1164,7 @@ export class StagentDaemon {
       }
 
       const match = pathname.match(
-        /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
+        /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
       if (match) {
         const contractId = decodeURIComponent(match[1] as string);
@@ -1254,6 +1265,29 @@ export class StagentDaemon {
             this.sendJson(res, 200, { result });
           } catch (err) {
             this.sendActionError(res, err);
+          }
+          return;
+        }
+
+        if (method === "GET" && action === "diff-files") {
+          // TASK-C.5 双栏 Diff：逐文件返回基线/当前两段真实内容
+          const worktreePath = path.join(
+            this.repoRoot,
+            ".stagent",
+            "worktrees",
+            `task-${contractId}`,
+          );
+          if (!fs.existsSync(worktreePath)) {
+            this.sendJson(res, 404, { error: "Worktree not found" });
+            return;
+          }
+          try {
+            const baseBranch =
+              store.get(contractId)?.authorization.git.base_branch ?? "main";
+            const result = await readDiffFiles(worktreePath, baseBranch);
+            this.sendJson(res, 200, result);
+          } catch (err) {
+            this.sendJson(res, 500, { error: (err as Error).message });
           }
           return;
         }

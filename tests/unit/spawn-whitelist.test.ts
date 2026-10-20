@@ -65,8 +65,12 @@ const CLI_HOST_PREFIX = "daemon/worker/cli-host/";
 
 const CHILD_PROCESS_PATTERN =
   /(?:from\s+["']node:child_process["']|require\(\s*["'](?:node:)?child_process["']\s*\))/;
+/**
+ * 无 import 的兜底检测：只认明确的进程启动 API，且排除 `xxx.exec(` 这类方法调用
+ * （例如 RegExp.prototype.exec），否则正则、解析器会误报。
+ */
 const SPAWN_CALL_PATTERN =
-  /\b(?:spawn|spawnSync|exec|execSync|execFile|execFileSync|fork)\s*\(/;
+  /(?<![.\w])(?:spawn|spawnSync|execFile|execFileSync|execSync|fork)\s*\(/;
 
 function walk(dir: string, out: string[]): void {
   let entries: fs.Dirent[];

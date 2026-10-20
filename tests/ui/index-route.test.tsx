@@ -78,8 +78,10 @@ vi.mock("@/hooks/use-daemon-stream", () => ({
       status: "closed",
       logs: [],
       alerts: [],
+      terminal: [],
       dismissAlert: () => {},
       clearLogs: () => {},
+      clearTerminal: () => {},
     };
   },
 }));

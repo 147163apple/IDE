@@ -49,6 +49,10 @@ export interface OrchestratorOptions {
   repoRoot: string;
   /** 主工作区脏时是否已获用户确认 */
   acknowledgeDirty?: boolean;
+  /** TASK-C.5：验证命令输出的逐行实时回放（内容已脱敏） */
+  onTerminalLine?:
+    | ((contractId: string, stream: "stdout" | "stderr", line: string) => void)
+    | undefined;
 }
 
 export interface ExecutionOutcome {
@@ -61,6 +65,9 @@ export class ContractOrchestrator {
   private readonly repoRoot: string;
   private readonly store: ContractStore;
   private readonly acknowledgeDirty: boolean;
+  private readonly onTerminalLine?:
+    | ((contractId: string, stream: "stdout" | "stderr", line: string) => void)
+    | undefined;
   /** 在途执行（execute/runWorker）的中止控制器：abort 端点凭此强杀子进程树 */
   private readonly abortControllers = new Map<string, AbortController>();
   /** 已请求中止但执行尚未开始的合同：注册控制器时立即进入已中止态 */
@@ -70,6 +77,7 @@ export class ContractOrchestrator {
     this.repoRoot = path.resolve(options.repoRoot);
     this.store = new ContractStore(this.repoRoot);
     this.acknowledgeDirty = options.acknowledgeDirty ?? false;
+    this.onTerminalLine = options.onTerminalLine;
   }
 
   getStore(): ContractStore {
@@ -566,6 +574,12 @@ export class ContractOrchestrator {
       costMonitor,
       loopGuard,
       ...(signal === undefined ? {} : { signal }),
+      ...(this.onTerminalLine === undefined
+        ? {}
+        : {
+            onTerminalLine: (stream, line) =>
+              this.onTerminalLine?.(contract.contract_id, stream, line),
+          }),
     });
     return { gateway, costMonitor, loopGuard, worktreePath };
   }

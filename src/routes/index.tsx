@@ -38,6 +38,7 @@ import {
   executeContract,
   fetchArchGraph,
   fetchDiff,
+  fetchDiffFiles,
   fetchEvidence,
   fetchHealth,
   fetchSettings,
@@ -51,6 +52,7 @@ import {
   undoProtectionRound,
   type ArchGraphPayload,
   type DaemonConnection,
+  type DiffFilesView,
   type ModelSettings,
   type ProtectionRecommendationView,
   type ProtectionStateView,
@@ -63,6 +65,7 @@ import { RadarGraph } from "@/components/radar/RadarGraph";
 import { FilterToolbar } from "@/components/radar/FilterToolbar";
 import { ScopeSelector } from "@/components/radar/ScopeSelector";
 import { DiffViewer } from "@/components/diff/DiffViewer";
+import { StructuredTerminal } from "@/components/StructuredTerminal";
 import { EditorOpener } from "@/components/editor/EditorOpener";
 import { EvidenceChecklist } from "@/components/evidence/EvidenceChecklist";
 import { useDaemonStream } from "@/hooks/use-daemon-stream";
@@ -125,6 +128,7 @@ function Console() {
   const [diff, setDiff] = useState<{ patch: string; stat: string } | null>(
     null,
   );
+  const [diffFiles, setDiffFiles] = useState<DiffFilesView | null>(null);
   const [mergeInfo, setMergeInfo] = useState<string | null>(null);
   const [settings, setSettings] = useState<ModelSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -687,6 +691,7 @@ function Console() {
                     setEvidence(null);
                     setWorkerResult(null);
                     setDiff(null);
+                    setDiffFiles(null);
                   }}
                   className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
                     selectedId === contract.contract_id
@@ -887,7 +892,14 @@ function Console() {
                   <button
                     onClick={() =>
                       void runAction("diff", async () => {
-                        setDiff(await fetchDiff(conn, selected.contract_id));
+                        const [patch, files] = await Promise.all([
+                          fetchDiff(conn, selected.contract_id),
+                          fetchDiffFiles(conn, selected.contract_id).catch(
+                            () => null,
+                          ),
+                        ]);
+                        setDiff(patch);
+                        setDiffFiles(files);
                       })
                     }
                     className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
@@ -951,7 +963,24 @@ function Console() {
                   </section>
                 )}
 
-                {diff && <DiffViewer patch={diff.patch} />}
+                {diff && (
+                  <DiffViewer
+                    patch={diff.patch}
+                    files={diffFiles?.files}
+                    truncatedList={diffFiles?.truncatedList}
+                  />
+                )}
+                {selected && (
+                  <StructuredTerminal
+                    lines={stream.terminal
+                      .filter((t) => t.contractId === selected.contract_id)
+                      .map((t) => ({
+                        stream: t.stream,
+                        line: t.line,
+                        at: t.at,
+                      }))}
+                  />
+                )}
                 {evidence && (
                   <>
                     <EvidenceChecklist

@@ -236,6 +236,32 @@ export async function fetchDiff(
   );
 }
 
+/** TASK-C.5 双栏 Diff：逐文件的基线/当前内容（真实 git） */
+export interface DiffFilePairView {
+  path: string;
+  oldPath?: string;
+  status: "added" | "modified" | "deleted" | "renamed";
+  before: string;
+  after: string;
+  binary: boolean;
+  truncated: boolean;
+}
+
+export interface DiffFilesView {
+  files: DiffFilePairView[];
+  truncatedList: boolean;
+}
+
+export async function fetchDiffFiles(
+  conn: DaemonConnection,
+  contractId: string,
+): Promise<DiffFilesView> {
+  return request<DiffFilesView>(
+    conn,
+    `/api/contracts/${encodeURIComponent(contractId)}/diff-files`,
+  );
+}
+
 /** evidenceId 省略时取该合同最新一份（刷新后恢复验收面板） */
 export async function fetchEvidence(
   conn: DaemonConnection,

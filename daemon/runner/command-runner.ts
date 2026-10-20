@@ -49,6 +49,11 @@ export interface CommandRunnerOptions {
   secretValues?: string[];
   /** 用户手动中止信号：触发后同样执行全进程树回收（超时路径一致） */
   signal?: AbortSignal | undefined;
+  /**
+   * 逐行实时回调（TASK-C.5 结构化终端回放）。
+   * 每行在回调前已完成脱敏，且单行长度有上限；调用方不得在脱敏前截断。
+   */
+  onLine?: (stream: "stdout" | "stderr", line: string) => void;
 }
 
 export interface CommandResult {
@@ -167,6 +172,60 @@ function pushTail(capture: StreamCapture, str: string): void {
 function pushChunk(capture: StreamCapture, chunk: Buffer): void {
   capture.bytes += chunk.length;
   pushString(capture, capture.decoder.write(chunk));
+}
+
+// ---------------------------------------------------------------------------
+// TASK-C.5 逐行实时回放：脱敏先行，再限单行长度
+// ---------------------------------------------------------------------------
+
+/** 单行上限（防止一行几 MB 的构建输出撑爆前端） */
+export const MAX_STREAM_LINE_CHARS = 4000;
+
+interface LineStream {
+  decoder: StringDecoder;
+  pending: string;
+}
+
+function createLineStream(): LineStream {
+  return { decoder: new StringDecoder("utf-8"), pending: "" };
+}
+
+function emitLine(
+  stream: "stdout" | "stderr",
+  raw: string,
+  options: CommandRunnerOptions,
+): void {
+  // 顺序必须是「先脱敏、后截断」：截断边界不得把敏感值切成两半后漏出
+  const { text } = redactSecrets(raw.replace(/\r$/, ""), options.secretValues);
+  const bounded =
+    text.length > MAX_STREAM_LINE_CHARS
+      ? `${text.slice(0, MAX_STREAM_LINE_CHARS)} …[本行已截断]`
+      : text;
+  options.onLine?.(stream, bounded);
+}
+
+function pushLines(
+  ls: LineStream,
+  chunk: Buffer,
+  stream: "stdout" | "stderr",
+  options: CommandRunnerOptions,
+): void {
+  ls.pending += ls.decoder.write(chunk);
+  const parts = ls.pending.split("\n");
+  ls.pending = parts.pop() ?? "";
+  for (const line of parts) emitLine(stream, line, options);
+}
+
+function flushLineStream(
+  ls: LineStream,
+  stream: "stdout" | "stderr",
+  options: CommandRunnerOptions,
+): void {
+  ls.pending += ls.decoder.end();
+  if (ls.pending.length > 0) {
+    emitLine(stream, ls.pending, options);
+    ls.pending = "";
+  }
 }
 
 /** 收尾：冲刷解码器、脱敏、组装头尾截断结果 */
@@ -327,6 +386,9 @@ export async function runCommand(
   // 头/尾双窗口采集：内存恒为 O(maxOutputChars)，与子进程产量无关
   const stdoutCapture = createCapture(maxOutputChars);
   const stderrCapture = createCapture(maxOutputChars);
+  // TASK-C.5：逐行实时回放（仅当调用方订阅时创建）
+  const stdoutLines = options.onLine ? createLineStream() : null;
+  const stderrLines = options.onLine ? createLineStream() : null;
 
   // Split command line into executable and arguments safely
   // Note: we run without shell: true to prevent subshell vulnerabilities
@@ -423,6 +485,10 @@ export async function runCommand(
       if (timeoutTimer) clearTimeout(timeoutTimer);
       options.signal?.removeEventListener("abort", abortHandler);
 
+      // 先把行缓冲里最后一段（无换行结尾）冲出去，再收尾
+      if (stdoutLines) flushLineStream(stdoutLines, "stdout", options);
+      if (stderrLines) flushLineStream(stderrLines, "stderr", options);
+
       const durationMs = Date.now() - startTime;
 
       // 规范 TASK-A.4 PASS-5：先脱敏，再组装截断结果
@@ -458,10 +524,12 @@ export async function runCommand(
     // 流式采集：头窗口 + 尾窗口，内存不随产量增长
     child.stdout?.on("data", (chunk: Buffer) => {
       pushChunk(stdoutCapture, chunk);
+      if (stdoutLines) pushLines(stdoutLines, chunk, "stdout", options);
     });
 
     child.stderr?.on("data", (chunk: Buffer) => {
       pushChunk(stderrCapture, chunk);
+      if (stderrLines) pushLines(stderrLines, chunk, "stderr", options);
     });
 
     child.on("error", (err) => {
