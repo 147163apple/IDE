@@ -46,7 +46,7 @@ async function collect(it: AsyncIterable<AdapterEvent>) {
   return out;
 }
 
-describe("TASK-W.5a 启动参数（--bare / 配置隔离 / 续接）", () => {
+describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
   const adapter = new ClaudeCodeAdapter({
     apiKey: () => KEY,
     tmpRoot: os.tmpdir(),
@@ -59,8 +59,14 @@ describe("TASK-W.5a 启动参数（--bare / 配置隔离 / 续接）", () => {
   const settings = JSON.parse(fs.readFileSync(launch.settingsPath, "utf8"));
   afterEach(() => undefined);
 
-  it("一律 --bare，只加载 Stagent 生成的 settings 与 mcp-config（strict）", () => {
-    expect(launch.args[0]).toBe("--bare");
+  it("不用 --bare（会跳过 hooks）；--setting-sources 为空，只加载 Stagent 生成的 settings 与 mcp-config（strict）", () => {
+    expect(launch.args).not.toContain("--bare");
+    expect(launch.args.slice(0, 2)).toEqual(["--setting-sources", ""]);
+    const tools = launch.args[launch.args.indexOf("--tools") + 1] ?? "";
+    expect(tools.split(",")).toEqual(
+      expect.arrayContaining(["Read", "Edit", "Write"]),
+    );
+    expect(tools.split(",")).not.toContain("Bash");
     expect(launch.args).toContain("--strict-mcp-config");
     expect(launch.args[launch.args.indexOf("--settings") + 1]).toBe(
       launch.settingsPath,

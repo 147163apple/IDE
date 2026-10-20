@@ -14,7 +14,7 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
  * TASK-W.5a Claude Code 适配器（headless + stream-json）。
  *
  * 用户决定（2026-10-20）：一律使用 ANTHROPIC_API_KEY 按量计费，所有模式都以
- * `--bare` 启动 —— 不加载仓库里的 .claude/settings.json hooks 与 .mcp.json（否则是绕过口），
+ * 以 `--setting-sources ""` 启动（原为 --bare，但 --bare 会连 --settings 的 hooks 一起跳过）—— 不加载仓库里的 .claude/settings.json hooks 与 .mcp.json（否则是绕过口），
  * 只加载 Stagent 生成的 `--settings` 与 `--mcp-config`（配合 --strict-mcp-config）。
  *
  * 硬限制不只靠 hook（hook 崩溃 / 超时 / exit 1 会放行）：同时用 --disallowedTools 与
@@ -133,8 +133,16 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     // Stagent Gateway 的 MCP 端点在 W.4 落地；此前只挂空集合，且 --strict-mcp-config
     fs.writeFileSync(mcpPath, JSON.stringify({ mcpServers: {} }));
 
+    // 不用 --bare：实测 Claude Code 2.1.x 的 --bare 会跳过 --settings 里的 hooks，
+    // 并把工具集缩成 Bash/Edit/Read，PreToolUse 兜底会静默失效。
+    // 改为 --setting-sources "" 忽略用户/项目/本地配置，只加载 Stagent 生成的 settings，
+    // 并用 --tools 显式限定可用工具集。
+    const tools = [...BASE_TOOLS, ...(allowBash ? ["Bash"] : [])];
     const args = [
-      "--bare",
+      "--setting-sources",
+      "",
+      "--tools",
+      tools.join(","),
       "-p",
       input.prompt,
       "--output-format",
@@ -149,7 +157,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       "--permission-mode",
       "acceptEdits",
       "--allowedTools",
-      [...BASE_TOOLS, ...(allowBash ? ["Bash"] : [])].join(","),
+      tools.join(","),
       "--disallowedTools",
       [...ALWAYS_DENY, ...(allowBash ? [] : ["Bash"])].join(","),
     ];
