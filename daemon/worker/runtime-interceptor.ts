@@ -52,8 +52,8 @@ export interface RuntimeInterceptorOptions {
   knownTools?: readonly string[];
   /** 已授权的命令别名（exec_command 只允许这些） */
   allowedAliases?: readonly string[];
-  broadcast?: (violation: GatewayViolation) => void;
-  onDowngrade?: (violation: GatewayViolation) => void;
+  broadcast?: ((violation: GatewayViolation) => void) | undefined;
+  onDowngrade?: ((violation: GatewayViolation) => void) | undefined;
 }
 
 export const DEFAULT_CONTROLLED_TOOLS = [

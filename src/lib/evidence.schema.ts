@@ -154,6 +154,10 @@ export const evidenceBundleSchema = z
     worker_session_id: z.string().min(1).optional(),
     /** v1.2.0 新增：建议溯源，不构成验收依据 */
     supervisor_suggestion_ids: z.array(z.string().min(1)).optional(),
+    /** TASK-W.4：运行时复检降级后记录实际控制模式（默认受控） */
+    worker_control_mode: z
+      .enum(["GATEWAY_ENFORCED", "UNCONTROLLED_EXTERNAL"])
+      .optional(),
     generated_at: z.string(),
     usage: usageSchema,
     worktree_snapshot: worktreeSnapshotSchema,

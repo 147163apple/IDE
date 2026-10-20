@@ -145,6 +145,109 @@ describe("W.4 威胁守卫：命令启动前校验", () => {
     }
   });
 
+  it.each([
+    ["env sudo ls"],
+    ["xargs sudo"],
+    ["nice -n 5 sudo ls"],
+    ["timeout 5 sudo ls"],
+    ["caffeinate -d sudo ls"],
+    ["command sudo ls"],
+  ])("包装命令 %s 也会识别出特权命令", (line) => {
+    const [executable, ...args] = line.split(" ");
+    const res = assessCommandThreat({
+      executable: executable as string,
+      args,
+      worktreeRoot: worktree,
+      repoTrusted: true,
+    });
+    expect(res.allowed).toBe(false);
+    expect(res.category).toBe("PRIVILEGED_COMMAND");
+  });
+
+  it("sh/bash/zsh -c 后的第一个词同样过特权检查", () => {
+    for (const shell of ["sh", "bash", "zsh"]) {
+      const res = assessCommandThreat({
+        executable: shell,
+        args: ["-c", "sudo ls /"],
+        worktreeRoot: worktree,
+        repoTrusted: true,
+      });
+      expect(res.allowed, shell).toBe(false);
+      expect(res.category, shell).toBe("PRIVILEGED_COMMAND");
+    }
+  });
+
+  it("chmod 仅在目标位于 Worktree 外时拒绝", () => {
+    const inside = assessCommandThreat({
+      executable: "chmod",
+      args: ["755", "src/a.ts"],
+      worktreeRoot: worktree,
+      repoTrusted: true,
+    });
+    expect(inside.allowed).toBe(true);
+
+    const outside = assessCommandThreat({
+      executable: "chmod",
+      args: ["755", "/etc/passwd"],
+      worktreeRoot: worktree,
+      repoTrusted: true,
+    });
+    expect(outside.allowed).toBe(false);
+    expect(outside.category).toBe("HOST_PATH_ACCESS");
+  });
+
+  it("单段且不存在的 /xxx 不当作主机路径；明显的文件路径才拒绝", () => {
+    const opaque = assessCommandThreat({
+      executable: "echo",
+      args: ["/celebrate"],
+      worktreeRoot: worktree,
+      repoTrusted: true,
+    });
+    expect(opaque.allowed).toBe(true);
+
+    const fileLike = assessCommandThreat({
+      executable: "cat",
+      args: ["/tmp/missing-dir/secret.txt"],
+      worktreeRoot: worktree,
+      repoTrusted: true,
+    });
+    expect(fileLike.allowed).toBe(false);
+    expect(fileLike.category).toBe("HOST_PATH_ACCESS");
+  });
+
+  it("Worker 的 command_alias 路径同样执行威胁检查", async () => {
+    const draft = createContractDraft({
+      title: "W.4 alias threat",
+      description: "alias 走威胁守卫",
+      acceptanceCriteria: ["拒绝 sudo"],
+      writablePaths: ["src/**"],
+      commands: [
+        {
+          alias: "priv",
+          executable: "sudo",
+          args: ["ls"],
+          expected_exit_code: 0,
+          timeout_seconds: 30,
+        },
+      ],
+    });
+    const contract = softwareContractSchema.parse({
+      ...draft,
+      lifecycle_state: "EXECUTING",
+      approval: {
+        status: "APPROVED",
+        approved_by: "tina",
+        approved_at: new Date().toISOString(),
+      },
+    });
+    const gateway = new ScopedWorktreeGateway(worktree, contract, {});
+    const res = await gateway.callTool("stagent_exec_command", {
+      command_alias: "priv",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.error?.code).toBe(E_UNSAFE_EXECUTION);
+  });
+
   it("无法限制子进程的命令被拒绝，且拒绝路径不触碰 child_process", () => {
     for (const cmd of ["nohup", "setsid", "tmux", "systemd-run"]) {
       expect(() =>

@@ -46,7 +46,6 @@ const PRIVILEGED = new Set([
   "doas",
   "chown",
   "chgrp",
-  "chmod",
   "insmod",
   "rmmod",
   "modprobe",
@@ -63,6 +62,19 @@ const PRIVILEGED = new Set([
   "shutdown",
   "reboot",
 ]);
+
+/** 包装命令：真正的执行目标是后面的命令词 */
+const WRAPPERS = new Set([
+  "env",
+  "xargs",
+  "nice",
+  "timeout",
+  "caffeinate",
+  "command",
+]);
+
+/** shell 的 -c 参数：后面第一个词同样要过特权检查 */
+const SHELLS = new Set(["sh", "bash", "zsh", "dash", "ksh"]);
 
 /** 无法限制子进程（自守护/脱离会话）的命令 */
 const UNBOUNDED = new Set([
@@ -104,6 +116,72 @@ function normalizeExecutable(executable: string): string {
   return base.toLowerCase().replace(/\.(exe|cmd|bat)$/, "");
 }
 
+/**
+ * 取包装命令/shell -c 后面的真实命令词。
+ * 支持 env/xargs/nice/timeout/caffeinate/command 的常见选项形态；
+ * shell 的 `-c "sudo ls"` 取字符串里的第一个词。
+ */
+function effectiveExecutables(
+  executable: string,
+  args: readonly string[],
+): string[] {
+  const names: string[] = [];
+  let current = normalizeExecutable(executable);
+  let rest = [...args];
+  const seen = new Set<string>();
+
+  for (let depth = 0; depth < 5; depth += 1) {
+    names.push(current);
+    if (seen.has(current)) break;
+    seen.add(current);
+
+    if (SHELLS.has(current)) {
+      const cIndex = rest.indexOf("-c");
+      if (cIndex >= 0) {
+        const script = rest[cIndex + 1] ?? "";
+        const inner = script.trim().split(/\s+/)[0] ?? "";
+        if (inner) {
+          current = normalizeExecutable(inner);
+          rest = [];
+          continue;
+        }
+      }
+      break;
+    }
+
+    if (!WRAPPERS.has(current)) break;
+
+    // 跳过包装器自身选项与变长参数
+    let index = 0;
+    while (index < rest.length && rest[index]?.startsWith("-")) {
+      index += 1;
+    }
+    if (current === "timeout") {
+      // 第一个位置参数是时长，第二个才是命令
+      index += 1;
+    }
+    if (current === "nice" && rest[index - 1] === "-n") {
+      index += 1;
+    }
+    if (current === "env") {
+      // 跳过 VAR=value
+      while (index < rest.length && rest[index]?.includes("=")) index += 1;
+    }
+    const next = rest[index];
+    if (!next) break;
+    current = normalizeExecutable(next);
+    rest = rest.slice(index + 1);
+  }
+  return names;
+}
+
+function isExistingOrFileLikePath(arg: string): boolean {
+  if (!arg.startsWith("/")) return false;
+  if (fs.existsSync(arg)) return true;
+  const segments = arg.split("/").filter(Boolean);
+  return segments.length >= 2 || arg.endsWith("/");
+}
+
 const HOST_PATH_PREFIXES = ["/", "~", "C:\\", "c:\\", "\\\\"];
 
 /**
@@ -125,48 +203,72 @@ export function assessCommandThreat(params: {
     };
   }
 
-  const name = normalizeExecutable(params.executable);
-  if (PRIVILEGED.has(name)) {
-    return {
-      allowed: false,
-      category: "PRIVILEGED_COMMAND",
-      reason: `特权/系统管理命令被拒绝：${name} 不允许在合同执行中运行`,
-    };
-  }
-  if (UNBOUNDED.has(name)) {
-    return {
-      allowed: false,
-      category: "UNBOUNDED_SUBPROCESS",
-      reason: `无法可靠回收子进程的命令被拒绝：${name} 会脱离受控进程树`,
-    };
+  const names = effectiveExecutables(params.executable, params.args);
+  for (const name of names) {
+    if (PRIVILEGED.has(name)) {
+      return {
+        allowed: false,
+        category: "PRIVILEGED_COMMAND",
+        reason: `特权/系统管理命令被拒绝：${name} 不允许在合同执行中运行`,
+      };
+    }
+    if (UNBOUNDED.has(name)) {
+      return {
+        allowed: false,
+        category: "UNBOUNDED_SUBPROCESS",
+        reason: `无法可靠回收子进程的命令被拒绝：${name} 会脱离受控进程树`,
+      };
+    }
   }
 
   const root = path.resolve(params.worktreeRoot);
+  const hostPath = (candidate: string): ThreatAssessment | null => {
+    const target = path.resolve(root, candidate);
+    if (!isWithin(root, target)) {
+      return {
+        allowed: false,
+        category: "HOST_PATH_ACCESS",
+        reason: `命令参数试图访问 Worktree 之外的主机路径：${candidate}`,
+      };
+    }
+    return null;
+  };
+
+  // chmod 只在目标位于 Worktree 外时拒绝（Worktree 内改权限是合法的）
+  if (normalizeExecutable(params.executable) === "chmod") {
+    const positional = params.args.filter((a) => !a.startsWith("-"));
+    const modeLike = /^([0-7]{3,4}|[ugoa]*[+=,-][rwxXst]*)$/;
+    const targets = positional.filter(
+      (arg, index) => index > 0 || !modeLike.test(arg),
+    );
+    for (const target of targets) {
+      const violation = hostPath(target);
+      if (violation) return violation;
+    }
+    return { allowed: true, reason: "ok" };
+  }
+
   for (const rawArg of params.args) {
     // 选项值也可能带主机路径（--prefix=/tmp），先取出 = 之后的部分
     const arg = rawArg.includes("=")
       ? (rawArg.split("=").slice(1).join("=") ?? rawArg)
       : rawArg;
     if (arg.startsWith("-") && !rawArg.includes("=")) continue;
-    if (HOST_PATH_PREFIXES.some((prefix) => arg.startsWith(prefix))) {
-      const target = path.resolve(root, arg);
-      if (!isWithin(root, target)) {
-        return {
-          allowed: false,
-          category: "HOST_PATH_ACCESS",
-          reason: `命令参数试图访问 Worktree 之外的主机路径：${rawArg}`,
-        };
-      }
+    if (
+      arg.startsWith("~") ||
+      arg.startsWith("\\\\") ||
+      /^[A-Za-z]:\\/.test(arg)
+    ) {
+      const violation = hostPath(arg);
+      if (violation) return violation;
+    }
+    if (isExistingOrFileLikePath(arg)) {
+      const violation = hostPath(arg);
+      if (violation) return violation;
     }
     if (arg.split(/[\\/]/).includes("..")) {
-      const target = path.resolve(root, arg);
-      if (!isWithin(root, target)) {
-        return {
-          allowed: false,
-          category: "HOST_PATH_ACCESS",
-          reason: `命令参数试图通过 .. 逃逸 Worktree：${rawArg}`,
-        };
-      }
+      const violation = hostPath(arg);
+      if (violation) return violation;
     }
   }
 

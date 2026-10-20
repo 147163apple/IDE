@@ -37,6 +37,7 @@ import {
 import { type EnvSanitizerOptions } from "../runner/env-filter";
 import { buildCommandEnvironment } from "../worker/policy-guard";
 import type { RuntimeInterceptor } from "../worker/runtime-interceptor";
+import { assessCommandThreat, isRepoTrusted } from "../worker/threat-guard";
 import {
   CostMonitor,
   E_COST_CAP_EXCEEDED,
@@ -128,6 +129,8 @@ export interface ScopedGatewayOptions {
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
   /** TASK-W.4：运行时复检（能力漂移 / 未知通道 / 越界路径） */
   runtimeInterceptor?: RuntimeInterceptor | undefined;
+  /** TASK-W.4：是否强制仓库信任标记（orchestrator 置 true；单测默认关闭） */
+  requireRepoTrust?: boolean | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -154,6 +157,7 @@ export class ScopedWorktreeGateway {
   private readonly onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
   private readonly runtimeInterceptor?: RuntimeInterceptor | undefined;
+  private readonly requireRepoTrust: boolean;
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -181,6 +185,7 @@ export class ScopedWorktreeGateway {
     this.signal = options.signal;
     this.onTerminalLine = options.onTerminalLine;
     this.runtimeInterceptor = options.runtimeInterceptor;
+    this.requireRepoTrust = options.requireRepoTrust ?? false;
   }
 
   public getWorktreeRoot(): string {
@@ -461,8 +466,11 @@ export class ScopedWorktreeGateway {
     const budgetDenial = this.consumeToolCallBudget(name);
     if (budgetDenial) return budgetDenial;
 
-    // W.4：每个工具调用前复检通道与路径；内部验证调用（orchestrator）不受 Worker 通道限制
-    if (this.runtimeInterceptor && options.internal !== true) {
+    // W.4：每个工具调用前复检通道与路径；内部验证调用仅在未降级时豁免
+    if (
+      this.runtimeInterceptor &&
+      (options.internal !== true || this.runtimeInterceptor.isStopped())
+    ) {
       const guard = this.runtimeInterceptor.checkToolCall(name, rawInput);
       if (!guard.allowed) {
         const violation = guard.violation;
@@ -1227,6 +1235,41 @@ export class ScopedWorktreeGateway {
     const command = structured
       ? [structured.executable, ...structured.args].join(" ")
       : (parsed.data.command ?? "");
+
+    // W.4：Worker 的 command_alias 路径同样过威胁守卫（含追加参数）
+    if (!internal && structured !== undefined) {
+      const assessment = assessCommandThreat({
+        executable: structured.executable,
+        args: structured.args,
+        worktreeRoot: this.worktreeRoot,
+        repoTrusted: this.requireRepoTrust
+          ? isRepoTrusted(this.worktreeRoot)
+          : true,
+      });
+      if (!assessment.allowed) {
+        this.logAudit({
+          tool: "stagent_exec_command",
+          input: { command_alias: parsed.data.command_alias },
+          outcome: "BLOCKED",
+          violationCode: "E_UNSAFE_EXECUTION",
+          details: assessment.reason,
+        });
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[E_UNSAFE_EXECUTION] ${assessment.reason}`,
+            },
+          ],
+          error: {
+            code: "E_UNSAFE_EXECUTION",
+            message: assessment.reason,
+            details: { category: assessment.category },
+          },
+        };
+      }
+    }
 
     // 0. 主动中止检查：abort 之后在途命令已被整树强杀，后续命令一律拒绝，
     //    保证 execute 的命令循环立刻收尾而不是继续跑剩余验证
