@@ -596,7 +596,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（分支 `feat/c3-monaco-editor`，未合并。Monaco（`@monaco-editor/react`，编辑器本体默认从 jsDelivr CDN 加载，离线不可用）可写/只读区分；保存只走 `POST /api/worktree/files`，越权 403 + `.stagent/audit/gateway-violations.jsonl` + `GATEWAY_VIOLATION` 帧，文件无改动；`EVIDENCE_STATUS_CHANGED=STALE` 时中栏顶部横幅；Agent 的 Edit/Write 完成后中栏自动打开并刷新该文件。无合同（Vibe）时根为主工作树，仅禁写 .git/.stagent（保护清单待 P.1）。）
 * **核心目标**：
   1. Monaco Editor 嵌入，可写/只读视觉区分。
   2. **编辑器内 Evidence STALE 提示 (G-18)**：当关联合同 Evidence 变为 STALE 时，在中栏顶部弹出警告横幅，提示代码已被外部修改需重新验证。

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import {
   createContractDraft,
   softwareContractSchema,
@@ -36,16 +42,31 @@ vi.mock("@/lib/daemon-api", async (orig) => {
       throw new Error("no graph in test");
     }),
     fetchSettings: vi.fn(async () => ({ configured: false })),
+    readWorktreeFile: vi.fn(async (_c: unknown, p: string) => ({
+      path: p,
+      root: "/r",
+      content: `内容 of ${p}`,
+      writable: true,
+    })),
   };
 });
+let streamOpts: Record<string, (p: unknown) => void> = {};
+vi.mock("@monaco-editor/react", () => ({
+  default: (p: { value: string }) => (
+    <textarea data-testid="monaco" value={p.value} readOnly />
+  ),
+}));
 vi.mock("@/hooks/use-daemon-stream", () => ({
-  useDaemonStream: () => ({
-    status: "closed",
-    logs: [],
-    alerts: [],
-    dismissAlert: () => {},
-    clearLogs: () => {},
-  }),
+  useDaemonStream: (o: Record<string, (p: unknown) => void>) => {
+    streamOpts = o;
+    return {
+      status: "closed",
+      logs: [],
+      alerts: [],
+      dismissAlert: () => {},
+      clearLogs: () => {},
+    };
+  },
 }));
 
 const { Route } = await import("../../src/routes/index");
@@ -84,5 +105,46 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
       "worktree",
     );
     expect(screen.getByText("架构雷达", { exact: false })).toBeInTheDocument();
+  });
+  it("Sprint 1 门禁（假数据）：Agent 改文件 → 中栏自动打开 Monaco；Evidence STALE → 横幅", async () => {
+    render(<Console />);
+    fireEvent.click(await screen.findByText("主页面接线测试"));
+    const base = { session_id: "s", turn_id: "t", at: "" };
+    act(() => {
+      streamOpts.onChatEvent?.({
+        ...base,
+        seq: 1,
+        kind: "tool_call",
+        tool_id: "e1",
+        name: "Edit",
+        input: { file_path: "/Users/tina/Desktop/1020/src/a.ts" },
+      });
+      streamOpts.onChatEvent?.({
+        ...base,
+        seq: 2,
+        kind: "tool_result",
+        tool_id: "e1",
+        output: "ok",
+        is_error: false,
+      });
+    });
+    expect(await screen.findByRole("tab", { name: "a.ts" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("monaco")).toHaveValue("内容 of src/a.ts"),
+    );
+    expect(screen.queryByTestId("evidence-stale-banner")).toBeNull();
+    act(() => {
+      streamOpts.onEvidenceStatus?.({
+        contract_id: contract.contract_id,
+        evidence_id: "ev",
+        status: "STALE",
+      });
+    });
+    expect(screen.getByTestId("evidence-stale-banner")).toHaveTextContent(
+      "STALE",
+    );
   });
 });

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { FileTree } from "./FileTree";
 import { SplitPaneContainer } from "./SplitPaneContainer";
@@ -33,6 +33,12 @@ export interface WorkspaceLayoutProps {
   studioContent?: ReactNode;
   rightPanel?: ReactNode;
   footer?: ReactNode;
+  /** 渲染某个文件的编辑器（C.3）；缺省为占位 */
+  renderFile?: (path: string, boundToWorktree: boolean) => ReactNode;
+  /** 外部请求打开文件（例如 Agent 刚改了它）；nonce 变化即触发 */
+  openRequest?: { path: string; nonce: number } | null;
+  /** 中栏顶部横幅（Evidence STALE 等） */
+  middleBanner?: ReactNode;
   /** 首次打开即显示 Supervisor Studio 标签 */
   defaultOpenStudio?: boolean;
 }
@@ -64,6 +70,18 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     setTabs((t) => (t.some((x) => x.id === tab.id) ? t : [...t, tab]));
     setActiveTab(tab.id);
   };
+  const req = props.openRequest;
+  useEffect(() => {
+    if (!req) return;
+    const p = req.path;
+    setTabs((t) =>
+      t.some((x) => x.id === p)
+        ? t
+        : [...t, { id: p, title: p.split("/").pop() ?? p }],
+    );
+    setActiveTab(p);
+  }, [req?.path, req?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const openStudio = () =>
     openTab({ id: STUDIO_TAB_ID, title: "Supervisor Studio", system: true });
 
@@ -78,9 +96,13 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   );
   const editorFor = (id: string | null) =>
     id && id !== STUDIO_TAB_ID ? (
-      <div data-testid="editor-placeholder" className="p-3 text-sm">
-        {id}（代码编辑器占位，TASK-C.3 接入 Monaco）
-      </div>
+      props.renderFile ? (
+        props.renderFile(id, useWorktree)
+      ) : (
+        <div data-testid="editor-placeholder" className="p-3 text-sm">
+          {id}（代码编辑器占位，TASK-C.3 接入 Monaco）
+        </div>
+      )
     ) : (
       <div className="p-3 text-sm opacity-60">从左侧打开文件</div>
     );
@@ -148,6 +170,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
           data-testid="middle-column"
           className="flex min-w-0 flex-1 flex-col"
         >
+          {props.middleBanner}
           <div role="tablist" className="flex gap-1 border-b px-2 text-sm">
             {tabs.map((t) => (
               <button
