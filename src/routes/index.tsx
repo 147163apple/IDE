@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -21,6 +21,12 @@ import {
 import type { EvidenceBundle } from "@/lib/evidence.schema";
 import {
   abortContract,
+  createChatSession,
+  getChatSession,
+  interruptChat,
+  listChatAdapters,
+  listChatSessions,
+  sendChatMessage,
   approveContract,
   createContract,
   executeContract,
@@ -52,6 +58,9 @@ import { EditorOpener } from "@/components/editor/EditorOpener";
 import { EvidenceChecklist } from "@/components/evidence/EvidenceChecklist";
 import { useDaemonStream } from "@/hooks/use-daemon-stream";
 import { WorkspaceLayout } from "@/components/WorkspaceLayout";
+import { AgentChatPane } from "@/components/AgentChatPane";
+import type { AgentSessionTransport } from "@/hooks/use-agent-session";
+import type { ChatEvent } from "@/lib/chat-events";
 import {
   APPROVED_STATES,
   buildFileTree,
@@ -106,8 +115,16 @@ function Console() {
   const [showSettings, setShowSettings] = useState(false);
 
   const fileTree = useMemo(
-    () => buildFileTree(graph?.graph.nodes.map((n) => n.filePath) ?? []),
-    [graph],
+    () =>
+      buildFileTree(
+        (graph?.graph.nodes.map((n) => n.filePath) ?? []).map((p) =>
+          // 架构图给的是绝对路径；文件树与编辑器统一用仓库相对路径
+          repoRoot && p.startsWith(repoRoot + "/")
+            ? p.slice(repoRoot.length + 1)
+            : p,
+        ),
+      ),
+    [graph, repoRoot],
   );
 
   const selected = useMemo(
@@ -146,6 +163,27 @@ function Console() {
     }
   }, [conn]);
 
+  // 右栏会话：CHAT_EVENT 经同一条 WS 推送，这里做一个简单的订阅分发
+  const chatListeners = useRef(new Set<(e: ChatEvent) => void>());
+  const chatTransport = useMemo<AgentSessionTransport | null>(
+    () =>
+      connected
+        ? {
+            listAdapters: () => listChatAdapters(conn),
+            listSessions: () => listChatSessions(conn),
+            createSession: (a) => createChatSession(conn, a),
+            getSession: (id) => getChatSession(conn, id),
+            send: (id, text) => sendChatMessage(conn, id, text),
+            interrupt: (id) => interruptChat(conn, id),
+            subscribe: (listener) => {
+              chatListeners.current.add(listener);
+              return () => chatListeners.current.delete(listener);
+            },
+          }
+        : null,
+    [connected, conn],
+  );
+
   // 实时流（WebSocket）：状态/日志/告警由 Daemon 推送，轮询退化为兜底
   const stream = useDaemonStream({
     port: daemonPort,
@@ -153,6 +191,9 @@ function Console() {
     enabled: connected,
     onContractUpdate: (_p: ContractUpdatePayload) => {
       void refresh();
+    },
+    onChatEvent: (e: ChatEvent) => {
+      for (const l of chatListeners.current) l(e);
     },
     onEvidenceReady: (p: EvidenceReadyPayload) => {
       if (p.contract_id !== selectedId) return;
@@ -254,6 +295,7 @@ function Console() {
         contract={workspaceContract}
         files={fileTree}
         defaultOpenStudio
+        rightPanel={<AgentChatPane transport={chatTransport} />}
         headerExtra={
           <>
             <span

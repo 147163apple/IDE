@@ -8,6 +8,7 @@ import type {
   ScopeAlertPayload,
   WorkerLogPayload,
 } from "@/lib/ipc/frames";
+import type { ChatEvent } from "@/lib/chat-events";
 
 /**
  * Daemon WebSocket 实时流（Track C）。
@@ -46,6 +47,7 @@ export interface UseDaemonStreamOptions {
   onContractUpdate?: (payload: ContractUpdatePayload) => void;
   onEvidenceReady?: (payload: EvidenceReadyPayload) => void;
   onStreamError?: (message: string) => void;
+  onChatEvent?: (event: ChatEvent) => void;
 }
 
 export interface DaemonStreamState {
@@ -127,6 +129,11 @@ export function useDaemonStream(
         case "EVIDENCE_READY": {
           const payload = asPayload<EvidenceReadyPayload>(frame);
           if (payload) handlersRef.current.onEvidenceReady?.(payload);
+          return;
+        }
+        case "CHAT_EVENT": {
+          const payload = asPayload<ChatEvent>(frame);
+          if (payload) handlersRef.current.onChatEvent?.(payload);
           return;
         }
         case "ERROR": {
