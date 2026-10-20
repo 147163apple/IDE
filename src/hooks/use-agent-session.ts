@@ -67,7 +67,7 @@ export function foldChatEvents(events: ChatEvent[]): {
       }
       case "tool_call":
         messages.push({
-          id: `tool-${e.tool_id}`,
+          id: `tool-${e.turn_id}-${e.tool_id}`,
           role: "tool",
           text: e.name,
           tool: { name: e.name, input: e.input },
@@ -75,7 +75,9 @@ export function foldChatEvents(events: ChatEvent[]): {
         });
         break;
       case "tool_result": {
-        const card = messages.find((m) => m.id === `tool-${e.tool_id}`);
+        const card = messages.find(
+          (m) => m.id === `tool-${e.turn_id}-${e.tool_id}`,
+        );
         if (card?.tool) {
           card.tool.output = e.output;
           card.tool.is_error = e.is_error;
@@ -203,6 +205,10 @@ export function useAgentSession(
       if (event.kind === "delta" && sentAt.current !== null) {
         setFirstTokenMs(Date.now() - sentAt.current);
         sentAt.current = null;
+      }
+      // 本轮结束后刷新会话列表（标题、原生会话 ID）
+      if (event.kind === "turn_end" || event.kind === "interrupted") {
+        void transport.listSessions().then(setSessions, () => {});
       }
       setEvents((prev) =>
         prev.some(

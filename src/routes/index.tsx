@@ -115,8 +115,16 @@ function Console() {
   const [showSettings, setShowSettings] = useState(false);
 
   const fileTree = useMemo(
-    () => buildFileTree(graph?.graph.nodes.map((n) => n.filePath) ?? []),
-    [graph],
+    () =>
+      buildFileTree(
+        (graph?.graph.nodes.map((n) => n.filePath) ?? []).map((p) =>
+          // 架构图给的是绝对路径；文件树与编辑器统一用仓库相对路径
+          repoRoot && p.startsWith(repoRoot + "/")
+            ? p.slice(repoRoot.length + 1)
+            : p,
+        ),
+      ),
+    [graph, repoRoot],
   );
 
   const selected = useMemo(

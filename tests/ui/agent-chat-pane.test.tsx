@@ -147,3 +147,31 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
     expect(screen.getByTestId("agent-chat")).toHaveTextContent("连接 Daemon");
   });
 });
+
+describe("foldChatEvents", () => {
+  it("不同轮次的相同 tool_id 各自成卡片、结果不串（浏览器实测发现的重复 key）", async () => {
+    const { foldChatEvents } =
+      await import("../../src/hooks/use-agent-session");
+    const e = (turn: string, seq: number, body: object) =>
+      ({ session_id: "s", turn_id: turn, seq, at: "", ...body }) as never;
+    const { messages } = foldChatEvents([
+      e("t1", 0, { kind: "tool_call", tool_id: "x", name: "Read", input: {} }),
+      e("t1", 1, {
+        kind: "tool_result",
+        tool_id: "x",
+        output: "一",
+        is_error: false,
+      }),
+      e("t2", 2, { kind: "tool_call", tool_id: "x", name: "Read", input: {} }),
+      e("t2", 3, {
+        kind: "tool_result",
+        tool_id: "x",
+        output: "二",
+        is_error: false,
+      }),
+    ]);
+    const cards = messages.filter((m) => m.role === "tool");
+    expect(new Set(cards.map((c) => c.id)).size).toBe(2);
+    expect(cards.map((c) => c.tool?.output)).toEqual(["一", "二"]);
+  });
+});
