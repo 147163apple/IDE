@@ -80,6 +80,15 @@ describe("C.5 Diff 端点：合同 ID 与路径包含性", () => {
     }
   });
 
+  it("非法百分号编码返回 400，而不是 500", async () => {
+    const res = await getJson<{ error?: string }>(
+      `${baseUrl}/api/contracts/%E0%A4%A/diff`,
+      token,
+    );
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe("Invalid URL encoding");
+  });
+
   it("合法但不存在的合同返回 404，不泄露任何路径内容", async () => {
     for (const endpoint of ["diff", "diff-files"]) {
       const res = await getJson<{ error?: string }>(

@@ -1191,9 +1191,21 @@ export class StagentDaemon {
         /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
       if (match) {
-        const contractId = decodeURIComponent(match[1] as string);
+        // W.3：非法百分号编码（如 %E0%A4%A）会让 decodeURIComponent 抛 URIError，
+        // 统一返回 400，避免落到外层变成 500 或泄露堆栈。
+        let contractId: string;
+        let subId: string | undefined;
+        try {
+          contractId = decodeURIComponent(match[1] as string);
+          subId =
+            match[3] === undefined
+              ? undefined
+              : decodeURIComponent(match[3] as string);
+        } catch {
+          this.sendJson(res, 400, { error: "Invalid URL encoding" });
+          return;
+        }
         const action = match[2];
-        const subId = match[3];
 
         if (method === "GET" && !action) {
           const contract = store.get(contractId);
@@ -1208,11 +1220,7 @@ export class StagentDaemon {
         // Track C：EVIDENCE_READY 推送后，控制台据此拉取完整证据包，不必等用户点执行
         if (method === "GET" && action === "evidence") {
           const snapshot = subId
-            ? loadEvidenceSnapshot(
-                this.repoRoot,
-                contractId,
-                decodeURIComponent(subId),
-              )
+            ? loadEvidenceSnapshot(this.repoRoot, contractId, subId)
             : loadLatestEvidenceSnapshot(this.repoRoot, contractId);
           if (!snapshot) {
             this.sendJson(res, 404, { error: "Evidence not found" });

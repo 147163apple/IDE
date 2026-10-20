@@ -34,7 +34,8 @@ import {
   assertAliasExtraArgsAllowed,
   CommandPolicyError,
 } from "../runner/command-policy";
-import { parseEnvFile, type EnvSanitizerOptions } from "../runner/env-filter";
+import { type EnvSanitizerOptions } from "../runner/env-filter";
+import { buildCommandEnvironment } from "../worker/policy-guard";
 import {
   CostMonitor,
   E_COST_CAP_EXCEEDED,
@@ -287,40 +288,14 @@ export class ScopedWorktreeGateway {
   private buildCommandEnv(alias: string | undefined): {
     envOptions: EnvSanitizerOptions;
     secretValues: string[];
+    env: Record<string, string>;
   } {
-    const permissions = this.contract.authorization.execution_permissions;
-    const extraEnv: Record<string, string> = {};
-    const secretValues: string[] = [];
-
-    if (alias !== undefined) {
-      for (const grant of permissions.env_file_grants ?? []) {
-        if (!grant.command_aliases.includes(alias)) continue;
-        try {
-          const safe = resolveSafeWorktreePath(this.worktreeRoot, grant.file);
-          const parsedFile = parseEnvFile(
-            fs.readFileSync(safe.absolutePath, "utf-8"),
-          );
-          for (const name of grant.variable_names) {
-            const value = parsedFile[name];
-            if (value === undefined) continue;
-            extraEnv[name] = value;
-            if (value.length >= 6) secretValues.push(value);
-          }
-        } catch {
-          // 文件缺失/越界：该命令拿不到这些变量，但不阻断执行
-        }
-      }
-    }
-
-    return {
-      envOptions: {
-        extraEnv,
-        allowedKeyOverrides: [
-          ...permissions.allowed_environment_variable_names,
-        ],
-      },
-      secretValues,
-    };
+    // W.3：环境白名单 / env_file_grants / 网络策略统一由 policy-guard 组装
+    return buildCommandEnvironment({
+      permissions: this.contract.authorization.execution_permissions,
+      worktreeRoot: this.worktreeRoot,
+      alias,
+    });
   }
 
   private logAudit(entry: {
@@ -395,15 +370,8 @@ export class ScopedWorktreeGateway {
               description:
                 "Literal extra argv entries; shell metacharacters are rejected",
             },
-            command: {
-              type: "string",
-              description: "Legacy free-form command (internal verification)",
-            },
-            executable: {
-              type: "string",
-              description: "Legacy structured executable",
-            },
           },
+          required: ["command_alias"],
         },
       },
       {
@@ -461,6 +429,7 @@ export class ScopedWorktreeGateway {
   public async callTool(
     name: string,
     rawInput: unknown,
+    options: { internal?: boolean } = {},
   ): Promise<MCPToolCallResult> {
     // G-09：任何工具调用先记账；熔断后一律拒绝（含未知工具名）
     const budgetDenial = this.consumeToolCallBudget(name);
@@ -472,7 +441,7 @@ export class ScopedWorktreeGateway {
       case "stagent_write_file":
         return this.handleWriteFile(rawInput);
       case "stagent_exec_command":
-        return this.handleExecCommand(rawInput);
+        return this.handleExecCommand(rawInput, options.internal === true);
       case "stagent_list_dir":
       case "stagent_list_directory":
         return this.handleListDir(rawInput);
@@ -1053,6 +1022,7 @@ export class ScopedWorktreeGateway {
 
   private async handleExecCommand(
     rawInput: unknown,
+    internal: boolean,
   ): Promise<MCPToolCallResult> {
     const parsed = StagentExecCommandSchema.safeParse(rawInput);
     if (!parsed.success) {
@@ -1068,10 +1038,38 @@ export class ScopedWorktreeGateway {
       };
     }
 
+    // W.3：旧 command / executable 入口只允许 orchestrator 内部验证调用。
+    // 对外工具定义已删除这两个字段，Worker 只能走 command_alias。
+    if (
+      !internal &&
+      (parsed.data.command !== undefined ||
+        parsed.data.executable !== undefined)
+    ) {
+      const msg =
+        "Worker must use command_alias; free-form command/executable is internal-only";
+      this.logAudit({
+        tool: "stagent_exec_command",
+        input: {
+          has_command: parsed.data.command !== undefined,
+          has_executable: parsed.data.executable !== undefined,
+        },
+        outcome: "BLOCKED",
+        violationCode: E_UNAUTHORIZED_COMMAND,
+        details: msg,
+      });
+      return {
+        isError: true,
+        content: [{ type: "text", text: `[${E_UNAUTHORIZED_COMMAND}] ${msg}` }],
+        error: { code: E_UNAUTHORIZED_COMMAND, message: msg },
+      };
+    }
+
     // 结构化 argv 优先（§9.1）；字符串形式仅用于兼容既有调用。
     // Worker 面走 `command_alias`：别名必须存在于合同验证命令中，额外参数
     // 仅接受字面量，含 shell 元字符一律 E_UNAUTHORIZED_COMMAND。
     let structured: { executable: string; args: string[] } | undefined;
+    /** 别名 + 已校验追加参数后的完整命令：只用于让 runner 做精确白名单匹配 */
+    let authorizedAliasCommand: string | undefined;
     if (parsed.data.command_alias !== undefined) {
       const alias = parsed.data.command_alias;
       const spec = this.contract.verification_spec.commands.find(
@@ -1109,6 +1107,7 @@ export class ScopedWorktreeGateway {
       try {
         assertAliasExtraArgsAllowed({
           executable: spec.executable,
+          templateArgs: spec.args,
           extraArgs,
         });
       } catch (err) {
@@ -1169,6 +1168,8 @@ export class ScopedWorktreeGateway {
         executable: spec.executable,
         args: [...spec.args, ...extraArgs],
       };
+      authorizedAliasCommand =
+        `${structured.executable} ${structured.args.join(" ")}`.trim();
     } else if (parsed.data.executable !== undefined) {
       structured = {
         executable: parsed.data.executable,
@@ -1216,10 +1217,18 @@ export class ScopedWorktreeGateway {
     }
 
     // 2. Whitelist compilation from contract (§9.1 structured commands)
+    // 精确匹配：不再接受「前缀 + 空格」的松散放行；别名追加参数只有在
+    // assertAliasExtraArgsAllowed 校验通过后，才把完整命令加入本轮白名单。
     const vSpec = this.contract.verification_spec;
     const allowedCommands: string[] = vSpec.commands.map((c) =>
       [c.executable, ...c.args].join(" "),
     );
+    if (
+      authorizedAliasCommand !== undefined &&
+      !allowedCommands.includes(authorizedAliasCommand)
+    ) {
+      allowedCommands.push(authorizedAliasCommand);
+    }
 
     // 3. Execution
     const taskBudgetMs =
@@ -1258,6 +1267,7 @@ export class ScopedWorktreeGateway {
         networkPolicy:
           this.contract.authorization.execution_permissions.network_policy,
         envOptions: commandEnv.envOptions,
+        resolvedEnv: commandEnv.env,
         ...(commandEnv.secretValues.length === 0
           ? {}
           : { secretValues: commandEnv.secretValues }),
@@ -1268,12 +1278,20 @@ export class ScopedWorktreeGateway {
           : { onLine: this.onTerminalLine }),
       });
 
+      // 端口冲突诊断：验证脚本启动服务时常见，属于环境问题而非断言失败。
+      // 识别后返回 E_PORT_CONFLICT + 白话说明，且不计入连续失败熔断。
+      const portConflict =
+        result.exitCode !== 0 &&
+        /EADDRINUSE|address already in use/i.test(
+          `${result.stdout}\n${result.stderr}`,
+        );
+
       // Update loop guard if this matches a verification test command
       const isTestCommand = allowedCommands.some(
         (tc) => command === tc || command.startsWith(tc + " "),
       );
-      // 用户主动中止（exit 130）不算验证失败，避免误触连续失败熔断
-      if (this.loopGuard && isTestCommand && !result.aborted) {
+      // 用户主动中止（exit 130）与端口冲突都不算验证失败，避免误触熔断
+      if (this.loopGuard && isTestCommand && !result.aborted && !portConflict) {
         this.loopGuard.recordAttempt({
           passed: result.exitCode === 0,
           exitCode: result.exitCode,
@@ -1286,11 +1304,13 @@ export class ScopedWorktreeGateway {
 
       const errorCode = taskBudgetExhausted
         ? "E_TASK_TIMEOUT"
-        : result.timedOut
-          ? "E_COMMAND_TIMEOUT"
-          : result.exitCode === 0
-            ? undefined
-            : "E_VERIFICATION_FAILED";
+        : portConflict
+          ? "E_PORT_CONFLICT"
+          : result.timedOut
+            ? "E_COMMAND_TIMEOUT"
+            : result.exitCode === 0
+              ? undefined
+              : "E_VERIFICATION_FAILED";
 
       this.logAudit({
         tool: "stagent_exec_command",
@@ -1315,9 +1335,11 @@ export class ScopedWorktreeGateway {
                 code: errorCode,
                 message: taskBudgetExhausted
                   ? "Task total duration budget exhausted (max_duration_seconds)"
-                  : result.timedOut
-                    ? "Command exceeded timeout_seconds and was terminated (124)"
-                    : "Verification command returned a non-zero exit code",
+                  : portConflict
+                    ? "端口被占用，验证未完成。这属于环境冲突，不是测试断言失败；请先停止占用该端口的进程（macOS/Linux 可用 lsof -i :<端口> 查看），再重试。"
+                    : result.timedOut
+                      ? "Command exceeded timeout_seconds and was terminated (124)"
+                      : "Verification command returned a non-zero exit code",
               },
             }
           : {}),

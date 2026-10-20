@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
+import { applyNetworkPolicy } from "../worker/policy-guard";
 import { sanitizeEnvironment, type EnvSanitizerOptions } from "./env-filter";
 import { killProcessTree, type ProcessTreeKillResult } from "./process-tree";
 
@@ -49,11 +50,10 @@ export interface CommandRunnerOptions {
   secretValues?: string[];
   /** 用户手动中止信号：触发后同样执行全进程树回收（超时路径一致） */
   signal?: AbortSignal | undefined;
-  /**
-   * 逐行实时回调（TASK-C.5 结构化终端回放）。
-   * 每行在回调前已完成脱敏，且单行长度有上限；调用方不得在脱敏前截断。
-   */
+  /** 逐行实时回调（TASK-C.5 结构化终端回放）。 */
   onLine?: (stream: "stdout" | "stderr", line: string) => void;
+  /** W.3：由 policy-guard 组装好的最终环境（提供后跳过内部白名单/网络注入） */
+  resolvedEnv?: Record<string, string>;
 }
 
 export interface CommandResult {
@@ -86,6 +86,8 @@ const SECRET_PATTERNS: RegExp[] = [
   /\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*\S+/g, // KEY=value
   // JSON 形式（含小写键）："api_key": "…" / "token": "…"
   /(["']?(?:api[_-]?key|access[_-]?token|token|secret|password)["']?\s*:\s*)"[^"]*"/gi,
+  // PEM 私钥块：必须整块遮蔽，单行规则看不到中间的 base64
+  /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g,
 ];
 
 /** 先脱敏、后有界截断（规范 TASK-A.4 PASS-5） */
@@ -106,6 +108,7 @@ export function redactSecrets(
   for (const pattern of SECRET_PATTERNS) {
     out = out.replace(pattern, (match) => {
       redacted = true;
+      if (match.startsWith("-----BEGIN")) return "[REDACTED PRIVATE KEY BLOCK]";
       // KEY=value：保留 KEY=
       const eq = match.indexOf("=");
       if (eq > 0) return `${match.slice(0, eq + 1)}[REDACTED]`;
@@ -190,10 +193,36 @@ export const MAX_STREAM_LINE_CHARS = 4000;
 interface LineStream {
   decoder: StringDecoder;
   pending: string;
+  /** 正在 PEM 私钥块内：块内所有行一律丢弃，直到 END 标记 */
+  inPrivateKeyBlock: boolean;
 }
 
+const PRIVATE_KEY_BEGIN = /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/;
+const PRIVATE_KEY_END = /-----END [A-Z0-9 ]*PRIVATE KEY-----/;
+
 function createLineStream(): LineStream {
-  return { decoder: new StringDecoder("utf-8"), pending: "" };
+  return {
+    decoder: new StringDecoder("utf-8"),
+    pending: "",
+    inPrivateKeyBlock: false,
+  };
+}
+
+/**
+ * 多行私钥块遮蔽（逐行状态机）：
+ * - BEGIN 行替换为占位符，块内（含 END）全部丢弃；
+ * - 直到 END 才恢复输出；缺少 END 时后续全部丢弃（失败关闭）。
+ */
+function maskPrivateKeyBlock(ls: LineStream, line: string): string | null {
+  if (ls.inPrivateKeyBlock) {
+    if (PRIVATE_KEY_END.test(line)) ls.inPrivateKeyBlock = false;
+    return null;
+  }
+  if (PRIVATE_KEY_BEGIN.test(line)) {
+    ls.inPrivateKeyBlock = true;
+    return "[REDACTED PRIVATE KEY BLOCK]";
+  }
+  return line;
 }
 
 function emitLine(
@@ -219,7 +248,10 @@ function pushLines(
   ls.pending += ls.decoder.write(chunk);
   const parts = ls.pending.split("\n");
   ls.pending = parts.pop() ?? "";
-  for (const line of parts) emitLine(stream, line, options);
+  for (const line of parts) {
+    const masked = maskPrivateKeyBlock(ls, line);
+    if (masked !== null) emitLine(stream, masked, options);
+  }
 }
 
 function flushLineStream(
@@ -229,7 +261,8 @@ function flushLineStream(
 ): void {
   ls.pending += ls.decoder.end();
   if (ls.pending.length > 0) {
-    emitLine(stream, ls.pending, options);
+    const masked = maskPrivateKeyBlock(ls, ls.pending);
+    if (masked !== null) emitLine(stream, masked, options);
     ls.pending = "";
   }
 }
@@ -291,23 +324,6 @@ export function truncateOutput(
 }
 
 /** DENY 策略下的离线环境约束（非对抗性沙箱，见 ADR-003） */
-function applyNetworkPolicy(
-  env: Record<string, string>,
-  policy: CommandRunnerOptions["networkPolicy"],
-): Record<string, string> {
-  if (policy !== "DENY") return env;
-  return {
-    ...env,
-    HTTP_PROXY: "http://127.0.0.1:9",
-    HTTPS_PROXY: "http://127.0.0.1:9",
-    ALL_PROXY: "http://127.0.0.1:9",
-    NO_PROXY: "",
-    npm_config_offline: "true",
-    YARN_ENABLE_NETWORK: "0",
-    PIP_NO_INDEX: "1",
-  };
-}
-
 function stripQuotedStrings(str: string): string {
   return str
     .replace(/"(?:[^"\\]|\\.)*"/g, '""')
@@ -361,14 +377,13 @@ export async function runCommand(
   // 结构化 argv 不经 shell，无需（也不应）对其参数内容做 shell 操作符校验
   if (!structured) validateCommandSafety(trimmedCmd);
 
-  // Whitelist verification if configured
+  // Whitelist verification if configured.
+  // 只接受精确匹配：旧实现允许「授权命令 + 空格 + 任意追加」，等于把追加参数
+  // 交给 shell 语义解释；W.3 起追加参数必须先在网关层通过参数策略校验。
   if (options.allowedCommands && options.allowedCommands.length > 0) {
-    const isWhitelisted = options.allowedCommands.some((allowed) => {
-      const normAllowed = allowed.trim();
-      return (
-        trimmedCmd === normAllowed || trimmedCmd.startsWith(normAllowed + " ")
-      );
-    });
+    const isWhitelisted = options.allowedCommands.some(
+      (allowed) => trimmedCmd === allowed.trim(),
+    );
 
     if (!isWhitelisted) {
       throw new CommandSecurityError(
@@ -381,10 +396,12 @@ export async function runCommand(
 
   const timeoutMs = options.timeoutMs ?? 120_000;
   const maxOutputChars = options.maxOutputChars ?? 100_000;
-  const env = applyNetworkPolicy(
-    sanitizeEnvironment(process.env, options.envOptions),
-    options.networkPolicy,
-  );
+  const env =
+    options.resolvedEnv ??
+    applyNetworkPolicy(
+      sanitizeEnvironment(process.env, options.envOptions),
+      options.networkPolicy,
+    );
 
   const startTime = Date.now();
   let timedOut = false;

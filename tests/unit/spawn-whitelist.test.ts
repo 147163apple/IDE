@@ -90,6 +90,11 @@ const DOT_EXEC = /\.exec\s*\(/;
 /** 需要禁止的第三方/运行时启动方式 */
 const OTHER_LAUNCHERS: Array<{ pattern: RegExp; label: string }> = [
   { pattern: /process\s*\.\s*binding\s*\(/, label: "process.binding" },
+  {
+    pattern: /process\s*\[\s*["']binding["']\s*\]/,
+    label: "process['binding']",
+  },
+  { pattern: /\bgetBuiltinModule\s*\(/, label: "getBuiltinModule" },
   { pattern: /\bBun\s*\.\s*spawn\s*\(/, label: "Bun.spawn" },
   { pattern: /\bexeca\b/, label: "execa" },
   { pattern: /["']cross-spawn["']/, label: "cross-spawn" },
@@ -112,6 +117,10 @@ export function scanContent(rel: string, content: string): string[] {
       violations.push(
         `${where} 引用 child_process（import/require/动态导入均禁止）`,
       );
+      return;
+    }
+    if (line.includes("worker_threads")) {
+      violations.push(`${where} 引用 worker_threads（线程可间接执行命令）`);
       return;
     }
     for (const rule of OTHER_LAUNCHERS) {
@@ -190,6 +199,12 @@ describe("进程启动白名单（TASK-P.1 / C.5 加固）", () => {
       `const require2 = createRequire(import.meta.url);\nconst cp = require2("child_process");`,
     ],
     ["process.binding", `const b = process.binding("spawn_sync");`],
+    ["process['binding']", `const b = process['binding']("spawn_sync");`],
+    [
+      "getBuiltinModule",
+      `const cp = process.getBuiltinModule("child_process");`,
+    ],
+    ["worker_threads", `import { Worker } from "node:worker_threads";`],
     ["Bun.spawn", `Bun.spawn(["ls", "-la"]);`],
     ["execa 导入", `import { execa } from "execa";`],
     ["cross-spawn 导入", `const spawn = require("cross-spawn");`],

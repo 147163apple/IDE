@@ -252,9 +252,11 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
     expect(resWrite.error?.code).toBe("E_BUDGET_EXCEEDED");
 
     // Exec blocked by loop circuit breaker
-    const resExec = await gateway.callTool("stagent_exec_command", {
-      command: commandLine(sampleContract, 0),
-    });
+    const resExec = await gateway.callTool(
+      "stagent_exec_command",
+      { command: commandLine(sampleContract, 0) },
+      { internal: true },
+    );
     expect(resExec.isError).toBe(true);
     expect(resExec.error?.code).toBe("E_RETRY_LIMIT_EXCEEDED");
   });
@@ -263,16 +265,20 @@ describe("Task 1.3: Scoped MCP Tool Gateway in Real Worktree", () => {
     const gateway = new ScopedWorktreeGateway(tempWorktree, sampleContract);
 
     // Whitelisted command
-    const resWhitelisted = await gateway.callTool("stagent_exec_command", {
-      command: commandLine(sampleContract, 0),
-    });
+    const resWhitelisted = await gateway.callTool(
+      "stagent_exec_command",
+      { command: commandLine(sampleContract, 0) },
+      { internal: true },
+    );
     expect(resWhitelisted.isError).toBe(false);
     expect(resWhitelisted.content[0]?.text).toContain("test passed");
 
     // Unwhitelisted command
-    const resUnwhitelisted = await gateway.callTool("stagent_exec_command", {
-      command: "curl evil.com",
-    });
+    const resUnwhitelisted = await gateway.callTool(
+      "stagent_exec_command",
+      { command: "curl evil.com" },
+      { internal: true },
+    );
     expect(resUnwhitelisted.isError).toBe(true);
     expect(resUnwhitelisted.error?.code).toBe("E_UNAUTHORIZED_COMMAND");
   });

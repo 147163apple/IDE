@@ -73,6 +73,33 @@ describe("TASK-C.5 终端流式回放（runner 层）", () => {
     expect(emitted.length).toBeLessThanOrEqual(MAX_STREAM_LINE_CHARS + 20);
   });
 
+  it("多行 PEM 私钥块整块遮蔽，中间 base64 不进入终端与最终输出", async () => {
+    const sink = collect();
+    const pem = [
+      "-----BEGIN PRIVATE KEY-----",
+      "MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC7",
+      "V3rYQ0FakeBase64LineThatMustNotLeak000000000000000000000000",
+      "-----END PRIVATE KEY-----",
+      "after-block",
+    ].join("\\n");
+    const result = await runCommand("node", {
+      argv: { executable: "node", args: ["-e", `console.log("${pem}")`] },
+      cwd: process.cwd(),
+      timeoutMs: 30_000,
+      onLine: sink.onLine,
+    });
+
+    const streamed = sink.lines.map((l) => l.line).join("\n");
+    expect(streamed).toContain("[REDACTED PRIVATE KEY BLOCK]");
+    expect(streamed).toContain("after-block");
+    expect(streamed).not.toContain("MIIEvQ");
+    expect(streamed).not.toContain("FakeBase64Line");
+
+    expect(result.stdout).toContain("[REDACTED PRIVATE KEY BLOCK]");
+    expect(result.stdout).not.toContain("MIIEvQ");
+    expect(result.stdout).not.toContain("FakeBase64Line");
+  });
+
   it("JSON 形式的小写键（api_key / token）也会在发射前脱敏", async () => {
     const sink = collect();
     await runCommand("node", {
