@@ -11,6 +11,7 @@ import {
   StagentWriteFileSchema,
   StagentExecCommandSchema,
   StagentListDirSchema,
+  StagentDeleteFileSchema,
   StagentDeclareCompleteSchema,
   type AuditLogEntry,
   type MCPToolCallResult,
@@ -24,14 +25,27 @@ import {
   PathTraversalError,
   E_PATH_TRAVERSAL,
 } from "./path-resolver";
-import { runCommand, CommandSecurityError } from "../runner/command-runner";
-import { CostMonitor, E_COST_CAP_EXCEEDED } from "../guard/cost-monitor";
+import {
+  runCommand,
+  CommandSecurityError,
+  E_UNAUTHORIZED_COMMAND,
+} from "../runner/command-runner";
+import {
+  assertAliasExtraArgsAllowed,
+  CommandPolicyError,
+} from "../runner/command-policy";
+import { parseEnvFile, type EnvSanitizerOptions } from "../runner/env-filter";
+import {
+  CostMonitor,
+  E_COST_CAP_EXCEEDED,
+  E_BUDGET_EXCEEDED,
+} from "../guard/cost-monitor";
 import { LoopGuard, E_LOOP_CIRCUIT_TRIPPED } from "../guard/loop-guard";
 import {
-  guardAgentFileOperation,
-  ensureRoundStarted,
-} from "../protection/protection-list";
-import { ensureCheckpoint } from "../protection/auto-checkpoint";
+  isTestPath,
+  scopeExplicitlyIncludesTests,
+} from "../guard/test-integrity";
+import { guardAgentFileOperation } from "../protection/protection-list";
 
 /** 从 Worktree 路径反推主仓库根（保护清单/快照始终归属主仓库） */
 function mainRepoRootOf(worktreeRoot: string): string {
@@ -39,10 +53,6 @@ function mainRepoRootOf(worktreeRoot: string): string {
   const idx = worktreeRoot.indexOf(marker);
   return idx > 0 ? worktreeRoot.slice(0, idx) : worktreeRoot;
 }
-import {
-  isTestPath,
-  scopeExplicitlyIncludesTests,
-} from "../guard/test-integrity";
 
 /** 单文件读取上限（规范 TASK-A.2 PASS-2） */
 export const MAX_READ_BYTES = 1024 * 1024;
@@ -50,8 +60,34 @@ export const MAX_READ_BYTES = 1024 * 1024;
 /** 测试文件写入被拦截（合同未显式授权测试模式） */
 export const E_TEST_FILE_WRITE_BLOCKED = "E_TEST_FILE_WRITE_BLOCKED";
 
+/** 乐观锁冲突（TASK-W.2 G-03 / §9.3：归因 SCOPE_VIOLATION） */
+export const E_CONFLICT = "E_CONFLICT";
+
 /** 任务已被用户主动中止（AbortSignal 已触发） */
 export const E_TASK_ABORTED = "E_TASK_ABORTED";
+
+/**
+ * Shell 元字符：仅用于 Worker 面 `command_alias + args` 的参数校验。
+ *
+ * 即便执行器始终 `shell: false`（argv 直传、不解析），仍在网关层拒绝这些
+ * 字符，形成「不依赖执行器实现」的第二道防线，并给出可审计的
+ * `E_UNAUTHORIZED_COMMAND`，避免 Worker 误以为拼接式命令被接受。
+ */
+const SHELL_METACHARACTERS = /[;&|`$<>\n\r]/;
+
+/** 递归列目录的条目上限，避免超大仓库把输出撑爆 */
+const MAX_LIST_ENTRIES = 500;
+
+/**
+ * Scope 判定结果 → §9.3 运行时错误码。
+ *
+ * `checkWriteAccess()` 返回的是内部原因（`FORBIDDEN_PATH` / `NOT_WRITABLE`），
+ * 直接当错误码回传会造成「实现码 ≠ 目录码」的契约漂移；此处统一映射：
+ * 禁区 → `E_FORBIDDEN_PATH`，越界/只读 → `E_OUT_OF_SCOPE`（均归因 SCOPE_VIOLATION）。
+ */
+function scopeErrorCode(reason: string | undefined): string {
+  return reason === "FORBIDDEN_PATH" ? "E_FORBIDDEN_PATH" : "E_OUT_OF_SCOPE";
+}
 
 /** 二进制探测：前 8 KiB 出现 NUL 字节即判定为二进制 */
 function isBinaryBuffer(buffer: Buffer): boolean {
@@ -67,6 +103,16 @@ export interface ScopedGatewayOptions {
   /** TASK-C.5：命令输出的逐行实时回放（行内容已脱敏） */
   onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
+}
+
+/** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
+export interface GatewayCallCounters {
+  tool_calls: number;
+  command_executions: number;
+  max_tool_calls?: number | undefined;
+  max_command_executions?: number | undefined;
+  tripped: boolean;
+  trip_detail?: string | undefined;
 }
 
 /**
@@ -89,6 +135,13 @@ export class ScopedWorktreeGateway {
   private modifiedTestFiles: Set<string> = new Set();
   /** 任务级累计运行时长（规范 §9.1：与单命令 timeout_seconds 独立） */
   private cumulativeDurationMs = 0;
+
+  // --- G-09：工具调用与命令执行分列记账（互不折算） ---
+  private toolCallCount = 0;
+  private commandExecutionCount = 0;
+  /** 任一计数超限即熔断；熔断后本实例不再执行任何工具调用（不可恢复） */
+  private budgetTripped = false;
+  private budgetTripDetail: string | null = null;
 
   constructor(
     worktreeRoot: string,
@@ -136,6 +189,140 @@ export class ScopedWorktreeGateway {
     return this.loopGuard;
   }
 
+  /**
+   * G-09 分列记账快照：工具调用次数与命令执行次数各自独立累计，
+   * 任一超限即 `tripped=true`，此后所有工具调用被硬阻断（不可恢复）。
+   */
+  public getCallCounters(): GatewayCallCounters {
+    const budget = this.contract.authorization.budget_limits;
+    return {
+      tool_calls: this.toolCallCount,
+      command_executions: this.commandExecutionCount,
+      ...(budget.max_tool_calls === undefined
+        ? {}
+        : { max_tool_calls: budget.max_tool_calls }),
+      ...(budget.max_command_executions === undefined
+        ? {}
+        : { max_command_executions: budget.max_command_executions }),
+      tripped: this.budgetTripped,
+      ...(this.budgetTripDetail === null
+        ? {}
+        : { trip_detail: this.budgetTripDetail }),
+    };
+  }
+
+  /** 熔断后本实例拒绝一切工具调用（Worker 当前会话应终止） */
+  public isBudgetTripped(): boolean {
+    return this.budgetTripped;
+  }
+
+  /**
+   * 工具调用记账：进入即计数，超过 `max_tool_calls` 时熔断。
+   * 未配置上限时不限制。
+   */
+  private consumeToolCallBudget(tool: string): MCPToolCallResult | null {
+    if (this.budgetTripped) {
+      return this.budgetDenied(tool, "budget already tripped in this session");
+    }
+
+    const limit = this.contract.authorization.budget_limits.max_tool_calls;
+    this.toolCallCount += 1;
+    if (limit !== undefined && this.toolCallCount > limit) {
+      this.budgetTripDetail = `max_tool_calls=${limit} exceeded (attempt ${this.toolCallCount})`;
+      this.budgetTripped = true;
+      return this.budgetDenied(tool, this.budgetTripDetail);
+    }
+    return null;
+  }
+
+  /** 命令执行记账：与工具调用分列，超过 `max_command_executions` 时熔断 */
+  private consumeCommandExecutionBudget(): MCPToolCallResult | null {
+    if (this.budgetTripped) {
+      return this.budgetDenied(
+        "stagent_exec_command",
+        "budget already tripped",
+      );
+    }
+
+    const limit =
+      this.contract.authorization.budget_limits.max_command_executions;
+    this.commandExecutionCount += 1;
+    if (limit !== undefined && this.commandExecutionCount > limit) {
+      this.budgetTripDetail = `max_command_executions=${limit} exceeded (attempt ${this.commandExecutionCount})`;
+      this.budgetTripped = true;
+      return this.budgetDenied("stagent_exec_command", this.budgetTripDetail);
+    }
+    return null;
+  }
+
+  private budgetDenied(tool: string, detail: string): MCPToolCallResult {
+    const message =
+      `Execution budget exhausted: ${detail}. ` +
+      `Tool calls and command executions are metered separately; this session cannot continue`;
+    this.logAudit({
+      tool,
+      input: {},
+      outcome: "BLOCKED",
+      violationCode: E_BUDGET_EXCEEDED,
+      details: message,
+    });
+    return {
+      isError: true,
+      content: [{ type: "text", text: `[${E_BUDGET_EXCEEDED}] ${message}` }],
+      error: {
+        code: E_BUDGET_EXCEEDED,
+        message,
+        details: this.getCallCounters(),
+      },
+    };
+  }
+
+  /**
+   * 构建子进程环境（TASK-W.3 目标 2）：
+   * - 基础白名单由 `sanitizeEnvironment` 兜底；
+   * - 合同 `allowed_environment_variable_names` 允许透传同名宿主变量；
+   * - `env_file_grants` 仅在 alias 命中 `command_aliases` 时读取，
+   *   且只取 `variable_names` 声明的键；值登记为秘密值供输出脱敏。
+   */
+  private buildCommandEnv(alias: string | undefined): {
+    envOptions: EnvSanitizerOptions;
+    secretValues: string[];
+  } {
+    const permissions = this.contract.authorization.execution_permissions;
+    const extraEnv: Record<string, string> = {};
+    const secretValues: string[] = [];
+
+    if (alias !== undefined) {
+      for (const grant of permissions.env_file_grants ?? []) {
+        if (!grant.command_aliases.includes(alias)) continue;
+        try {
+          const safe = resolveSafeWorktreePath(this.worktreeRoot, grant.file);
+          const parsedFile = parseEnvFile(
+            fs.readFileSync(safe.absolutePath, "utf-8"),
+          );
+          for (const name of grant.variable_names) {
+            const value = parsedFile[name];
+            if (value === undefined) continue;
+            extraEnv[name] = value;
+            if (value.length >= 6) secretValues.push(value);
+          }
+        } catch {
+          // 文件缺失/越界：该命令拿不到这些变量，但不阻断执行
+        }
+      }
+    }
+
+    return {
+      envOptions: {
+        extraEnv,
+        allowedKeyOverrides: [
+          ...permissions.allowed_environment_variable_names,
+        ],
+      },
+      secretValues,
+    };
+  }
+
   private logAudit(entry: {
     tool: string;
     input: unknown;
@@ -175,12 +362,17 @@ export class ScopedWorktreeGateway {
       {
         name: "stagent_write_file",
         description:
-          "Write or modify file contents strictly within authorized writable_paths. Strictly forbidden paths and budget limits are enforced.",
+          "Write or modify file contents strictly within authorized writable_paths. Strictly forbidden paths and budget limits are enforced. Pass expected_hash for optimistic concurrency control; a mismatch is rejected with E_CONFLICT.",
         inputSchema: {
           type: "object",
           properties: {
             path: { type: "string", description: "Target file path" },
             content: { type: "string", description: "Full content to write" },
+            expected_hash: {
+              type: "string",
+              description:
+                "Optional SHA-256 of the current file content; mismatch raises E_CONFLICT",
+            },
           },
           required: ["path", "content"],
         },
@@ -188,18 +380,36 @@ export class ScopedWorktreeGateway {
       {
         name: "stagent_exec_command",
         description:
-          "Execute an authorized verification command (e.g. build, test, lint) in the worktree. Enforces command whitelist, timeout, and environment sanitization.",
+          "Execute an authorized command alias from the contract (structured argv, shell:false). Shell metacharacters are rejected with E_UNAUTHORIZED_COMMAND.",
         inputSchema: {
           type: "object",
           properties: {
-            command: { type: "string", description: "Command to execute" },
+            command_alias: {
+              type: "string",
+              description:
+                "Contract verification command alias (preferred for workers)",
+            },
+            args: {
+              type: "array",
+              items: { type: "string" },
+              description:
+                "Literal extra argv entries; shell metacharacters are rejected",
+            },
+            command: {
+              type: "string",
+              description: "Legacy free-form command (internal verification)",
+            },
+            executable: {
+              type: "string",
+              description: "Legacy structured executable",
+            },
           },
-          required: ["command"],
         },
       },
       {
-        name: "stagent_list_dir",
-        description: "List files and directories in the worktree sandbox.",
+        name: "stagent_list_directory",
+        description:
+          "List files and directories inside the worktree sandbox (规范命名；与 stagent_list_dir 等价).",
         inputSchema: {
           type: "object",
           properties: {
@@ -207,7 +417,23 @@ export class ScopedWorktreeGateway {
               type: "string",
               description: "Relative directory path (defaults to root .)",
             },
+            recursive: {
+              type: "boolean",
+              description: "Recursively list children (max 500 entries)",
+            },
           },
+        },
+      },
+      {
+        name: "stagent_delete_file",
+        description:
+          "Delete a single regular file within authorized writable_paths. Directories, forbidden paths and unauthorized test files are rejected.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path to delete" },
+          },
+          required: ["path"],
         },
       },
       {
@@ -236,6 +462,10 @@ export class ScopedWorktreeGateway {
     name: string,
     rawInput: unknown,
   ): Promise<MCPToolCallResult> {
+    // G-09：任何工具调用先记账；熔断后一律拒绝（含未知工具名）
+    const budgetDenial = this.consumeToolCallBudget(name);
+    if (budgetDenial) return budgetDenial;
+
     switch (name) {
       case "stagent_read_file":
         return this.handleReadFile(rawInput);
@@ -244,7 +474,10 @@ export class ScopedWorktreeGateway {
       case "stagent_exec_command":
         return this.handleExecCommand(rawInput);
       case "stagent_list_dir":
+      case "stagent_list_directory":
         return this.handleListDir(rawInput);
+      case "stagent_delete_file":
+        return this.handleDeleteFile(rawInput);
       case "stagent_declare_complete":
         return this.handleDeclareComplete(rawInput);
       default:
@@ -309,11 +542,12 @@ export class ScopedWorktreeGateway {
       this.contract.authorization.file_system_scope,
     );
     if (!access.allowed) {
+      const code = scopeErrorCode(access.reason);
       this.logAudit({
         tool: "stagent_read_file",
         input: rawInput,
         outcome: "BLOCKED",
-        violationCode: access.reason ?? "NOT_READABLE",
+        violationCode: code,
         details: access.message ?? undefined,
       });
       return {
@@ -322,7 +556,7 @@ export class ScopedWorktreeGateway {
           { type: "text", text: access.message || "Read permission denied" },
         ],
         error: {
-          code: access.reason || "NOT_READABLE",
+          code,
           message: access.message || "Read permission denied",
           details: { path: safe.relativePath, pattern: access.pattern },
         },
@@ -535,6 +769,50 @@ export class ScopedWorktreeGateway {
     };
   }
 
+  /**
+   * P.1 保护门卫（C.5 验收要求）：所有写入/删除/改名之前必须先过这里。
+   * - 命中保护区 → 登记待审批卡并拒绝（先拦后写）；
+   * - 清单读不出/路径解析失败 → 一律拒绝（失败关闭）；
+   * - 本方法不建快照：Vibe 的 Auto-Checkpoint 由聊天轮次开始时创建（server 层），
+   *   合同 Worktree 由隔离目录与 Evidence 兜底，避免每次工具调用都触发 git 操作。
+   */
+  private async protectionDenied(
+    tool: "stagent_write_file" | "stagent_delete_file",
+    relPath: string,
+  ): Promise<MCPToolCallResult | null> {
+    const protectionRoot = mainRepoRootOf(this.worktreeRoot);
+    let gate: {
+      allowed: boolean;
+      reason: string;
+      cardId?: string | undefined;
+    };
+    try {
+      gate = guardAgentFileOperation(protectionRoot, relPath);
+    } catch (err) {
+      gate = {
+        allowed: false,
+        reason: `保护门卫不可用，按拒绝处理：${(err as Error).message}`,
+      };
+    }
+    if (gate.allowed) return null;
+    this.logAudit({
+      tool,
+      input: { path: relPath },
+      outcome: "BLOCKED",
+      violationCode: "PROTECTED_PATH",
+      details: gate.reason,
+    });
+    return {
+      isError: true,
+      content: [{ type: "text", text: gate.reason }],
+      error: {
+        code: "PROTECTED_PATH",
+        message: gate.reason,
+        details: { path: relPath, cardId: gate.cardId },
+      },
+    };
+  }
+
   private async handleWriteFile(rawInput: unknown): Promise<MCPToolCallResult> {
     const parsed = StagentWriteFileSchema.safeParse(rawInput);
     if (!parsed.success) {
@@ -605,11 +883,12 @@ export class ScopedWorktreeGateway {
       this.contract.authorization.file_system_scope,
     );
     if (!access.allowed) {
+      const code = scopeErrorCode(access.reason);
       this.logAudit({
         tool: "stagent_write_file",
         input: { path: rawPath },
         outcome: "BLOCKED",
-        violationCode: access.reason ?? "NOT_WRITABLE",
+        violationCode: code,
         details: access.message ?? undefined,
       });
       return {
@@ -618,12 +897,19 @@ export class ScopedWorktreeGateway {
           { type: "text", text: access.message || "Write permission denied" },
         ],
         error: {
-          code: access.reason || "NOT_WRITABLE",
+          code,
           message: access.message || "Write permission denied",
           details: { path: safe.relativePath, pattern: access.pattern },
         },
       };
     }
+
+    // 3.4 P.1 保护门禁：写入落盘前先拦（含后续新增的 delete_file）
+    const protectedWrite = await this.protectionDenied(
+      "stagent_write_file",
+      safe.relativePath,
+    );
+    if (protectedWrite) return protectedWrite;
 
     // 3.5 测试完整性门禁：测试文件写入要求 writable_paths 中存在显式测试
     // 模式（tests/**、**/*.test.ts 等）。仅被 src/** 这类宽泛模式覆盖时坚决
@@ -653,51 +939,6 @@ export class ScopedWorktreeGateway {
       }
     }
 
-    // 3.7 P.1 保护清单门禁（任何模式）：命中保护区先拦后写，拒绝即登记待审批卡。
-    // 清单读取出错/路径解析失败一律按拒绝处理（失败关闭），不静默放行。
-    // 快照只在「主工作树直改」（Vibe）时创建；合同 Worktree 由隔离目录与 Evidence 兜底，
-    // 避免在每次测试/合同写入时对仓库执行 git stash（既慢又会与并发 git 操作抢锁）。
-    {
-      const protectionRoot = mainRepoRootOf(this.worktreeRoot);
-      const editingMainTree = protectionRoot === this.worktreeRoot;
-      let gate: {
-        allowed: boolean;
-        reason: string;
-        cardId?: string | undefined;
-        entryName?: string | undefined;
-      };
-      try {
-        if (editingMainTree) {
-          ensureRoundStarted(protectionRoot, "mcp-write");
-          await ensureCheckpoint(protectionRoot);
-        }
-        gate = guardAgentFileOperation(protectionRoot, safe.relativePath);
-      } catch (err) {
-        gate = {
-          allowed: false,
-          reason: `保护门卫不可用，按拒绝处理：${(err as Error).message}`,
-        };
-      }
-      if (!gate.allowed) {
-        this.logAudit({
-          tool: "stagent_write_file",
-          input: { path: safe.relativePath },
-          outcome: "BLOCKED",
-          violationCode: "PROTECTED_PATH",
-          details: gate.reason,
-        });
-        return {
-          isError: true,
-          content: [{ type: "text", text: gate.reason }],
-          error: {
-            code: "PROTECTED_PATH",
-            message: gate.reason,
-            details: { path: safe.relativePath, cardId: gate.cardId },
-          },
-        };
-      }
-    }
-
     // 4. Budget limits verification (Max file modifications)
     const maxFiles =
       this.contract.authorization.budget_limits.max_file_modifications;
@@ -716,6 +957,47 @@ export class ScopedWorktreeGateway {
         content: [{ type: "text", text: `[BUDGET_EXCEEDED] ${msg}` }],
         error: { code: "BUDGET_EXCEEDED", message: msg },
       };
+    }
+
+    // 4.5 乐观并发锁（G-03）：传入 expected_hash 时必须与磁盘现状一致。
+    // 文件不存在也视为冲突——调用方声明「我知道它现在是什么」，而它并不存在，
+    // 静默当作新建会掩盖并发删除。
+    if (parsed.data.expected_hash !== undefined) {
+      const expected = parsed.data.expected_hash.toLowerCase();
+      let currentHash: string | null = null;
+      try {
+        const currentBuffer = await fs.promises.readFile(safe.absolutePath);
+        currentHash = createHash("sha256").update(currentBuffer).digest("hex");
+      } catch {
+        currentHash = null;
+      }
+
+      if (currentHash === null || currentHash !== expected) {
+        const msg =
+          currentHash === null
+            ? `Optimistic lock failed: '${safe.relativePath}' does not exist, but expected_hash was provided`
+            : `Optimistic lock failed: '${safe.relativePath}' was modified externally (expected ${expected}, actual ${currentHash})`;
+        this.logAudit({
+          tool: "stagent_write_file",
+          input: { path: safe.relativePath, expected_hash: expected },
+          outcome: "BLOCKED",
+          violationCode: E_CONFLICT,
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[${E_CONFLICT}] ${msg}` }],
+          error: {
+            code: E_CONFLICT,
+            message: msg,
+            details: {
+              path: safe.relativePath,
+              expected_hash: expected,
+              current_hash: currentHash,
+            },
+          },
+        };
+      }
     }
 
     // 5. Write to disk
@@ -786,14 +1068,113 @@ export class ScopedWorktreeGateway {
       };
     }
 
-    // 结构化 argv 优先（§9.1）；字符串形式仅用于兼容既有调用
-    const structured =
-      parsed.data.executable !== undefined
-        ? {
-            executable: parsed.data.executable,
-            args: parsed.data.args ?? [],
-          }
-        : undefined;
+    // 结构化 argv 优先（§9.1）；字符串形式仅用于兼容既有调用。
+    // Worker 面走 `command_alias`：别名必须存在于合同验证命令中，额外参数
+    // 仅接受字面量，含 shell 元字符一律 E_UNAUTHORIZED_COMMAND。
+    let structured: { executable: string; args: string[] } | undefined;
+    if (parsed.data.command_alias !== undefined) {
+      const alias = parsed.data.command_alias;
+      const spec = this.contract.verification_spec.commands.find(
+        (candidate) => candidate.alias === alias,
+      );
+      if (!spec) {
+        const msg = `Command alias '${alias}' is not authorized by the contract`;
+        this.logAudit({
+          tool: "stagent_exec_command",
+          input: { command_alias: alias },
+          outcome: "BLOCKED",
+          violationCode: E_UNAUTHORIZED_COMMAND,
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[${E_UNAUTHORIZED_COMMAND}] ${msg}` },
+          ],
+          error: {
+            code: E_UNAUTHORIZED_COMMAND,
+            message: msg,
+            details: {
+              command_alias: alias,
+              allowed_aliases: this.contract.verification_spec.commands.map(
+                (candidate) => candidate.alias,
+              ),
+            },
+          },
+        };
+      }
+
+      const extraArgs = parsed.data.args ?? [];
+      // W.3 参数策略：解释器禁止动态求值参数，追加参数只允许位置参数
+      try {
+        assertAliasExtraArgsAllowed({
+          executable: spec.executable,
+          extraArgs,
+        });
+      } catch (err) {
+        const violation =
+          err instanceof CommandPolicyError
+            ? err.violation
+            : "OPTION_INJECTION";
+        const msg = (err as Error).message;
+        this.logAudit({
+          tool: "stagent_exec_command",
+          input: { command_alias: alias, args: extraArgs },
+          outcome: "BLOCKED",
+          violationCode: E_UNAUTHORIZED_COMMAND,
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [{ type: "text", text: msg }],
+          error: {
+            code: E_UNAUTHORIZED_COMMAND,
+            message: msg,
+            details: {
+              command_alias: alias,
+              violation,
+              executable: spec.executable,
+            },
+          },
+        };
+      }
+
+      const offending = extraArgs.find((arg) => SHELL_METACHARACTERS.test(arg));
+      if (offending !== undefined) {
+        const msg =
+          `Argument contains shell metacharacters and is refused: ${JSON.stringify(offending)}. ` +
+          `Commands are executed as a literal argv array with shell:false; ` +
+          `pipes, chaining and substitutions are never interpreted`;
+        this.logAudit({
+          tool: "stagent_exec_command",
+          input: { command_alias: alias, args: extraArgs },
+          outcome: "BLOCKED",
+          violationCode: E_UNAUTHORIZED_COMMAND,
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[${E_UNAUTHORIZED_COMMAND}] ${msg}` },
+          ],
+          error: {
+            code: E_UNAUTHORIZED_COMMAND,
+            message: msg,
+            details: { command_alias: alias, offending_argument: offending },
+          },
+        };
+      }
+
+      structured = {
+        executable: spec.executable,
+        args: [...spec.args, ...extraArgs],
+      };
+    } else if (parsed.data.executable !== undefined) {
+      structured = {
+        executable: parsed.data.executable,
+        args: parsed.data.args ?? [],
+      };
+    }
     const command = structured
       ? [structured.executable, ...structured.args].join(" ")
       : (parsed.data.command ?? "");
@@ -862,6 +1243,13 @@ export class ScopedWorktreeGateway {
       };
     }
 
+    // 3.5 G-09：命令执行次数独立记账（与工具调用分列，超限即熔断）
+    const commandBudgetDenial = this.consumeCommandExecutionBudget();
+    if (commandBudgetDenial) return commandBudgetDenial;
+
+    // 3.6 环境白名单 + 合同 env-file 授权（按 alias 生效）
+    const commandEnv = this.buildCommandEnv(parsed.data.command_alias);
+
     try {
       const result = await runCommand(command, {
         cwd: this.worktreeRoot,
@@ -869,6 +1257,10 @@ export class ScopedWorktreeGateway {
         timeoutMs: Math.max(1, taskBudgetMs - this.cumulativeDurationMs),
         networkPolicy:
           this.contract.authorization.execution_permissions.network_policy,
+        envOptions: commandEnv.envOptions,
+        ...(commandEnv.secretValues.length === 0
+          ? {}
+          : { secretValues: commandEnv.secretValues }),
         ...(structured === undefined ? {} : { argv: structured }),
         ...(this.signal === undefined ? {} : { signal: this.signal }),
         ...(this.onTerminalLine === undefined
@@ -931,8 +1323,12 @@ export class ScopedWorktreeGateway {
           : {}),
       };
     } catch (err) {
+      // 命令安全校验（注入符号 / 空命令 / 非法 argv）统一归到目录码
+      // E_UNAUTHORIZED_COMMAND（§9.3），避免回传内部实现码 COMMAND_REJECTED
       const code =
-        err instanceof CommandSecurityError ? err.code : "EXEC_ERROR";
+        err instanceof CommandSecurityError
+          ? E_UNAUTHORIZED_COMMAND
+          : "EXEC_ERROR";
       this.logAudit({
         tool: "stagent_exec_command",
         input: { command },
@@ -950,9 +1346,200 @@ export class ScopedWorktreeGateway {
     }
   }
 
+  /**
+   * 删除普通文件（TASK-W.2 五大工具之一）。
+   *
+   * 语义与写入同级：删除属于「修改工作区」，必须满足可写 Scope、测试完整性
+   * 与文件数预算；目录、符号链接一律拒绝（避免一次调用删掉整棵子树）。
+   */
+  private async handleDeleteFile(
+    rawInput: unknown,
+  ): Promise<MCPToolCallResult> {
+    const parsed = StagentDeleteFileSchema.safeParse(rawInput);
+    if (!parsed.success) {
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: "Invalid delete_file input: path is required.",
+          },
+        ],
+        error: { code: "INVALID_INPUT", message: "Path cannot be empty" },
+      };
+    }
+
+    const rawPath = parsed.data.path;
+
+    // 1. 路径安全解析（拒绝绝对路径、.. 与越界符号链接）
+    let safe;
+    try {
+      safe = resolveSafeWorktreePath(this.worktreeRoot, rawPath);
+    } catch (err) {
+      const code =
+        err instanceof PathTraversalError ? err.code : E_PATH_TRAVERSAL;
+      this.logAudit({
+        tool: "stagent_delete_file",
+        input: { path: rawPath },
+        outcome: "BLOCKED",
+        violationCode: code,
+        details: (err as Error).message,
+      });
+      return {
+        isError: true,
+        content: [
+          { type: "text", text: `[${code}] ${(err as Error).message}` },
+        ],
+        error: { code, message: (err as Error).message },
+      };
+    }
+
+    // 2. 可写 Scope（删除等同写入）
+    const access = checkWriteAccess(
+      safe.relativePath,
+      this.contract.authorization.file_system_scope,
+    );
+    if (!access.allowed) {
+      const code = scopeErrorCode(access.reason);
+      this.logAudit({
+        tool: "stagent_delete_file",
+        input: { path: rawPath },
+        outcome: "BLOCKED",
+        violationCode: code,
+        details: access.message ?? undefined,
+      });
+      return {
+        isError: true,
+        content: [
+          { type: "text", text: access.message || "Delete permission denied" },
+        ],
+        error: {
+          code,
+          message: access.message || "Delete permission denied",
+          details: { path: safe.relativePath, pattern: access.pattern },
+        },
+      };
+    }
+
+    // 2.5 P.1 保护门禁：删除前先拦（delete_file 与写入同权）
+    const protectedDelete = await this.protectionDenied(
+      "stagent_delete_file",
+      safe.relativePath,
+    );
+    if (protectedDelete) return protectedDelete;
+
+    // 3. 测试完整性：删除测试文件同样视为规避验证
+    if (isTestPath(safe.relativePath)) {
+      const writable =
+        this.contract.authorization.file_system_scope.writable_paths;
+      if (!scopeExplicitlyIncludesTests(writable)) {
+        const msg =
+          `Delete rejected: '${safe.relativePath}' is a test file, but writable_paths ` +
+          `does not explicitly include test patterns; removing tests to fake a passing verdict is not allowed`;
+        this.logAudit({
+          tool: "stagent_delete_file",
+          input: { path: rawPath },
+          outcome: "BLOCKED",
+          violationCode: E_TEST_FILE_WRITE_BLOCKED,
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [
+            { type: "text", text: `[${E_TEST_FILE_WRITE_BLOCKED}] ${msg}` },
+          ],
+          error: { code: E_TEST_FILE_WRITE_BLOCKED, message: msg },
+        };
+      }
+    }
+
+    // 4. 文件数预算：删除一个未登记文件同样占用一次修改配额
+    const maxFiles =
+      this.contract.authorization.budget_limits.max_file_modifications;
+    const isNewFileMod = !this.modifiedFiles.has(safe.relativePath);
+    if (isNewFileMod && this.modifiedFiles.size >= maxFiles) {
+      const msg = `Budget exceeded: modification limit of ${maxFiles} files reached`;
+      this.logAudit({
+        tool: "stagent_delete_file",
+        input: { path: rawPath },
+        outcome: "BLOCKED",
+        violationCode: "BUDGET_EXCEEDED",
+        details: msg,
+      });
+      return {
+        isError: true,
+        content: [{ type: "text", text: `[BUDGET_EXCEEDED] ${msg}` }],
+        error: { code: "BUDGET_EXCEEDED", message: msg },
+      };
+    }
+
+    // 5. 只删普通文件（lstat：符号链接不算普通文件）
+    try {
+      const stat = await fs.promises.lstat(safe.absolutePath);
+      if (!stat.isFile()) {
+        const msg = `Refusing to delete non-regular file: '${safe.relativePath}'`;
+        this.logAudit({
+          tool: "stagent_delete_file",
+          input: { path: rawPath },
+          outcome: "BLOCKED",
+          violationCode: "E_NOT_A_FILE",
+          details: msg,
+        });
+        return {
+          isError: true,
+          content: [{ type: "text", text: `[E_NOT_A_FILE] ${msg}` }],
+          error: { code: "E_NOT_A_FILE", message: msg },
+        };
+      }
+
+      await fs.promises.unlink(safe.absolutePath);
+      this.modifiedFiles.add(safe.relativePath);
+      if (isTestPath(safe.relativePath)) {
+        this.modifiedTestFiles.add(safe.relativePath);
+      }
+
+      this.logAudit({
+        tool: "stagent_delete_file",
+        input: { path: safe.relativePath },
+        outcome: "SUCCESS",
+        details: `deleted ${stat.size} bytes`,
+      });
+
+      return {
+        isError: false,
+        content: [
+          {
+            type: "text",
+            text: `File '${safe.relativePath}' deleted successfully.`,
+          },
+        ],
+        data: { deleted: true, path: safe.relativePath },
+      };
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code ?? "EIO";
+      const message =
+        code === "ENOENT"
+          ? `File not found: '${safe.relativePath}'`
+          : `Failed to delete file: ${(err as Error).message}`;
+      this.logAudit({
+        tool: "stagent_delete_file",
+        input: { path: safe.relativePath },
+        outcome: "FAILED",
+        violationCode: code,
+        details: message,
+      });
+      return {
+        isError: true,
+        content: [{ type: "text", text: message }],
+        error: { code: code === "ENOENT" ? "ENOENT" : "EIO", message },
+      };
+    }
+  }
+
   private async handleListDir(rawInput: unknown): Promise<MCPToolCallResult> {
     const parsed = StagentListDirSchema.safeParse(rawInput ?? {});
     const targetRel = parsed.success ? parsed.data.path : ".";
+    const recursive = parsed.success ? parsed.data.recursive === true : false;
 
     let safe;
     try {
@@ -983,38 +1570,61 @@ export class ScopedWorktreeGateway {
         };
       }
 
-      const entries = await fs.promises.readdir(safe.absolutePath, {
-        withFileTypes: true,
-      });
       const forbidden =
         this.contract.authorization.file_system_scope.strictly_forbidden_paths;
+      interface ListedEntry {
+        name: string;
+        path: string;
+        isDirectory: boolean;
+        isFile: boolean;
+      }
+      const collected: ListedEntry[] = [];
 
-      const filtered = entries
-        .filter((entry) => {
-          if (entry.name === ".git" || entry.name === ".stagent") return false;
+      const walk = async (
+        dirAbs: string,
+        dirRel: string,
+        depth: number,
+      ): Promise<void> => {
+        const entries = await fs.promises.readdir(dirAbs, {
+          withFileTypes: true,
+        });
+        for (const entry of entries) {
+          if (collected.length >= MAX_LIST_ENTRIES) return;
+          if (entry.name === ".git" || entry.name === ".stagent") continue;
           const entryRel =
-            safe.relativePath === "."
-              ? entry.name
-              : `${safe.relativePath}/${entry.name}`;
-          const isForbidden = matchesAnyPattern(entryRel, forbidden).matches;
-          return !isForbidden;
-        })
-        .map((entry) => ({
-          name: entry.name,
-          isDirectory: entry.isDirectory(),
-          isFile: entry.isFile(),
-        }));
+            dirRel === "." ? entry.name : `${dirRel}/${entry.name}`;
+          if (matchesAnyPattern(entryRel, forbidden).matches) continue;
+          collected.push({
+            name: entry.name,
+            path: entryRel,
+            isDirectory: entry.isDirectory(),
+            isFile: entry.isFile(),
+          });
+          // 深度上限 8 层：防御异常嵌套导致的遍历爆炸
+          if (
+            recursive &&
+            entry.isDirectory() &&
+            !entry.isSymbolicLink() &&
+            depth < 8
+          ) {
+            await walk(path.join(dirAbs, entry.name), entryRel, depth + 1);
+          }
+        }
+      };
+
+      await walk(safe.absolutePath, safe.relativePath, 0);
 
       this.logAudit({
-        tool: "stagent_list_dir",
-        input: rawInput,
+        tool: "stagent_list_directory",
+        input: { path: safe.relativePath, recursive },
         outcome: "SUCCESS",
+        details: `${collected.length} entries`,
       });
 
       return {
         isError: false,
-        content: [{ type: "text", text: JSON.stringify(filtered, null, 2) }],
-        data: filtered,
+        content: [{ type: "text", text: JSON.stringify(collected, null, 2) }],
+        data: collected,
       };
     } catch (err) {
       return {

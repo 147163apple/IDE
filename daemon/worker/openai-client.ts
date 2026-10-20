@@ -59,24 +59,19 @@ export class OpenAiWorkerClient implements WorkerModelClient {
     });
 
     const contract = input.contract;
-    const scope = contract.authorization.file_system_scope;
+    const task = input.task;
 
-    const system = [
-      "你是 Stagent 的 Coding Worker，在受控 Git Worktree 中工作。",
-      "只能修改 writable_paths 内的文件；严禁触碰 strictly_forbidden_paths。",
-      "返回完整文件内容，不要输出 diff、不要引入未安装依赖、不要执行命令。",
-      "若无需改动，返回空 changes 数组。",
-    ].join("\n");
+    // System Prompt 的唯一来源：session-task-injector 依据已批准合同装配。
+    // 此处不再自行拼接范围/验收规则，避免「提示词与合同各说一套」。
+    const system = task.system_prompt;
 
     const prompt = [
-      `任务：${contract.intent.title}`,
-      `方案：${contract.intent.description}`,
-      `验收标准：\n${contract.intent.acceptance_criteria.map((c) => `- ${c}`).join("\n")}`,
-      `可写路径：${scope.writable_paths.join(", ")}`,
-      `严禁路径：${scope.strictly_forbidden_paths.join(", ")}`,
+      `合同：${contract.contract_id}（revision ${task.contract_revision}）`,
+      `工作目录：${task.worktree_root}`,
       `现有文件：\n${input.files
         .map((f) => `=== ${f.path} ===\n${f.content}`)
         .join("\n\n")}`,
+      "请按输出契约返回 changes 数组（完整文件内容）；若无需改动返回空数组。",
     ].join("\n\n");
 
     const result = await generateObject({
