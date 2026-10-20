@@ -303,7 +303,9 @@ describe("TASK-W.5a cli-host 进程托管与打断 ≤2s（假 CLI）", () => {
       cwd: tmp,
       env: { ...process.env, FAKE_TOKENS: "10000", FAKE_IGNORE_SIGINT: "1" },
     });
-    await new Promise((r) => setTimeout(r, 600));
+    // 等假 CLI 吐出第一行（此时它已装好忽略 SIGINT 的处理器），避免固定等待在慢机器上偶发失败
+    const it0 = p.lines[Symbol.asyncIterator]();
+    await it0.next();
     const r = await p.stop();
     expect(["SIGTERM", "SIGKILL"]).toContain(r.via);
     expect(r.ms).toBeLessThan(2000);
