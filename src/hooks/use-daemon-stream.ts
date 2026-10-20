@@ -7,6 +7,7 @@ import type {
   EvidenceReadyPayload,
   IpcFrame,
   ScopeAlertPayload,
+  TerminalStreamPayload,
   WorkerLogPayload,
 } from "@/lib/ipc/frames";
 import type { ChatEvent } from "@/lib/chat-events";
@@ -35,9 +36,18 @@ export interface StreamAlert {
   at: string;
 }
 
+/** TASK-C.5 终端回放行（内容已由 Daemon 脱敏） */
+export interface StreamTerminalLine {
+  contractId: string;
+  stream: "stdout" | "stderr";
+  line: string;
+  at: string;
+}
+
 /** 内存有界：Worker 可以无限刷日志，浏览器不能无限接 */
 const MAX_LOG_LINES = 500;
 const MAX_ALERTS = 20;
+const MAX_TERMINAL_LINES = 2000;
 
 export interface UseDaemonStreamOptions {
   /** Daemon HTTP/WebSocket 端口；null 表示尚未探测到 */
@@ -56,7 +66,10 @@ export interface DaemonStreamState {
   status: IpcClientStatus;
   logs: StreamLogLine[];
   alerts: StreamAlert[];
+  /** TASK-C.5：命令输出的逐行回放（按合同区分） */
+  terminal: StreamTerminalLine[];
   clearLogs: () => void;
+  clearTerminal: () => void;
   dismissAlert: (id: string) => void;
 }
 
@@ -72,6 +85,7 @@ export function useDaemonStream(
   const [status, setStatus] = useState<IpcClientStatus>("closed");
   const [logs, setLogs] = useState<StreamLogLine[]>([]);
   const [alerts, setAlerts] = useState<StreamAlert[]>([]);
+  const [terminal, setTerminal] = useState<StreamTerminalLine[]>([]);
 
   // 回调放进 ref：避免父组件每次渲染都重建 WebSocket 连接
   const handlersRef = useRef(options);
@@ -123,6 +137,22 @@ export function useDaemonStream(
           );
           return;
         }
+        case "TERMINAL_STREAM": {
+          const payload = asPayload<TerminalStreamPayload>(frame);
+          if (!payload?.line) return;
+          setTerminal((prev) =>
+            [
+              ...prev,
+              {
+                contractId: payload.contract_id,
+                stream: payload.stream,
+                line: payload.line,
+                at,
+              },
+            ].slice(-MAX_TERMINAL_LINES),
+          );
+          return;
+        }
         case "CONTRACT_UPDATE": {
           const payload = asPayload<ContractUpdatePayload>(frame);
           if (payload) handlersRef.current.onContractUpdate?.(payload);
@@ -161,10 +191,19 @@ export function useDaemonStream(
   }, [port, token, host, enabled]);
 
   const clearLogs = useCallback(() => setLogs([]), []);
+  const clearTerminal = useCallback(() => setTerminal([]), []);
   const dismissAlert = useCallback(
     (id: string) => setAlerts((prev) => prev.filter((a) => a.id !== id)),
     [],
   );
 
-  return { status, logs, alerts, clearLogs, dismissAlert };
+  return {
+    status,
+    logs,
+    alerts,
+    terminal,
+    clearLogs,
+    clearTerminal,
+    dismissAlert,
+  };
 }

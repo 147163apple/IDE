@@ -63,6 +63,7 @@ import type { EvidenceBundle } from "../src/lib/evidence.schema";
 import { WorktreeWatcher } from "./watcher/fs-watcher";
 import { EvidenceInvalidationEngine } from "./watcher/invalidation-engine";
 import { buildDependencyGraph } from "./arch/graph";
+import { readDiffFiles } from "./diff/diff-files";
 import { launchEditor } from "./editor/launcher";
 import { getModelSettings, setRuntimeKey } from "./worker/key-store";
 import { ChatSessionManager } from "./chat/session-manager";
@@ -72,7 +73,11 @@ import {
   recordViolation,
   type FileAccessContext,
 } from "./editor/worktree-files";
-import { getWorktreePath, execGit } from "./git/worktree-manager";
+import {
+  assertSafeContractId,
+  getWorktreePath,
+  execGit,
+} from "./git/worktree-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
@@ -157,7 +162,17 @@ export class StagentDaemon {
     this.maxConnectionsPerWindow = options.maxConnectionsPerWindow ?? 30;
     this.connectionWindowMs = options.connectionWindowMs ?? 10_000;
     this.maxClients = options.maxClients ?? 64;
-    this.orchestrator = new ContractOrchestrator({ repoRoot: this.repoRoot });
+    this.orchestrator = new ContractOrchestrator({
+      repoRoot: this.repoRoot,
+      // TASK-C.5：验证命令的逐行输出实时推给页面（脱敏在 runner 内完成）
+      onTerminalLine: (contractId, stream, line) => {
+        this.broadcast("TERMINAL_STREAM", {
+          contract_id: contractId,
+          stream,
+          line,
+        });
+      },
+    });
     this.chat = new ChatSessionManager({
       repoRoot: this.repoRoot,
       adapters: options.chatAdapters ?? defaultChatAdapters(this.repoRoot),
@@ -755,6 +770,26 @@ export class StagentDaemon {
   }
 
   /**
+   * 合同 ID 白名单 + worktrees 目录包含性校验（C.5 安全修复）。
+   * 路由正则只挡 `/`，`..%2F..` 解码后仍可穿越；这里双重校验：
+   * 1) ID 只允许 [A-Za-z0-9_-]；
+   * 2) path.resolve 结果必须落在 <repo>/.stagent/worktrees 内。
+   * 不满足一律抛错，由调用方返回 400，绝不返回任何目录内容。
+   */
+  private resolveWorktreePath(contractId: string): string {
+    assertSafeContractId(contractId);
+    const root = path.resolve(this.repoRoot, ".stagent", "worktrees");
+    const resolved = path.resolve(root, `task-${contractId}`);
+    const rel = path.relative(root, resolved);
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) {
+      throw new Error(
+        `worktree path escapes .stagent/worktrees: ${contractId}`,
+      );
+    }
+    return resolved;
+  }
+
+  /**
    * TASK-P.1 保护清单与本轮授权的控制面 API。
    * 清单修改只走这里（UI 开关/推荐卡），AI 的任何写通道都被门卫挡住；
    * hook 通道投递的拦截请求在每次访问时并入待审批卡（文件队列，不新增 WS 帧）。
@@ -1153,7 +1188,7 @@ export class StagentDaemon {
       }
 
       const match = pathname.match(
-        /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
+        /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
       if (match) {
         const contractId = decodeURIComponent(match[1] as string);
@@ -1258,13 +1293,42 @@ export class StagentDaemon {
           return;
         }
 
+        if (method === "GET" && action === "diff-files") {
+          // TASK-C.5 双栏 Diff：逐文件返回基线/当前两段真实内容
+          let worktreePath: string;
+          try {
+            worktreePath = this.resolveWorktreePath(contractId);
+          } catch (err) {
+            this.sendJson(res, 400, {
+              error: `invalid contract id: ${(err as Error).message}`,
+            });
+            return;
+          }
+          if (!fs.existsSync(worktreePath)) {
+            this.sendJson(res, 404, { error: "Worktree not found" });
+            return;
+          }
+          try {
+            const baseBranch =
+              store.get(contractId)?.authorization.git.base_branch ?? "main";
+            const result = await readDiffFiles(worktreePath, baseBranch);
+            this.sendJson(res, 200, result);
+          } catch (err) {
+            this.sendJson(res, 500, { error: (err as Error).message });
+          }
+          return;
+        }
+
         if (method === "GET" && action === "diff") {
-          const worktreePath = path.join(
-            this.repoRoot,
-            ".stagent",
-            "worktrees",
-            `task-${contractId}`,
-          );
+          let worktreePath: string;
+          try {
+            worktreePath = this.resolveWorktreePath(contractId);
+          } catch (err) {
+            this.sendJson(res, 400, {
+              error: `invalid contract id: ${(err as Error).message}`,
+            });
+            return;
+          }
           if (!fs.existsSync(worktreePath)) {
             this.sendJson(res, 404, { error: "Worktree not found" });
             return;

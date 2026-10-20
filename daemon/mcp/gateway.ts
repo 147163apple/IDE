@@ -64,6 +64,9 @@ export interface ScopedGatewayOptions {
   loopGuard?: LoopGuard | undefined;
   /** 用户主动中止信号：在途命令整树强杀，后续命令一律拒绝执行 */
   signal?: AbortSignal | undefined;
+  /** TASK-C.5：命令输出的逐行实时回放（行内容已脱敏） */
+  onTerminalLine?:
+    ((stream: "stdout" | "stderr", line: string) => void) | undefined;
 }
 
 /**
@@ -77,6 +80,8 @@ export class ScopedWorktreeGateway {
   private readonly costMonitor?: CostMonitor | undefined;
   private readonly loopGuard?: LoopGuard | undefined;
   private readonly signal?: AbortSignal | undefined;
+  private readonly onTerminalLine?:
+    ((stream: "stdout" | "stderr", line: string) => void) | undefined;
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -95,6 +100,7 @@ export class ScopedWorktreeGateway {
     this.costMonitor = options.costMonitor;
     this.loopGuard = options.loopGuard;
     this.signal = options.signal;
+    this.onTerminalLine = options.onTerminalLine;
   }
 
   public getWorktreeRoot(): string {
@@ -649,8 +655,11 @@ export class ScopedWorktreeGateway {
 
     // 3.7 P.1 保护清单门禁（任何模式）：命中保护区先拦后写，拒绝即登记待审批卡。
     // 清单读取出错/路径解析失败一律按拒绝处理（失败关闭），不静默放行。
+    // 快照只在「主工作树直改」（Vibe）时创建；合同 Worktree 由隔离目录与 Evidence 兜底，
+    // 避免在每次测试/合同写入时对仓库执行 git stash（既慢又会与并发 git 操作抢锁）。
     {
       const protectionRoot = mainRepoRootOf(this.worktreeRoot);
+      const editingMainTree = protectionRoot === this.worktreeRoot;
       let gate: {
         allowed: boolean;
         reason: string;
@@ -658,8 +667,10 @@ export class ScopedWorktreeGateway {
         entryName?: string | undefined;
       };
       try {
-        ensureRoundStarted(protectionRoot, "mcp-write");
-        await ensureCheckpoint(protectionRoot);
+        if (editingMainTree) {
+          ensureRoundStarted(protectionRoot, "mcp-write");
+          await ensureCheckpoint(protectionRoot);
+        }
         gate = guardAgentFileOperation(protectionRoot, safe.relativePath);
       } catch (err) {
         gate = {
@@ -860,6 +871,9 @@ export class ScopedWorktreeGateway {
           this.contract.authorization.execution_permissions.network_policy,
         ...(structured === undefined ? {} : { argv: structured }),
         ...(this.signal === undefined ? {} : { signal: this.signal }),
+        ...(this.onTerminalLine === undefined
+          ? {}
+          : { onLine: this.onTerminalLine }),
       });
 
       // Update loop guard if this matches a verification test command
