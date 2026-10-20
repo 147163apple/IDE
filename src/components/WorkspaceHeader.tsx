@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   RUN_MODE_LABEL,
   EXECUTION_STATUS_LABEL,
@@ -13,6 +14,7 @@ export interface WorkspaceHeaderProps {
   contract?: ActiveContract | null | undefined;
   workerControl: WorkerControl;
   onOpenStudio: () => void;
+  extra?: ReactNode;
 }
 
 /** TASK-C.1 Header：仓库 / 分支 / 模式 / 合同+Worktree / 受控徽标 / Supervisor 入口 */
@@ -23,6 +25,7 @@ export function WorkspaceHeader({
   contract,
   workerControl,
   onOpenStudio,
+  extra,
 }: WorkspaceHeaderProps) {
   const active = !!contract?.approved;
   const branch = active ? `task/${contract!.contractId}` : baseBranch;
@@ -60,6 +63,7 @@ export function WorkspaceHeader({
       >
         {enforced ? "GATEWAY_ENFORCED 受控" : "UNCONTROLLED_EXTERNAL 非受控"}
       </span>
+      {extra}
       <button
         type="button"
         data-testid="open-studio"
