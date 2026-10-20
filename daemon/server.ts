@@ -51,6 +51,10 @@ import { ChatSessionManager } from "./chat/session-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
+import {
+  CLAUDE_CODE_VERIFIED_ON,
+  ClaudeCodeAdapter,
+} from "./worker/cli-host/claude-code-adapter";
 
 export interface DaemonServerOptions extends PortFinderOptions {
   repoRoot: string;
@@ -129,7 +133,7 @@ export class StagentDaemon {
     this.orchestrator = new ContractOrchestrator({ repoRoot: this.repoRoot });
     this.chat = new ChatSessionManager({
       repoRoot: this.repoRoot,
-      adapters: options.chatAdapters ?? defaultChatAdapters(),
+      adapters: options.chatAdapters ?? defaultChatAdapters(this.repoRoot),
       publish: (event) => {
         this.broadcast("CHAT_EVENT", event);
       },
@@ -1095,8 +1099,15 @@ export class StagentDaemon {
   }
 }
 
-function defaultChatAdapters(): ChatAdapter[] {
-  return [new BaselineChatAdapter(), new DemoChatAdapter()];
+function defaultChatAdapters(repoRoot: string): ChatAdapter[] {
+  return [
+    new ClaudeCodeAdapter({
+      configDir: path.join(repoRoot, ".stagent", "claude-config"),
+      verifiedOn: CLAUDE_CODE_VERIFIED_ON,
+    }),
+    new BaselineChatAdapter(),
+    new DemoChatAdapter(),
+  ];
 }
 
 export function createDaemon(options: DaemonServerOptions): StagentDaemon {
