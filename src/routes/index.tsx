@@ -27,6 +27,8 @@ import {
   listChatAdapters,
   listChatSessions,
   sendChatMessage,
+  readWorktreeFile,
+  saveWorktreeFile,
   approveContract,
   createContract,
   executeContract,
@@ -59,6 +61,8 @@ import { EvidenceChecklist } from "@/components/evidence/EvidenceChecklist";
 import { useDaemonStream } from "@/hooks/use-daemon-stream";
 import { WorkspaceLayout } from "@/components/WorkspaceLayout";
 import { AgentChatPane } from "@/components/AgentChatPane";
+import { MonacoEditorPane } from "@/components/MonacoEditorPane";
+import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
 import type { AgentSessionTransport } from "@/hooks/use-agent-session";
 import type { ChatEvent } from "@/lib/chat-events";
 import {
@@ -184,6 +188,60 @@ function Console() {
     [connected, conn],
   );
 
+  // C.3：Agent 改完文件 → 中栏自动打开并刷新（Sprint 1 门禁「中栏实时可见」）
+  const [openRequest, setOpenRequest] = useState<{
+    path: string;
+    nonce: number;
+  } | null>(null);
+  const [reloadKeys, setReloadKeys] = useState<Record<string, number>>({});
+  const pendingEdits = useRef(new Map<string, string>());
+  const [staleContracts, setStaleContracts] = useState<Set<string>>(new Set());
+  const toRepoRelative = useCallback(
+    (p: string) => {
+      if (repoRoot && p.startsWith(repoRoot + "/"))
+        return p.slice(repoRoot.length + 1);
+      const wt = p.match(/\/\.stagent\/worktrees\/task-[^/]+\/(.+)$/);
+      return wt?.[1] ?? p.replace(/^\.\//, "");
+    },
+    [repoRoot],
+  );
+  const onAgentFileEvent = useCallback(
+    (e: ChatEvent) => {
+      if (e.kind === "tool_call" && /^(Edit|Write|MultiEdit)$/.test(e.name)) {
+        const fp = (e.input as { file_path?: unknown } | null)?.file_path;
+        if (typeof fp === "string") pendingEdits.current.set(e.tool_id, fp);
+      }
+      if (e.kind === "tool_result") {
+        const fp = pendingEdits.current.get(e.tool_id);
+        pendingEdits.current.delete(e.tool_id);
+        if (!fp || e.is_error) return;
+        const rel = toRepoRelative(fp);
+        setReloadKeys((k) => ({ ...k, [rel]: (k[rel] ?? 0) + 1 }));
+        setOpenRequest({ path: rel, nonce: Date.now() });
+      }
+    },
+    [toRepoRelative],
+  );
+
+  // 编辑器 IO 必须稳定（否则每次渲染都会重新读文件）
+  const fileIoFor = useMemo(() => {
+    const cache = new Map<string, WorktreeFileIO>();
+    return (contractId: string | null): WorktreeFileIO | null => {
+      if (!connected) return null;
+      const key = contractId ?? "";
+      let io = cache.get(key);
+      if (!io) {
+        io = {
+          read: (fp) => readWorktreeFile(conn, fp, contractId),
+          save: (fp, content) =>
+            saveWorktreeFile(conn, fp, content, contractId),
+        };
+        cache.set(key, io);
+      }
+      return io;
+    };
+  }, [connected, conn]);
+
   // 实时流（WebSocket）：状态/日志/告警由 Daemon 推送，轮询退化为兜底
   const stream = useDaemonStream({
     port: daemonPort,
@@ -193,7 +251,16 @@ function Console() {
       void refresh();
     },
     onChatEvent: (e: ChatEvent) => {
+      onAgentFileEvent(e);
       for (const l of chatListeners.current) l(e);
+    },
+    onEvidenceStatus: (p) => {
+      setStaleContracts((prev) => {
+        const next = new Set(prev);
+        if (p.status === "STALE") next.add(p.contract_id);
+        else next.delete(p.contract_id);
+        return next;
+      });
     },
     onEvidenceReady: (p: EvidenceReadyPayload) => {
       if (p.contract_id !== selectedId) return;
@@ -296,6 +363,33 @@ function Console() {
         files={fileTree}
         defaultOpenStudio
         rightPanel={<AgentChatPane transport={chatTransport} />}
+        openRequest={openRequest}
+        renderFile={(filePath, bound) => {
+          const contractId = bound
+            ? (workspaceContract?.contractId ?? null)
+            : null;
+          const io = fileIoFor(contractId);
+          return (
+            <MonacoEditorPane
+              key={`${contractId ?? "main"}:${filePath}`}
+              path={filePath}
+              io={io}
+              reloadKey={reloadKeys[filePath] ?? 0}
+            />
+          );
+        }}
+        middleBanner={
+          selected && staleContracts.has(selected.contract_id) ? (
+            <div
+              data-testid="evidence-stale-banner"
+              role="alert"
+              className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-800"
+            >
+              ⚠
+              代码在验证之后被改动过，之前的验收证据已失效（STALE），请重新「执行验证」后再合并。
+            </div>
+          ) : null
+        }
         headerExtra={
           <>
             <span

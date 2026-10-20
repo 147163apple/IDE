@@ -48,6 +48,13 @@ import { buildDependencyGraph } from "./arch/graph";
 import { launchEditor } from "./editor/launcher";
 import { getModelSettings, setRuntimeKey } from "./worker/key-store";
 import { ChatSessionManager } from "./chat/session-manager";
+import {
+  decideWrite,
+  readFileFor,
+  recordViolation,
+  type FileAccessContext,
+} from "./editor/worktree-files";
+import { getWorktreePath } from "./git/worktree-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
@@ -658,6 +665,75 @@ export class StagentDaemon {
     this.armedContractId = null;
   }
 
+  private fileContext(
+    contractId: string | null | undefined,
+  ): FileAccessContext {
+    if (!contractId) {
+      return { repoRoot: this.repoRoot, contract: null, worktreePath: null };
+    }
+    const contract = this.orchestrator.getStore().get(contractId);
+    if (!contract) throw new Error(`contract not found: ${contractId}`);
+    const worktreePath = getWorktreePath(this.repoRoot, contractId);
+    if (!fs.existsSync(worktreePath)) throw new Error("合同 Worktree 不存在");
+    return { repoRoot: this.repoRoot, contract, worktreePath };
+  }
+
+  /** TASK-C.3 编辑器读写：保存必须经此端点，越权 403 + GATEWAY_VIOLATION */
+  private async handleWorktreeFiles(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    url: URL,
+  ): Promise<void> {
+    try {
+      if (method === "GET") {
+        const ctx = this.fileContext(url.searchParams.get("contract_id"));
+        this.sendJson(
+          res,
+          200,
+          readFileFor(ctx, url.searchParams.get("path") ?? ""),
+        );
+        return;
+      }
+      if (method === "POST") {
+        const body = (await this.readJsonBody(req)) as {
+          path?: string;
+          content?: string;
+          contract_id?: string;
+        };
+        if (typeof body.content !== "string") {
+          this.sendJson(res, 400, { error: "content is required" });
+          return;
+        }
+        const ctx = this.fileContext(body.contract_id);
+        const d = decideWrite(ctx, String(body.path ?? ""));
+        if (!d.allowed || !d.absolutePath) {
+          const violation = {
+            at: new Date().toISOString(),
+            source: "editor" as const,
+            contract_id: body.contract_id ?? null,
+            path: String(body.path ?? ""),
+            reason: d.reason,
+          };
+          recordViolation(this.repoRoot, violation);
+          this.broadcast("GATEWAY_VIOLATION", violation);
+          this.sendJson(res, 403, {
+            error: "GATEWAY_VIOLATION",
+            reason: d.reason,
+          });
+          return;
+        }
+        fs.mkdirSync(path.dirname(d.absolutePath), { recursive: true });
+        fs.writeFileSync(d.absolutePath, body.content);
+        this.sendJson(res, 200, { path: d.relativePath, saved: true });
+        return;
+      }
+      this.sendJson(res, 405, { error: "Method Not Allowed" });
+    } catch (err) {
+      this.sendJson(res, 400, { error: (err as Error).message });
+    }
+  }
+
   /** TASK-C.6 右栏会话 REST；流式事件经 WS CHAT_EVENT 推送 */
   private async handleChat(
     req: http.IncomingMessage,
@@ -807,6 +883,15 @@ export class StagentDaemon {
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }
+      return;
+    }
+
+    if (pathname === "/api/worktree/files") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleWorktreeFiles(req, res, method, parsedUrl);
       return;
     }
 

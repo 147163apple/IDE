@@ -399,3 +399,37 @@ export async function interruptChat(
     )
   ).interrupted;
 }
+
+// ---- TASK-C.3 编辑器读写（服务端强制校验） ----
+export interface WorktreeFile {
+  path: string;
+  root: string;
+  content: string;
+  writable: boolean;
+}
+
+export async function readWorktreeFile(
+  conn: DaemonConnection,
+  filePath: string,
+  contractId?: string | null,
+): Promise<WorktreeFile> {
+  const q = new URLSearchParams({ path: filePath });
+  if (contractId) q.set("contract_id", contractId);
+  return request<WorktreeFile>(conn, `/api/worktree/files?${q.toString()}`);
+}
+
+export async function saveWorktreeFile(
+  conn: DaemonConnection,
+  filePath: string,
+  content: string,
+  contractId?: string | null,
+): Promise<void> {
+  await request(conn, "/api/worktree/files", {
+    method: "POST",
+    body: JSON.stringify({
+      path: filePath,
+      content,
+      ...(contractId ? { contract_id: contractId } : {}),
+    }),
+  });
+}

@@ -3,6 +3,7 @@ import { StagentIpcClient, type IpcClientStatus } from "@/lib/ipc/client";
 import type {
   ContractUpdatePayload,
   ErrorPayload,
+  EvidenceStatusChangedPayload,
   EvidenceReadyPayload,
   IpcFrame,
   ScopeAlertPayload,
@@ -48,6 +49,7 @@ export interface UseDaemonStreamOptions {
   onEvidenceReady?: (payload: EvidenceReadyPayload) => void;
   onStreamError?: (message: string) => void;
   onChatEvent?: (event: ChatEvent) => void;
+  onEvidenceStatus?: (payload: EvidenceStatusChangedPayload) => void;
 }
 
 export interface DaemonStreamState {
@@ -129,6 +131,11 @@ export function useDaemonStream(
         case "EVIDENCE_READY": {
           const payload = asPayload<EvidenceReadyPayload>(frame);
           if (payload) handlersRef.current.onEvidenceReady?.(payload);
+          return;
+        }
+        case "EVIDENCE_STATUS_CHANGED": {
+          const payload = asPayload<EvidenceStatusChangedPayload>(frame);
+          if (payload) handlersRef.current.onEvidenceStatus?.(payload);
           return;
         }
         case "CHAT_EVENT": {
