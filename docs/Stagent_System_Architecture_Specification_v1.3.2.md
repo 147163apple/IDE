@@ -4,12 +4,12 @@
 > **状态**：产品方向与工程执行统一事实源；实现须通过本文可验证验收标准（**本版为文档修订版，代码基线不变，所有测试数量一律以最新 CI 运行结果与提交哈希为准，不再写死**）  
 > **前序版本**：v1.3.2 / v1.3.1 / v1.2.0 (Verified Baseline) / v1.1.3  
 > **本次修订重点 (v1.3.3，依据《三份规范文档综合审查与修订指令》2026-10-20)**：
-> 1. **新增运行模式与全局保护清单 (§0.6)**：引入 `VIBE`（默认，零门禁）与 `PROTECTED` 双模式；新增 `.stagent/protection.json` 全局保护清单、静默合同（Silent Contract）、Vibe 自动快照（Auto-Checkpoint）与【撤销本轮改动】一键恢复、确定性冲突仲裁（User-First Discard Rule）。`[待用户确认 D1 / D2]`
+> 1. **新增运行模式与全局保护清单 (§0.6)**：引入 `VIBE`（默认，零门禁）与 `PROTECTED` 双模式；新增 `.stagent/protection.json` 全局保护清单、静默合同（Silent Contract）、Vibe 自动快照（Auto-Checkpoint）与【撤销本轮改动】一键恢复、确定性冲突仲裁（User-First Discard Rule）。`[用户已确认 D1 / D2 · 2026-10-20]`
 > 2. **审批减负**：合同 Scope 与保护清单无交集时自动批准（记录备案）；合并改为一键合并，删除二次确认弹窗；未触碰保护清单的预算追加/resume 不再重批；主树 dirty 仅白话提示不阻塞。
-> 3. **成熟 Agent 双轨接入 (§2.3/§2.7/§9.1)**：保留自研 API Worker 作为保底基线与测试替身；新增 `daemon/worker/cli-host/` 专用子进程隔离模块（全仓唯一允许 `child_process`/spawn 的位置，强制 `shell:false` + 进程树托管）；接入顺序 Claude Code → cursor-agent → OpenHands；`control_mode` 新增 `SANDBOX_ENFORCED`；能力声明新增 `billing_model`/`streaming_protocol`/`resume_mechanism`/`interrupt_supported`/`native_tools_disabled`/`verified_on`；**所有成熟 Agent 能力声明统一标记「待实机验证（verified_on: 空）」，通过 cli-host 黑盒实测后方可标记受控**。`[待用户确认 D3]`
+> 3. **成熟 Agent 双轨接入 (§2.3/§2.7/§9.1)**：保留自研 API Worker 作为保底基线与测试替身；新增 `daemon/worker/cli-host/` 专用子进程隔离模块（全仓唯一允许 `child_process`/spawn 的位置，强制 `shell:false` + 进程树托管）；接入顺序 Claude Code → cursor-agent → OpenHands；`control_mode` 新增 `SANDBOX_ENFORCED`；能力声明新增 `billing_model`/`streaming_protocol`/`resume_mechanism`/`interrupt_supported`/`native_tools_disabled`/`verified_on`；**所有成熟 Agent 能力声明统一标记「待实机验证（verified_on: 空）」，通过 cli-host 黑盒实测后方可标记受控**。`[用户已确认 D3 · 2026-10-20]`
 > 4. **Supervisor 规则优先与预算分账 (§2.2/§4.4)**：L0 确定性规则引擎零模型调用，L1 强模型按需调用；Supervisor 独立日预算，不再占用 Worker/合同预算；移除「对话停顿 3s 即评估」的默认轮询。
 > 5. **契约与错误码修订 (§4.1/§9.1/§9.3)**：MCP 工具集补齐 `stagent_delete_file` 统一为 6 工具；`E_CONFLICT` 归属新增 `WRITE_CONFLICT` 并按「重读后重试」处理，不再导致合同 `ABORTED`。
-> 6. **架构雷达与成熟度评分推迟**至 v0.2 之后（§3 保留为远期参考，不进入当前排期）。`[待用户确认 D4]`
+> 6. **架构雷达与成熟度评分推迟**至 v0.2 之后（§3 保留为远期参考，不进入当前排期）。`[用户已确认 D4 · 2026-10-20]`
 
 > **v1.3.2 历史修订要点（存档）**：
 > 1. **彻底消除野错误码与闭环超时契约 (闭环 P1-N1)**：修正 §6.4(3) 历史残留的野错误码 `E_TIMEOUT`，明确按超时类型分别记录 `E_COMMAND_TIMEOUT` 或 `E_TASK_TIMEOUT`，与 §9.3 ErrorCode Catalog 15 ➔ 10 映射完全闭环。
@@ -87,7 +87,7 @@ Stagent 是面向独立开发者与外包工程师的 **AI 开发工作台与工
 
 测试必须在声明支持的平台矩阵运行；任何未覆盖平台不得标记通过。
 
-## 0.6 运行模式与全局保护清单 (Run Modes & Global Protection List) `[待用户确认 D1 / D2]`
+## 0.6 运行模式与全局保护清单 (Run Modes & Global Protection List) `[用户已确认 D1 / D2 · 2026-10-20]`
 
 ### 0.6.1 双运行模式
 
@@ -165,7 +165,7 @@ Stagent v0.1 采用本地 Daemon 为唯一权威的控制面。用户在 Stagent
   - **右栏**：受控 Coding Worker 交互会话窗口。所有代码改动意图、工具调用过程与调试进度均透明呈现在此窗口中，并供 Supervisor 全程审计读取。
 - **代码视图 (Monaco)**：采用 Monaco Editor 作为中栏代码阅读与编辑核心；所有文件保存均调用 `POST /api/worktree/files` 经 Daemon 强校验路径白名单。清晰显示只读/可写标识、Worktree 绑定状态以及 Evidence STALE 警告横幅。
 - **终端**：默认展示 Daemon 执行命令的结构化脱敏日志；若提供交互式终端，必须使用独立权限策略，严禁绕过白名单。v0.1 严禁将未受控宿主 Shell 直接暴露给 Worker。
-- **Supervisor 双模交互 (HUD 胶囊 + Studio 标签页)** `[待用户确认 D4]`：
+- **Supervisor 双模交互 (HUD 胶囊 + Studio 标签页)** `[用户已确认 D4 · 2026-10-20]`：
   - **v1.3.3 排期口径**：HUD 的成熟度徽章、10min Snooze 与高级气泡交互推迟至 v0.2+；v0.1 仅保留"保护清单命中时的白话是/否卡片"与 Header 模式指示（自由模式 / 保护模式）。
   - **HUD 常驻胶囊（远期）**：位于 Header 右侧，实时显示需求成熟度徽章、安全指示灯与未决风险气泡。支持点击快速呼出或静默（Snooze 10min）。
   - **Supervisor Studio 标签页**：点击 HUD 胶囊或右侧对话框顶部快捷按钮时，在中栏以独立 Tab 打开（而非遮挡代码的浮动 Modal）。完整展示长篇需求成熟度分析、未决问题确认清单、结构化合同编辑器与执行期实时监控水表。
@@ -188,7 +188,7 @@ Stagent v0.1 采用本地 Daemon 为唯一权威的控制面。用户在 Stagent
 ### 2.3 Coding Worker 与 Agent Adapter（双轨演进路线，v1.3.3 修订）
 - **双轨制（保底与前瞻并存）**：
   - **保底轨**：自研 API Worker（`daemon/worker/ai-worker.ts`）保留为保底运行基线与单元测试替身，确保系统基础闭环不中断；
-  - **前瞻轨**：成熟编码 Agent 接入顺序为 **Claude Code → cursor-agent CLI → OpenHands**（`[待用户确认 D3]`），全部经由 `daemon/worker/cli-host/` 专用子进程隔离模块挂载。
+  - **前瞻轨**：成熟编码 Agent 接入顺序为 **Claude Code → cursor-agent CLI → OpenHands**（`[用户已确认 D3 · 2026-10-20]`），全部经由 `daemon/worker/cli-host/` 专用子进程隔离模块挂载。
 - **cli-host 子进程隔离模块**：全仓**唯一**允许使用 `child_process`/spawn 的模块；强制结构化 argv + `shell:false` + 进程树托管回收（复用 command-runner 风格的进程组/Job Object 管理）。
 - **Claude Code 收敛策略（待实机验证，verified_on: 空）**：优先**保留其原生工具**，通过官方 Pre-tool hook（动手前检查钩子）配合 Stagent 网关做拦截，辅以工具白名单/黑名单配置收窄内置 Edit/Write/Bash/WebFetch 等能力，**避免粗暴剥离原生工具导致模型死循环**；工作目录锁定 Worktree；利用其 Headless 模式与结构化输出接右栏流式会话；利用其会话续接能力实现 resume。以上行为以官方文档为依据，**具体能力必须在 cli-host 黑盒实测通过后**方可标记受控。
 - **cursor-agent（待实机验证，verified_on: 空）**：实测其权限配置能否完全 deny shell/写文件并仅挂 Stagent MCP；凭证途径仅限官方登录或 API Key（§0.3 红线）。不能完全关闭原生写能力者只能登记为 `UNCONTROLLED_EXTERNAL`，仅 Vibe 模式可用，UI 显示"未受控"。
@@ -255,7 +255,7 @@ v0.1 文件监听仅由本地 Daemon 的 OS 文件监听器承担（例如 Node 
 4. **文件新增（File Added）**：
    - 仅解析新节点 $A$ 及其引用的下游节点并在图上插入；上游已标记未解析引用的节点触发二次绑定检查。
 
-### 3.3 增量更新验收指标 (Performance Metrics) `[待用户确认 D4：整体推迟至 v0.2+]`
+### 3.3 增量更新验收指标 (Performance Metrics) `[用户已确认 D4：整体推迟至 v0.2+ · 2026-10-20]`
 
 > **v1.3.3 排期说明**：本节指标（含架构雷达渲染与内存门槛）随 `TASK-B.1/B.2/C.4` 一并推迟至 v0.2+，**不构成本轮 v0.1 的验收阻碍**；保留全文作为远期设计参考。
 - **全量冷启动索引基线**：1000 个模块的全量初次 AST 依赖抽取耗时 $\le 1.5\text{s}$。
@@ -789,7 +789,7 @@ export interface EvidenceBundleV11 {
 | P5：独立 Evidence 与一键合并 | 验证命令、测试完整性、快照、费用、Trailer、Squash | Evidence 由 Daemon 生成；过期/失败/阻断不可合并；`can_merge=true` 一键合并无二次确认弹窗 |
 | P5.5：成熟 Agent 受控实测 | Claude Code / cursor-agent / OpenHands 经 cli-host 黑盒实测 | 各 Adapter `verified_on` 填写真实版本与日期；4 类绕过负例在真实 CLI 上全部失败关闭；未通过者仅 Vibe 可用 |
 | P6：集成 Dogfood | 真实仓库端到端与支持平台验证 | 记录真实模型费用、延迟、失败、恢复、隐私和 Adapter 限制；发布说明披露未验证边界 |
-| v0.2+（推迟，另行立项）`[待用户确认 D4]` | 架构雷达（B.1/B.2/C.4）、成熟度评分、多子任务 DAG、新鲜上下文、Schema-First、并行 Worktree（RFC-2026-002 远期附录） | 另行立项评审 |
+| v0.2+（推迟，另行立项）`[用户已确认 D4 · 2026-10-20]` | 架构雷达（B.1/B.2/C.4）、成熟度评分、多子任务 DAG、新鲜上下文、Schema-First、并行 Worktree（RFC-2026-002 远期附录） | 另行立项评审 |
 
 ### 10.1 v0.1 退出条件
 

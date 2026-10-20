@@ -42,12 +42,12 @@
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]** | P2 工具管辖 | • 统一为 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• **`stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`**<br>• **强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)**<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.3** | 测试环境、秘密脱敏与网络/端口策略守卫 | 编码内核 | **[NEW_TASK]** | P2 环境网络 | • 环境变量白名单过滤、`CI=true` 注入、`env_file_grants` 按命令授权<br>• **秘密遮蔽严密发生在日志截断之前**<br>• 网络策略拦截 (`DENY` / `EXPLICIT_TARGETS` / `USER_APPROVED`)、动态端口 |
 | **TASK-W.4** | 高风险执行威胁守卫与运行时能力复检 (闭环 G-01 & G-20) | 编码内核 | **[NEW_TASK]** | P2 安全威胁 | • **闭环 G-01 & G-20**：落地 `daemon/worker/threat-guard.ts`<br>• 命令 argv 与仓库信任检查，高风险特权命令抛 `E_UNSAFE_EXECUTION` 并阻断<br>• 会话期周期性复检，检测到绕过立即降级为 `UNCONTROLLED_EXTERNAL` 并阻断 Evidence<br>• **落实 4 类绕过路径不可用负例断言** |
-| **TASK-B.1** | 本地 AST 增量依赖图分析引擎 | 架构感知 | **[DEFERRED → v0.2+]** `[待用户确认 D4]` | A §3 架构引擎 | • **统一路径前缀：`src/**/*.{ts,tsx,js,jsx,mjs,cjs,json}` (G-16)**<br>• 冷启动 ≤1.5s，单文件增量修补 ≤20ms |
-| **TASK-B.2** | 多活跃 Worktree 监听与 Evidence 状态联动 | 架构感知 | **[DEFERRED → v0.2+]** `[待用户确认 D4]` | P4 状态失效 | • 扩展多活跃 Worktree 监听，排除 `.git`/`.stagent`/`dist` 等<br>• 外部变更在 watcher debounce 窗口内（性能目标 ≤50ms）触发 Evidence `STALE` 并广播 `EVIDENCE_STATUS_CHANGED`；合并前指纹复核兜底 |
+| **TASK-B.1** | 本地 AST 增量依赖图分析引擎 | 架构感知 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | A §3 架构引擎 | • **统一路径前缀：`src/**/*.{ts,tsx,js,jsx,mjs,cjs,json}` (G-16)**<br>• 冷启动 ≤1.5s，单文件增量修补 ≤20ms |
+| **TASK-B.2** | 多活跃 Worktree 监听与 Evidence 状态联动 | 架构感知 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P4 状态失效 | • 扩展多活跃 Worktree 监听，排除 `.git`/`.stagent`/`dist` 等<br>• 外部变更在 watcher debounce 窗口内（性能目标 ≤50ms）触发 Evidence `STALE` 并广播 `EVIDENCE_STATUS_CHANGED`；合并前指纹复核兜底 |
 | **TASK-C.1** | Cursor 式三栏 IDE 响应式工作台骨架与 Studio 视口 | 前端呈现 | **[NEW_TASK]** | P3 工作台闭环 | • 左侧文件树/Git 状态、中栏多标签、右栏双 Agent 对话<br>• **Header 补齐：模式（探索/合同执行）、Worker 受控徽标、当前任务分支 (G-06)**<br>• **审批后默认绑定合同 Worktree，主树编辑显式切换提示 (G-18)** |
 | **TASK-C.2** | 中栏 Supervisor Studio 标签页与合同审阅面板 | 前端呈现 | **[NEW_TASK]** | P4 审批界面 | • 页面内悬浮 HUD 胶囊、成熟度指示器、未决风险气泡<br>• 审批弹窗展示完整 Scope、预算与验证命令，用户显式批准 |
 | **TASK-C.3** | Monaco 核心编辑器集成与受控 Worktree 读写 | 前端呈现 | **[NEW_TASK]** | P3 代码编辑 | • Monaco Editor 嵌入，可写/只读视觉区分，**编辑器内 Evidence STALE 指示 (G-18)**<br>• 服务端保存校验：`POST /api/worktree/files` 越权写入由 Daemon 403 拒绝 |
-| **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** `[待用户确认 D4]` | P3 架构雷达 | • 1000 节点拓扑渲染 (≤16ms patch, ≤30MB 内存)<br>• 交互式 Scope 圈选，已批准合同圈选禁止原地扩权 |
+| **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P3 架构雷达 | • 1000 节点拓扑渲染 (≤16ms patch, ≤30MB 内存)<br>• 交互式 Scope 圈选，已批准合同圈选禁止原地扩权 |
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[NEW_TASK]** | P3 差异终端 | • 双栏/内联 Git Diff 审阅<br>• 结构化终端流式日志展示、ANSI 渲染、先脱敏后截断 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[INCREMENTAL_UPGRADE]** | P5 核销合并 | • 提供 `POST /api/contracts/:id/approve` (防 TOCTOU)<br>• `resume` 提供**双路径裁决负例断言** (违规返回 409，G-14)<br>• **并发互斥锁守卫**：同合同 execute/resume/abort/merge 冲突返回 409 / `E_WORKSPACE_LOCKED` 并生成 BLOCKED Evidence (G-21)<br>• **合并成功后原子落盘合同与证据快照至 `.stagent/` 目录 (G-05)**<br>• 对齐 A §5.2 的 4 个 Git Trailer，执行合并门禁（**v1.3.3**：删除 Gate 5 二次确认弹窗改一键合并，保留 Gate 0~4 与后台指纹复核；冲突按 User-First Discard 仲裁） |
 | **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[NEW_TASK]** | P6 集成自举 | • 覆盖 Happy Path 全生命周期无人值守自动化回归<br>• **覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离，G-07）** |
@@ -681,7 +681,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 
 ### 3.5b 全局保护清单与 Vibe 安全网 (Sprint 2)
 
-#### 【Task P.1】全局保护清单与 Vibe 模式安全网 (v1.3.3 新增) `[待用户确认 D1 / D2]`
+#### 【Task P.1】全局保护清单与 Vibe 模式安全网 (v1.3.3 新增) `[用户已确认 D1 / D2 · 2026-10-20]`
 * **任务编号**：`TASK-P.1`
 * **前置依赖**：`TASK-D.1`
 * **任务状态**：**[NEW_TASK]**
@@ -791,7 +791,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 
 ## 4. 单人串行排期与门禁实施指南 (Sprint Schedule，v1.3.3 去过载重排)
 
-> **v1.3.3 重排原则**：阶段解耦、最小可用闭环前置。Sprint 1 结束即可端到端演示「右栏 Agent 改代码 → Monaco 查看」；Sprint 2 结束可演示「Diff → 一键合并 + 保护清单」。架构雷达（B.1/B.2/C.4）、成熟度评分与 RFC-2026-002 内容整体推迟至 v0.2+ 另行立项 `[待用户确认 D4]`。
+> **v1.3.3 重排原则**：阶段解耦、最小可用闭环前置。Sprint 1 结束即可端到端演示「右栏 Agent 改代码 → Monaco 查看」；Sprint 2 结束可演示「Diff → 一键合并 + 保护清单」。架构雷达（B.1/B.2/C.4）、成熟度评分与 RFC-2026-002 内容整体推迟至 v0.2+ 另行立项 `[用户已确认 D4 · 2026-10-20]`。
 
 | 迭代阶段 (Sprint) | 计划推进任务卡 | 阶段核心交付物 | 强制门禁检查点 (Gate Check) |
 | :--- | :--- | :--- | :--- |
@@ -801,7 +801,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 | **Sprint 4: Supervisor 规则优先** | `TASK-S.1`（独立预算/默认关防抖）➔ `TASK-S.2`（L0/L1 精简草案，白话文案）➔ `TASK-C.2`（Studio 精简版） | L0 规则引擎、L1 按需强模型、独立预算分账、白话草案 | VIBE 下 30 分钟连续聊天 Supervisor 模型调用 = 0（未点击时）；草案 100% parse 通过 |
 | **Sprint 5: 第二/第三个 Agent** | `TASK-W.5b` ➔ `TASK-W.5c` | cursor-agent / OpenHands（`SANDBOX_ENFORCED`）各自 cli-host 实测、计费模型分支 | 每个 Adapter 的 `verified_on` 如实填写；未通过者仅 Vibe 可用且 UI 显示"未受控" |
 | **Sprint 6: E2E 与自举发版** | `TASK-E.1`（含 Vibe、保护清单与各 Adapter 用例）➔ `TASK-E.2` | 8 类故障分支（故障 5 限定保护模式）+ Vibe 专项用例、Dogfooding 报告、发版打包 | 全部故障分支阻断成功；`npm run build` 产出干净构建包；报告披露各 Agent 实测限制 |
-| **v0.2+（推迟，另行立项）** `[待用户确认 D4]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3` 增强 ➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
+| **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3` 增强 ➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
