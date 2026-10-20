@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { readDiffFiles } from "../../daemon/diff/diff-files";
+import { readDiffFiles, isInsideWorktree } from "../../daemon/diff/diff-files";
 
 function git(cwd: string, args: string[]): string {
   return execFileSync("git", args, { cwd, encoding: "utf8" });
@@ -67,5 +67,43 @@ describe("TASK-C.5 文件级 Diff 数据（真实 git）", () => {
     expect(binary?.binary).toBe(true);
     expect(binary?.before).toBe("");
     expect(binary?.after).toBe("");
+  });
+
+  it("符号链接只给目标不读内容；未跟踪文件（AI 中途新建）也出现", async () => {
+    // 受控符号链接（指向 worktree 内）与越界符号链接
+    fs.symlinkSync("src/a.ts", path.join(repo, "link-in.ts"));
+    fs.symlinkSync("/etc/passwd", path.join(repo, "link-out"));
+    // AI 运行中途新建、尚未 add 的文件
+    fs.writeFileSync(path.join(repo, "src", "new.ts"), "export const n = 1;\n");
+
+    const { files } = await readDiffFiles(repo, "main");
+    const byPath = new Map(files.map((f) => [f.path, f]));
+
+    const linkIn = byPath.get("link-in.ts");
+    expect(linkIn?.symlinkTarget).toBe("src/a.ts");
+    expect(linkIn?.before).toBe("");
+    expect(linkIn?.after).toBe("");
+
+    const linkOut = byPath.get("link-out");
+    expect(linkOut?.symlinkTarget).toBe("/etc/passwd");
+    expect(linkOut?.after).toBe("");
+
+    const untracked = byPath.get("src/new.ts");
+    expect(untracked?.status).toBe("added");
+    expect(untracked?.after).toBe("export const n = 1;\n");
+  });
+
+  it("realpath 落在 worktree 之外的内容被判定为不可读", () => {
+    const worktree = fs.realpathSync(repo);
+    const outsideDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), "stagent-outside-"),
+    );
+    const outsideFile = path.join(outsideDir, "leak.txt");
+    fs.writeFileSync(outsideFile, "outside secret\n");
+    expect(
+      isInsideWorktree(worktree, path.join(repo, "src", "a.ts")).inside,
+    ).toBe(true);
+    expect(isInsideWorktree(worktree, outsideFile).inside).toBe(false);
+    fs.rmSync(outsideDir, { recursive: true, force: true });
   });
 });

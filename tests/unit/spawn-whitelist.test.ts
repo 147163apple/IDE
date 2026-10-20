@@ -3,14 +3,20 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * TASK-P.1 新增的静态闸门（用户要求）：
+ * TASK-P.1/C.5 静态闸门（用户要求，C.5 验收后加固）：
  * 全仓只有 daemon/worker/cli-host 可以启动外部进程；cli-host 之外的历史遗留启动点
  * 逐一列白（后续逐步迁移，迁移完成一条就从白名单删一条）。
  *
- * 任何新文件一旦 import node:child_process 或调用 spawn/exec 系列，本测试直接失败。
+ * 判定口径（宁可误报，不可漏报）：
+ * 1. 任何一行出现字符串 `child_process`（import / 动态 import / require / createRequire 全算）；
+ * 2. 任何一行出现 spawn/spawnSync/execFile/execFileSync/execSync/fork 调用；
+ * 3. 任何一行出现 `.exec(`（仅对已登记的 RegExp 误报行做行级豁免）；
+ * 4. 任何一行出现 process.binding(、Bun.spawn(、execa、cross-spawn。
+ *
  * 修复方式二选一：
  *  1. 把进程启动挪进 daemon/worker/cli-host/（推荐）；
- *  2. 确属受控例外：在下面 LEGACY_ALLOWLIST 增加一条并写明理由与迁移计划。
+ *  2. 确属受控例外：在 LEGACY_ALLOWLIST 增加文件（写理由与迁移计划），
+ *     或对已知误报在 LINE_ALLOWLIST 增加「文件 + 行特征 + 理由」。
  */
 
 const REPO_ROOT = path.resolve(__dirname, "../..");
@@ -63,14 +69,67 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
 
 const CLI_HOST_PREFIX = "daemon/worker/cli-host/";
 
-const CHILD_PROCESS_PATTERN =
-  /(?:from\s+["']node:child_process["']|require\(\s*["'](?:node:)?child_process["']\s*\))/;
-/**
- * 无 import 的兜底检测：只认明确的进程启动 API，且排除 `xxx.exec(` 这类方法调用
- * （例如 RegExp.prototype.exec），否则正则、解析器会误报。
- */
-const SPAWN_CALL_PATTERN =
+/** 行级豁免：只豁免「确知是 RegExp.prototype.exec」的行，不豁免文件 */
+const LINE_ALLOWLIST: Array<{
+  file: string;
+  pattern: RegExp;
+  reason: string;
+}> = [
+  {
+    file: "src/lib/terminal.ts",
+    pattern: /SGR\.exec\(input\)/,
+    reason: "RegExp.prototype.exec，非子进程调用",
+  },
+];
+
+/** 明确的进程启动 API（排除 xxx.spawn( 这类同名方法） */
+const SPAWN_CALL =
   /(?<![.\w])(?:spawn|spawnSync|execFile|execFileSync|execSync|fork)\s*\(/;
+/** 恢复 .exec( 检测（含对象方法），靠行级豁免排除 RegExp 误报 */
+const DOT_EXEC = /\.exec\s*\(/;
+/** 需要禁止的第三方/运行时启动方式 */
+const OTHER_LAUNCHERS: Array<{ pattern: RegExp; label: string }> = [
+  { pattern: /process\s*\.\s*binding\s*\(/, label: "process.binding" },
+  { pattern: /\bBun\s*\.\s*spawn\s*\(/, label: "Bun.spawn" },
+  { pattern: /\bexeca\b/, label: "execa" },
+  { pattern: /["']cross-spawn["']/, label: "cross-spawn" },
+];
+
+function isLineAllowed(rel: string, line: string): boolean {
+  return LINE_ALLOWLIST.some(
+    (rule) => rule.file === rel && rule.pattern.test(line),
+  );
+}
+
+/** 扫描一段源码，返回违规说明（空数组 = 干净） */
+export function scanContent(rel: string, content: string): string[] {
+  const violations: string[] = [];
+  const lines = content.split("\n");
+  lines.forEach((line, index) => {
+    if (isLineAllowed(rel, line)) return;
+    const where = `${rel}:${index + 1}`;
+    if (line.includes("child_process")) {
+      violations.push(
+        `${where} 引用 child_process（import/require/动态导入均禁止）`,
+      );
+      return;
+    }
+    for (const rule of OTHER_LAUNCHERS) {
+      if (rule.pattern.test(line)) {
+        violations.push(`${where} 使用 ${rule.label}`);
+        return;
+      }
+    }
+    if (SPAWN_CALL.test(line)) {
+      violations.push(`${where} 调用进程启动 API`);
+      return;
+    }
+    if (DOT_EXEC.test(line)) {
+      violations.push(`${where} 调用 .exec(（未能证明是 RegExp）`);
+    }
+  });
+  return violations;
+}
 
 function walk(dir: string, out: string[]): void {
   let entries: fs.Dirent[];
@@ -94,8 +153,8 @@ function relOf(abs: string): string {
   return path.relative(REPO_ROOT, abs).split(path.sep).join("/");
 }
 
-describe("进程启动白名单（TASK-P.1）", () => {
-  it("cli-host 与 6 个历史遗留模块之外，不得出现新的 child_process 用法", () => {
+describe("进程启动白名单（TASK-P.1 / C.5 加固）", () => {
+  it("cli-host 与 6 个历史遗留模块之外，不得出现任何进程启动迹象", () => {
     const files: string[] = [];
     for (const dir of SCAN_DIRS) walk(path.join(REPO_ROOT, dir), files);
 
@@ -105,21 +164,50 @@ describe("进程启动白名单（TASK-P.1）", () => {
     for (const abs of files) {
       const rel = relOf(abs);
       if (rel.startsWith(CLI_HOST_PREFIX) || allowed.has(rel)) continue;
-      const content = fs.readFileSync(abs, "utf8");
-      if (!CHILD_PROCESS_PATTERN.test(content)) {
-        // 没有 import 但直接调用 spawn/exec 的，同样算违规
-        if (SPAWN_CALL_PATTERN.test(content))
-          offenders.push(`${rel}（未 import 但调用了 spawn/exec）`);
-        continue;
-      }
-      offenders.push(rel);
+      offenders.push(...scanContent(rel, fs.readFileSync(abs, "utf8")));
     }
 
     expect(
       offenders,
-      `只有 daemon/worker/cli-host 可以启动外部进程。以下文件是新增的启动点：\n` +
+      `只有 daemon/worker/cli-host 可以启动外部进程。违规点：\n` +
         offenders.map((f) => `  - ${f}`).join("\n") +
-        `\n请挪进 cli-host，或在 tests/unit/spawn-whitelist.test.ts 的 LEGACY_ALLOWLIST 登记理由与迁移计划。`,
+        `\n请挪进 cli-host，或在 LEGACY_ALLOWLIST / LINE_ALLOWLIST 登记理由。`,
+    ).toEqual([]);
+  });
+
+  it.each([
+    [
+      "from 'child_process'（无 node: 前缀）",
+      `import { exec } from 'child_process';`,
+    ],
+    [
+      "import * as cp + cp.exec(",
+      `import * as cp from "node:child_process";\ncp.exec("ls");`,
+    ],
+    ["动态 import", `const cp = await import("node:child_process");`],
+    [
+      "createRequire",
+      `const require2 = createRequire(import.meta.url);\nconst cp = require2("child_process");`,
+    ],
+    ["process.binding", `const b = process.binding("spawn_sync");`],
+    ["Bun.spawn", `Bun.spawn(["ls", "-la"]);`],
+    ["execa 导入", `import { execa } from "execa";`],
+    ["cross-spawn 导入", `const spawn = require("cross-spawn");`],
+    ["对象方法 .exec(", `child.exec("rm -rf /");`],
+    ["无 import 直接 spawn", `spawn("ls", ["-la"]);`],
+  ])("负向用例：%s 必须被拦截", (_name, code) => {
+    expect(scanContent("daemon/example.ts", code).length).toBeGreaterThan(0);
+  });
+
+  it("正向对照：RegExp.exec 的已登记行不误报，普通代码不误报", () => {
+    expect(
+      scanContent(
+        "src/lib/terminal.ts",
+        `while ((match = SGR.exec(input)) !== null) {`,
+      ),
+    ).toEqual([]);
+    expect(
+      scanContent("daemon/example.ts", `const x = arr.filter(Boolean);`),
     ).toEqual([]);
   });
 
@@ -131,14 +219,17 @@ describe("进程启动白名单（TASK-P.1）", () => {
     }
   });
 
-  it("保护清单模块自身不启动任何外部进程", () => {
+  it("保护清单模块自身零进程启动迹象", () => {
     const dir = path.join(REPO_ROOT, "daemon", "protection");
     const files = fs
       .readdirSync(dir)
       .filter((n) => n.endsWith(".ts"))
-      .map((n) => fs.readFileSync(path.join(dir, n), "utf8"));
-    for (const content of files) {
-      expect(CHILD_PROCESS_PATTERN.test(content)).toBe(false);
+      .map((n) => ({
+        rel: `daemon/protection/${n}`,
+        content: fs.readFileSync(path.join(dir, n), "utf8"),
+      }));
+    for (const f of files) {
+      expect(scanContent(f.rel, f.content)).toEqual([]);
     }
   });
 });

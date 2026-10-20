@@ -73,6 +73,29 @@ describe("TASK-C.5 终端流式回放（runner 层）", () => {
     expect(emitted.length).toBeLessThanOrEqual(MAX_STREAM_LINE_CHARS + 20);
   });
 
+  it("JSON 形式的小写键（api_key / token）也会在发射前脱敏", async () => {
+    const sink = collect();
+    await runCommand("node", {
+      argv: {
+        executable: "node",
+        args: [
+          "-e",
+          'console.log(JSON.stringify({api_key:"abc123secret",token:"tok-999",note:"ok"}))',
+        ],
+      },
+      cwd: process.cwd(),
+      timeoutMs: 30_000,
+      onLine: sink.onLine,
+    });
+    const emitted = sink.lines[0]?.line ?? "";
+    expect(emitted).not.toContain("abc123secret");
+    expect(emitted).not.toContain("tok-999");
+    const parsed = JSON.parse(emitted) as Record<string, string>;
+    expect(parsed["api_key"]).toBe("[REDACTED]");
+    expect(parsed["token"]).toBe("[REDACTED]");
+    expect(parsed["note"]).toBe("ok");
+  });
+
   it("敏感值即使与超长内容同行也先整体遮蔽，绝不露出片段", async () => {
     const sink = collect();
     const longTail = "y".repeat(MAX_STREAM_LINE_CHARS + 500);

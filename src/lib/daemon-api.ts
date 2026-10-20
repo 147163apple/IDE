@@ -245,6 +245,10 @@ export interface DiffFilePairView {
   after: string;
   binary: boolean;
   truncated: boolean;
+  /** 符号链接只给目标，不返回内容 */
+  symlinkTarget?: string;
+  /** 真实路径逃逸出 worktree，已拒绝读取 */
+  unsafe?: boolean;
 }
 
 export interface DiffFilesView {

@@ -159,7 +159,21 @@ export function DiffViewer({
             ))}
           </ul>
           <div className="min-w-0 flex-1">
-            {selected?.binary ? (
+            {selected?.unsafe ? (
+              <div
+                data-testid="diff-unsafe"
+                className="p-3 text-xs text-destructive"
+              >
+                该文件的真实路径在 worktree 之外，已拒绝读取（{selected.path}）
+              </div>
+            ) : selected?.symlinkTarget !== undefined ? (
+              <div
+                data-testid="diff-symlink"
+                className="p-3 text-xs text-amber-600"
+              >
+                符号链接 -&gt; {selected.symlinkTarget}（不读取链接内容）
+              </div>
+            ) : selected?.binary ? (
               <div
                 data-testid="diff-binary"
                 className="p-3 text-xs text-muted-foreground"

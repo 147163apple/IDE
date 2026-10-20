@@ -84,6 +84,8 @@ const SECRET_PATTERNS: RegExp[] = [
   /\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, // Slack token
   /\bBearer\s+[A-Za-z0-9._-]{20,}\b/gi, // Bearer token
   /\b([A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)\s*=\s*\S+/g, // KEY=value
+  // JSON 形式（含小写键）："api_key": "…" / "token": "…"
+  /(["']?(?:api[_-]?key|access[_-]?token|token|secret|password)["']?\s*:\s*)"[^"]*"/gi,
 ];
 
 /** 先脱敏、后有界截断（规范 TASK-A.4 PASS-5） */
@@ -104,9 +106,13 @@ export function redactSecrets(
   for (const pattern of SECRET_PATTERNS) {
     out = out.replace(pattern, (match) => {
       redacted = true;
-      // 保留 KEY= 前缀，遮蔽值
+      // KEY=value：保留 KEY=
       const eq = match.indexOf("=");
-      return eq > 0 ? `${match.slice(0, eq + 1)}[REDACTED]` : "[REDACTED]";
+      if (eq > 0) return `${match.slice(0, eq + 1)}[REDACTED]`;
+      // JSON：保留 "key": 前缀，值换成 "[REDACTED]"，保持 JSON 合法
+      const colon = match.indexOf(":");
+      if (colon > 0) return `${match.slice(0, colon + 1)}"[REDACTED]"`;
+      return "[REDACTED]";
     });
   }
 
