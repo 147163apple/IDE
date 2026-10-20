@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { WorkspaceHeader } from "./WorkspaceHeader";
 import { FileTree } from "./FileTree";
 import { SplitPaneContainer } from "./SplitPaneContainer";
@@ -26,6 +26,15 @@ export interface WorkspaceLayoutProps {
   workerControl: WorkerControl;
   contract?: ActiveContract | null | undefined;
   files: FileNode[];
+  /** 以下为接入主页面用的插槽，均可选 */
+  headerExtra?: ReactNode;
+  banner?: ReactNode;
+  leftExtra?: ReactNode;
+  studioContent?: ReactNode;
+  rightPanel?: ReactNode;
+  footer?: ReactNode;
+  /** 首次打开即显示 Supervisor Studio 标签 */
+  defaultOpenStudio?: boolean;
 }
 
 /**
@@ -41,8 +50,14 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const useWorktree = bound && !onMainTree;
   const root = useWorktree ? contract!.worktreePath : props.repoPath;
 
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [activeTab, setActiveTab] = useState<string | null>(null);
+  const [tabs, setTabs] = useState<Tab[]>(() =>
+    props.defaultOpenStudio
+      ? [{ id: STUDIO_TAB_ID, title: "Supervisor Studio", system: true }]
+      : [],
+  );
+  const [activeTab, setActiveTab] = useState<string | null>(() =>
+    props.defaultOpenStudio ? STUDIO_TAB_ID : null,
+  );
   const [split, setSplit] = useState(false);
 
   const openTab = (tab: Tab) => {
@@ -53,8 +68,12 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     openTab({ id: STUDIO_TAB_ID, title: "Supervisor Studio", system: true });
 
   const studio = (
-    <div data-testid="studio-pane" className="p-3 text-sm">
-      Supervisor Studio（合同审阅区，TASK-C.2 实装）
+    <div data-testid="studio-pane" className="min-h-0 text-sm">
+      {props.studioContent ?? (
+        <div className="p-3">
+          Supervisor Studio（合同审阅区，TASK-C.2 实装）
+        </div>
+      )}
     </div>
   );
   const editorFor = (id: string | null) =>
@@ -78,7 +97,9 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         contract={contract}
         workerControl={props.workerControl}
         onOpenStudio={openStudio}
+        extra={props.headerExtra}
       />
+      {props.banner}
       {bound && onMainTree && (
         <div
           data-testid="main-tree-warning"
@@ -97,7 +118,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         </div>
       )}
       <div className="flex min-h-0 flex-1">
-        <aside data-testid="left-column" className="w-60 border-r">
+        <aside
+          data-testid="left-column"
+          className="flex w-72 shrink-0 flex-col overflow-auto border-r"
+        >
           {bound && !onMainTree && (
             <button
               type="button"
@@ -118,6 +142,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             rootLabel={root}
             onOpen={(p) => openTab({ id: p, title: p.split("/").pop() ?? p })}
           />
+          {props.leftExtra}
         </aside>
         <main
           data-testid="middle-column"
@@ -152,7 +177,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
               {split ? "取消分屏" : "分屏对照"}
             </button>
           </div>
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 overflow-auto">
             {split ? (
               <SplitPaneContainer left={editorFor(lastFile)} right={studio} />
             ) : isStudio ? (
@@ -163,9 +188,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
           </div>
         </main>
         <aside data-testid="right-column" className="w-80 border-l p-3 text-sm">
-          Coding Agent 对话（TASK-C.6 实装）
+          {props.rightPanel ?? "Coding Agent 对话（TASK-C.6 实装）"}
         </aside>
       </div>
+      {props.footer}
     </div>
   );
 }

@@ -51,6 +51,13 @@ import { DiffViewer } from "@/components/diff/DiffViewer";
 import { EditorOpener } from "@/components/editor/EditorOpener";
 import { EvidenceChecklist } from "@/components/evidence/EvidenceChecklist";
 import { useDaemonStream } from "@/hooks/use-daemon-stream";
+import { WorkspaceLayout } from "@/components/WorkspaceLayout";
+import {
+  APPROVED_STATES,
+  buildFileTree,
+  toExecutionStatus,
+} from "@/components/workspace-adapters";
+import type { ActiveContract } from "@/components/workspace-types";
 import type {
   ContractUpdatePayload,
   EvidenceReadyPayload,
@@ -59,7 +66,7 @@ import type {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Stagent — 验收控制台" },
+      { title: "Stagent — 工作台" },
       {
         name: "description",
         content:
@@ -74,6 +81,7 @@ function Console() {
   const [conn, setConn] = useState<DaemonConnection>(() => loadConnection());
   const [connected, setConnected] = useState(false);
   const [daemonPort, setDaemonPort] = useState<number | null>(null);
+  const [repoRoot, setRepoRoot] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [contracts, setContracts] = useState<SoftwareContract[]>([]);
@@ -96,6 +104,11 @@ function Console() {
   const [mergeInfo, setMergeInfo] = useState<string | null>(null);
   const [settings, setSettings] = useState<ModelSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+
+  const fileTree = useMemo(
+    () => buildFileTree(graph?.graph.nodes.map((n) => n.filePath) ?? []),
+    [graph],
+  );
 
   const selected = useMemo(
     () => contracts.find((c) => c.contract_id === selectedId) ?? null,
@@ -124,6 +137,7 @@ function Console() {
       const health = await fetchHealth(conn);
       setConnected(health.status === "ok");
       setDaemonPort(health.port);
+      setRepoRoot(health.repoRoot);
       setContracts(await listContracts(conn));
     } catch (err) {
       setConnected(false);
@@ -217,426 +231,457 @@ function Console() {
     }
   };
 
+  const repoName = repoRoot
+    ? (repoRoot.split("/").filter(Boolean).pop() ?? "stagent")
+    : "stagent";
+  const workspaceContract: ActiveContract | null = selected
+    ? {
+        contractId: selected.contract_id,
+        worktreePath: `${repoRoot ?? "."}/.stagent/worktrees/task-${selected.contract_id}`,
+        approved: APPROVED_STATES.has(selected.lifecycle_state),
+        status: toExecutionStatus(selected.lifecycle_state),
+      }
+    : null;
+
   return (
     <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
-      <header className="flex h-10 items-center gap-3 border-b border-border bg-card px-3">
-        <span className="font-semibold tracking-wide text-primary">
-          ◆ stagent
-        </span>
-        <span className="text-xs text-muted-foreground">验收控制台</span>
-        <span
-          className={`ml-2 flex items-center gap-1 text-xs ${connected ? "text-emerald-500" : "text-destructive"}`}
-        >
-          <Activity className="h-3 w-3" />
-          {connected ? "Daemon 已连接" : "未连接"}
-        </span>
-        <span
-          data-testid="stream-status"
-          className={`flex items-center gap-1 text-xs ${
-            stream.status === "connected"
-              ? "text-emerald-500"
-              : stream.status === "closed"
-                ? "text-muted-foreground"
-                : "text-amber-500"
-          }`}
-        >
-          <Radio className="h-3 w-3" />
-          {stream.status === "connected"
-            ? "实时流已通"
-            : stream.status === "connecting"
-              ? "实时流连接中"
-              : stream.status === "reconnecting"
-                ? "实时流重连中"
-                : "实时流未开"}
-        </span>
-        <button
-          onClick={() => setShowSettings((v) => !v)}
-          className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${settings?.configured ? "bg-emerald-500" : "bg-amber-500"}`}
-          />
-          模型 Key
-        </button>
-        <button
-          onClick={() => void refresh()}
-          className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <RefreshCw className="h-3 w-3" /> 刷新
-        </button>
-        <button
-          onClick={() => {
-            setScopeDraft(selectedPaths);
-            setShowForm((v) => !v);
-          }}
-          className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <Plus className="h-3 w-3" /> 新建合同
-        </button>
-      </header>
-
-      <ConnectionBar
-        conn={conn}
-        onChange={(next) => {
-          setConn(next);
-          saveConnection(next);
-        }}
-      />
-
-      {showSettings && (
-        <ModelKeyPanel
-          conn={conn}
-          settings={settings}
-          onSaved={(next) => setSettings(next)}
-        />
-      )}
-
-      {error && (
-        <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-          {error}
-        </div>
-      )}
-
-      {stream.alerts.length > 0 && (
-        <div
-          data-testid="scope-alerts"
-          className="space-y-1 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700"
-        >
-          {stream.alerts.map((alert) => (
-            <div key={alert.id} className="flex items-center gap-2">
-              <AlertTriangle className="h-3 w-3 shrink-0" />
-              <span className="font-mono font-semibold">{alert.code}</span>
-              <span className="truncate">{alert.message}</span>
-              <span className="text-[10px] opacity-70">
-                {alert.contractId.slice(-8)}
-              </span>
-              <button
-                onClick={() => stream.dismissAlert(alert.id)}
-                className="ml-auto shrink-0 px-1 text-amber-700/70 hover:text-amber-900"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-80 shrink-0 flex-col border-r border-border bg-sidebar">
-          <div className="min-h-[180px] flex-1 overflow-auto">
-            <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
-              Contracts ({contracts.length})
-            </div>
-            {contracts.length === 0 && (
-              <div className="px-3 py-4 text-xs text-muted-foreground">
-                暂无合同。点击「新建合同」由 Daemon 持久化。
-              </div>
-            )}
-            {contracts.map((contract) => (
-              <button
-                key={contract.contract_id}
-                onClick={() => {
-                  setSelectedId(contract.contract_id);
-                  setEvidence(null);
-                  setWorkerResult(null);
-                  setDiff(null);
-                }}
-                className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
-                  selectedId === contract.contract_id ? "bg-sidebar-accent" : ""
-                }`}
-              >
-                <div className="truncate text-xs">{contract.intent.title}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">
-                  {contract.lifecycle_state} · {contract.contract_id.slice(-8)}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          <div className="flex h-[320px] flex-col border-t border-border">
-            <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-              架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
-            </div>
-            {graph ? (
-              <>
-                <FilterToolbar
-                  query={query}
-                  onQueryChange={setQuery}
-                  showCycles={showCycles}
-                  onToggleCycles={setShowCycles}
-                  nodeCount={graph.stats.nodes}
-                  edgeCount={graph.stats.edges}
-                  selectedCount={selectedPaths.length}
-                  matches={matches}
-                />
-                <RadarGraph
-                  nodes={graph.graph.nodes}
-                  edges={graph.graph.edges}
-                  cycles={graph.cycles}
-                  selected={selectedPaths}
-                  onSelectionChange={setSelectedPaths}
-                  focusPath={focusPath}
-                  showCycles={showCycles}
-                  className="min-h-0 flex-1"
-                />
-                <ScopeSelector
-                  selected={selectedPaths}
-                  onApply={(paths) => {
-                    setScopeDraft(paths);
-                    setShowForm(true);
-                  }}
-                  onClear={() => setSelectedPaths([])}
-                />
-              </>
-            ) : (
-              <div className="px-2 py-4 text-[11px] text-muted-foreground">
-                连接 Daemon 后加载依赖图
-              </div>
-            )}
-          </div>
-        </aside>
-
-        <main className="flex min-w-0 flex-1 flex-col overflow-auto">
-          {showForm && (
-            <ContractForm
-              busy={busy === "create"}
-              initialPaths={scopeDraft}
-              onCreate={(contract) =>
-                runAction("create", async () => {
-                  const saved = await createContract(conn, contract);
-                  setSelectedId(saved.contract_id);
-                  setShowForm(false);
-                })
-              }
+      <WorkspaceLayout
+        repoName={repoName}
+        repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+        baseBranch={selected?.authorization.git.base_branch ?? "main"}
+        runMode="VIBE"
+        workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
+        contract={workspaceContract}
+        files={fileTree}
+        defaultOpenStudio
+        headerExtra={
+          <>
+            <span
+              className={`ml-2 flex items-center gap-1 text-xs ${connected ? "text-emerald-500" : "text-destructive"}`}
+            >
+              <Activity className="h-3 w-3" />
+              {connected ? "Daemon 已连接" : "未连接"}
+            </span>
+            <span
+              data-testid="stream-status"
+              className={`flex items-center gap-1 text-xs ${
+                stream.status === "connected"
+                  ? "text-emerald-500"
+                  : stream.status === "closed"
+                    ? "text-muted-foreground"
+                    : "text-amber-500"
+              }`}
+            >
+              <Radio className="h-3 w-3" />
+              {stream.status === "connected"
+                ? "实时流已通"
+                : stream.status === "connecting"
+                  ? "实时流连接中"
+                  : stream.status === "reconnecting"
+                    ? "实时流重连中"
+                    : "实时流未开"}
+            </span>
+            <button
+              onClick={() => setShowSettings((v) => !v)}
+              className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${settings?.configured ? "bg-emerald-500" : "bg-amber-500"}`}
+              />
+              模型 Key
+            </button>
+            <button
+              onClick={() => void refresh()}
+              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className="h-3 w-3" /> 刷新
+            </button>
+            <button
+              onClick={() => {
+                setScopeDraft(selectedPaths);
+                setShowForm((v) => !v);
+              }}
+              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+            >
+              <Plus className="h-3 w-3" /> 新建合同
+            </button>
+          </>
+        }
+        banner={
+          <>
+            <ConnectionBar
+              conn={conn}
+              onChange={(next) => {
+                setConn(next);
+                saveConnection(next);
+              }}
             />
-          )}
 
-          {!selected ? (
-            <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-              选择左侧合同查看详情，或在雷达中圈选文件后新建合同
+            {showSettings && (
+              <ModelKeyPanel
+                conn={conn}
+                settings={settings}
+                onSaved={(next) => setSettings(next)}
+              />
+            )}
+
+            {error && (
+              <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+                {error}
+              </div>
+            )}
+
+            {stream.alerts.length > 0 && (
+              <div
+                data-testid="scope-alerts"
+                className="space-y-1 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700"
+              >
+                {stream.alerts.map((alert) => (
+                  <div key={alert.id} className="flex items-center gap-2">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    <span className="font-mono font-semibold">
+                      {alert.code}
+                    </span>
+                    <span className="truncate">{alert.message}</span>
+                    <span className="text-[10px] opacity-70">
+                      {alert.contractId.slice(-8)}
+                    </span>
+                    <button
+                      onClick={() => stream.dismissAlert(alert.id)}
+                      className="ml-auto shrink-0 px-1 text-amber-700/70 hover:text-amber-900"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        }
+        leftExtra={
+          <>
+            <div className="min-h-[180px] flex-1 overflow-auto">
+              <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
+                Contracts ({contracts.length})
+              </div>
+              {contracts.length === 0 && (
+                <div className="px-3 py-4 text-xs text-muted-foreground">
+                  暂无合同。点击「新建合同」由 Daemon 持久化。
+                </div>
+              )}
+              {contracts.map((contract) => (
+                <button
+                  key={contract.contract_id}
+                  onClick={() => {
+                    setSelectedId(contract.contract_id);
+                    setEvidence(null);
+                    setWorkerResult(null);
+                    setDiff(null);
+                  }}
+                  className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
+                    selectedId === contract.contract_id
+                      ? "bg-sidebar-accent"
+                      : ""
+                  }`}
+                >
+                  <div className="truncate text-xs">
+                    {contract.intent.title}
+                  </div>
+                  <div className="mt-1 text-[10px] text-muted-foreground">
+                    {contract.lifecycle_state} ·{" "}
+                    {contract.contract_id.slice(-8)}
+                  </div>
+                </button>
+              ))}
             </div>
-          ) : (
-            <div className="space-y-4 p-4">
-              <ContractCard
-                contract={selected}
-                busy={busy === "approve"}
-                onApprove={(id) =>
-                  void runAction("approve", async () => {
-                    await approveContract(conn, id, "local-user");
+
+            <div className="flex h-[320px] flex-col border-t border-border">
+              <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
+              </div>
+              {graph ? (
+                <>
+                  <FilterToolbar
+                    query={query}
+                    onQueryChange={setQuery}
+                    showCycles={showCycles}
+                    onToggleCycles={setShowCycles}
+                    nodeCount={graph.stats.nodes}
+                    edgeCount={graph.stats.edges}
+                    selectedCount={selectedPaths.length}
+                    matches={matches}
+                  />
+                  <RadarGraph
+                    nodes={graph.graph.nodes}
+                    edges={graph.graph.edges}
+                    cycles={graph.cycles}
+                    selected={selectedPaths}
+                    onSelectionChange={setSelectedPaths}
+                    focusPath={focusPath}
+                    showCycles={showCycles}
+                    className="min-h-0 flex-1"
+                  />
+                  <ScopeSelector
+                    selected={selectedPaths}
+                    onApply={(paths) => {
+                      setScopeDraft(paths);
+                      setShowForm(true);
+                    }}
+                    onClear={() => setSelectedPaths([])}
+                  />
+                </>
+              ) : (
+                <div className="px-2 py-4 text-[11px] text-muted-foreground">
+                  连接 Daemon 后加载依赖图
+                </div>
+              )}
+            </div>
+          </>
+        }
+        studioContent={
+          <div className="flex min-w-0 flex-1 flex-col">
+            {showForm && (
+              <ContractForm
+                busy={busy === "create"}
+                initialPaths={scopeDraft}
+                onCreate={(contract) =>
+                  runAction("create", async () => {
+                    const saved = await createContract(conn, contract);
+                    setSelectedId(saved.contract_id);
+                    setShowForm(false);
                   })
                 }
               />
+            )}
 
-              <div className="grid gap-3 md:grid-cols-2">
-                <ScopeList scope={selected.authorization.file_system_scope} />
-                <BudgetVisualizer
-                  costLimits={selected.authorization.cost_limits}
-                  budgetLimits={selected.authorization.budget_limits}
+            {!selected ? (
+              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+                选择左侧合同查看详情，或在雷达中圈选文件后新建合同
+              </div>
+            ) : (
+              <div className="space-y-4 p-4">
+                <ContractCard
+                  contract={selected}
+                  busy={busy === "approve"}
+                  onApprove={(id) =>
+                    void runAction("approve", async () => {
+                      await approveContract(conn, id, "local-user");
+                    })
+                  }
                 />
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  disabled={
-                    busy !== null || selected.lifecycle_state !== "EXECUTING"
-                  }
-                  onClick={() =>
-                    runAction("worker", async () => {
-                      const result = await runWorker(
-                        conn,
-                        selected.contract_id,
-                      );
-                      setWorkerResult(result);
-                    })
-                  }
-                  className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                >
-                  {busy === "worker" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="h-3.5 w-3.5" />
-                  )}
-                  运行 Worker
-                </button>
-                <button
-                  disabled={
-                    busy !== null || selected.lifecycle_state !== "EXECUTING"
-                  }
-                  onClick={() =>
-                    runAction("execute", async () => {
-                      const outcome = await executeContract(
-                        conn,
-                        selected.contract_id,
-                      );
-                      setEvidence(outcome.evidence);
-                    })
-                  }
-                  className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                >
-                  {busy === "execute" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5" />
-                  )}
-                  执行验证
-                </button>
-                <button
-                  disabled={
-                    busy !== null ||
-                    selected.lifecycle_state !== "PENDING_RESUME"
-                  }
-                  onClick={() =>
-                    void runAction("resume", async () => {
-                      await resumeContract(conn, selected.contract_id);
-                    })
-                  }
-                  className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                >
-                  {busy === "resume" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                  恢复执行
-                </button>
-                <button
-                  disabled={
-                    busy !== null ||
-                    selected.lifecycle_state === "MERGED" ||
-                    selected.lifecycle_state === "ABORTED"
-                  }
-                  onClick={() => {
-                    const confirmed = window.confirm(
-                      `确认中止合同 ${selected.contract_id}？\n` +
-                        "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
-                    );
-                    if (!confirmed) return;
-                    void runAction("abort", async () => {
-                      await abortContract(
-                        conn,
-                        selected.contract_id,
-                        "local-user",
-                      );
-                      setEvidence(null);
-                    });
-                  }}
-                  className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                >
-                  {busy === "abort" ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <XCircle className="h-3.5 w-3.5" />
-                  )}
-                  {selected.lifecycle_state === "PENDING_APPROVAL"
-                    ? "驳回合同"
-                    : "中止任务"}
-                </button>
-                <button
-                  onClick={() =>
-                    void runAction("diff", async () => {
-                      setDiff(await fetchDiff(conn, selected.contract_id));
-                    })
-                  }
-                  className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
-                >
-                  <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
-                </button>
-                <EditorOpener conn={conn} contractId={selected.contract_id} />
-                {busy && (
-                  <span className="text-[10px] text-muted-foreground">
-                    正在{busy}…
-                  </span>
-                )}
-              </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <ScopeList scope={selected.authorization.file_system_scope} />
+                  <BudgetVisualizer
+                    costLimits={selected.authorization.cost_limits}
+                    budgetLimits={selected.authorization.budget_limits}
+                  />
+                </div>
 
-              {workerResult && (
-                <section className="rounded border border-border bg-card p-3">
-                  <h3 className="text-sm font-semibold">Worker 执行记录</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    应用 {workerResult.changes.length} 个文件 · tokens{" "}
-                    {workerResult.usage.inputTokens}↑ /{" "}
-                    {workerResult.usage.outputTokens}↓
-                  </p>
-                  <ul className="mt-2 space-y-0.5 text-[11px]">
-                    {workerResult.log.map((line) => (
-                      <li key={line} className="text-chart-2">
-                        {line}
-                      </li>
-                    ))}
-                  </ul>
-                </section>
-              )}
-
-              {selectedLogs.length > 0 && (
-                <section
-                  data-testid="live-log"
-                  className="rounded border border-border bg-card p-3"
-                >
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">实时日志</h3>
-                    <span className="text-[10px] text-muted-foreground">
-                      {selectedLogs.length} 行 · WebSocket 推送（保留最近 500
-                      行）
-                    </span>
-                    <button
-                      onClick={stream.clearLogs}
-                      className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                    >
-                      清空
-                    </button>
-                  </div>
-                  <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
-                    {selectedLogs.map((line, i) => (
-                      <div key={`${line.at}-${i}`}>
-                        <span className="text-zinc-500">
-                          {line.at.slice(11, 19)}{" "}
-                        </span>
-                        {line.line}
-                      </div>
-                    ))}
-                  </pre>
-                </section>
-              )}
-
-              {diff && <DiffViewer patch={diff.patch} />}
-              {evidence && (
-                <>
-                  <EvidenceChecklist
-                    evidence={evidence}
-                    busy={busy === "merge"}
-                    onMerge={() =>
-                      void runAction("merge", async () => {
-                        const result = await mergeContract(
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    disabled={
+                      busy !== null || selected.lifecycle_state !== "EXECUTING"
+                    }
+                    onClick={() =>
+                      runAction("worker", async () => {
+                        const result = await runWorker(
                           conn,
                           selected.contract_id,
-                          evidence.evidence_id,
-                          "local-user",
                         );
-                        setMergeInfo(
-                          `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
-                            result.worktreeRemoved ? "已清理" : "保留"
-                          }`,
-                        );
+                        setWorkerResult(result);
                       })
                     }
-                  />
-                  {mergeInfo && (
-                    <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
-                      {mergeInfo}
-                    </div>
+                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                  >
+                    {busy === "worker" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                    )}
+                    运行 Worker
+                  </button>
+                  <button
+                    disabled={
+                      busy !== null || selected.lifecycle_state !== "EXECUTING"
+                    }
+                    onClick={() =>
+                      runAction("execute", async () => {
+                        const outcome = await executeContract(
+                          conn,
+                          selected.contract_id,
+                        );
+                        setEvidence(outcome.evidence);
+                      })
+                    }
+                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                  >
+                    {busy === "execute" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5" />
+                    )}
+                    执行验证
+                  </button>
+                  <button
+                    disabled={
+                      busy !== null ||
+                      selected.lifecycle_state !== "PENDING_RESUME"
+                    }
+                    onClick={() =>
+                      void runAction("resume", async () => {
+                        await resumeContract(conn, selected.contract_id);
+                      })
+                    }
+                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                  >
+                    {busy === "resume" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    恢复执行
+                  </button>
+                  <button
+                    disabled={
+                      busy !== null ||
+                      selected.lifecycle_state === "MERGED" ||
+                      selected.lifecycle_state === "ABORTED"
+                    }
+                    onClick={() => {
+                      const confirmed = window.confirm(
+                        `确认中止合同 ${selected.contract_id}？\n` +
+                          "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
+                      );
+                      if (!confirmed) return;
+                      void runAction("abort", async () => {
+                        await abortContract(
+                          conn,
+                          selected.contract_id,
+                          "local-user",
+                        );
+                        setEvidence(null);
+                      });
+                    }}
+                    className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                  >
+                    {busy === "abort" ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <XCircle className="h-3.5 w-3.5" />
+                    )}
+                    {selected.lifecycle_state === "PENDING_APPROVAL"
+                      ? "驳回合同"
+                      : "中止任务"}
+                  </button>
+                  <button
+                    onClick={() =>
+                      void runAction("diff", async () => {
+                        setDiff(await fetchDiff(conn, selected.contract_id));
+                      })
+                    }
+                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
+                  >
+                    <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
+                  </button>
+                  <EditorOpener conn={conn} contractId={selected.contract_id} />
+                  {busy && (
+                    <span className="text-[10px] text-muted-foreground">
+                      正在{busy}…
+                    </span>
                   )}
-                  <EvidenceView evidence={evidence} />
-                </>
-              )}
-            </div>
-          )}
-        </main>
-      </div>
+                </div>
 
-      <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">
-        <span>Daemon: {conn.baseUrl}</span>
-        <span className="ml-auto">v0.1 · Evidence-gated</span>
-      </footer>
+                {workerResult && (
+                  <section className="rounded border border-border bg-card p-3">
+                    <h3 className="text-sm font-semibold">Worker 执行记录</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      应用 {workerResult.changes.length} 个文件 · tokens{" "}
+                      {workerResult.usage.inputTokens}↑ /{" "}
+                      {workerResult.usage.outputTokens}↓
+                    </p>
+                    <ul className="mt-2 space-y-0.5 text-[11px]">
+                      {workerResult.log.map((line) => (
+                        <li key={line} className="text-chart-2">
+                          {line}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {selectedLogs.length > 0 && (
+                  <section
+                    data-testid="live-log"
+                    className="rounded border border-border bg-card p-3"
+                  >
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-semibold">实时日志</h3>
+                      <span className="text-[10px] text-muted-foreground">
+                        {selectedLogs.length} 行 · WebSocket 推送（保留最近 500
+                        行）
+                      </span>
+                      <button
+                        onClick={stream.clearLogs}
+                        className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                      >
+                        清空
+                      </button>
+                    </div>
+                    <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
+                      {selectedLogs.map((line, i) => (
+                        <div key={`${line.at}-${i}`}>
+                          <span className="text-zinc-500">
+                            {line.at.slice(11, 19)}{" "}
+                          </span>
+                          {line.line}
+                        </div>
+                      ))}
+                    </pre>
+                  </section>
+                )}
+
+                {diff && <DiffViewer patch={diff.patch} />}
+                {evidence && (
+                  <>
+                    <EvidenceChecklist
+                      evidence={evidence}
+                      busy={busy === "merge"}
+                      onMerge={() =>
+                        void runAction("merge", async () => {
+                          const result = await mergeContract(
+                            conn,
+                            selected.contract_id,
+                            evidence.evidence_id,
+                            "local-user",
+                          );
+                          setMergeInfo(
+                            `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
+                              result.worktreeRemoved ? "已清理" : "保留"
+                            }`,
+                          );
+                        })
+                      }
+                    />
+                    {mergeInfo && (
+                      <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
+                        {mergeInfo}
+                      </div>
+                    )}
+                    <EvidenceView evidence={evidence} />
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        }
+        footer={
+          <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">
+            <span>Daemon: {conn.baseUrl}</span>
+            <span className="ml-auto">v0.1 · Evidence-gated</span>
+          </footer>
+        }
+      />
     </div>
   );
 }
