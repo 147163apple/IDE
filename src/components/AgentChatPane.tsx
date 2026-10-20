@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useAgentSession,
   type AgentSessionTransport,
@@ -14,8 +14,22 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
   const [draft, setDraft] = useState("");
   const [adapterId, setAdapterId] = useState<string>("");
   const current = chat.sessions.find((s) => s.id === chat.sessionId);
+  // 下拉框默认跟随「当前打开的会话」所用的助手，避免显示 Claude Code、实际却在演示会话里聊天
+  const currentAdapterAvailable = chat.adapters.some(
+    (a) => a.id === current?.adapter_id && a.available,
+  );
   const adapterChoice =
-    adapterId || chat.adapters.find((a) => a.available)?.id || "";
+    adapterId ||
+    (currentAdapterAvailable ? (current?.adapter_id ?? "") : "") ||
+    chat.adapters.find((a) => a.available)?.id ||
+    "";
+  const currentLabel =
+    chat.adapters.find((a) => a.id === current?.adapter_id)?.label ??
+    current?.adapter_id ??
+    "";
+  useEffect(() => {
+    setAdapterId("");
+  }, [chat.sessionId]);
 
   if (!transport) {
     return (
@@ -90,6 +104,20 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
           ))}
         </select>
       </div>
+      {current && (
+        <div
+          data-testid="current-agent"
+          className={
+            current.adapter_id === "demo"
+              ? "rounded border border-amber-500/60 bg-amber-500/10 p-1"
+              : "font-semibold"
+          }
+        >
+          当前对话使用：{currentLabel}
+          {current.adapter_id === "demo" &&
+            "。这是演示助手，不调用模型，也不会真的读文件；要测真实效果，请在上面「AI 助手：」选 Claude Code，再点「新会话」。"}
+        </div>
+      )}
       {current && (
         <div data-testid="chat-session-meta" className="text-[10px] opacity-60">
           {current.adapter_id}

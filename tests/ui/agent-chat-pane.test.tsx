@@ -191,3 +191,62 @@ describe("TASK-C.6 未连接与可见标签（白话）", () => {
     expect(screen.getByLabelText("选择 Agent")).toBeTruthy();
   });
 });
+
+describe("TASK-C.6 当前会话所用助手要说清楚", () => {
+  it("打开演示会话时：下拉框跟随为演示助手，并显示白话提醒", async () => {
+    const t: AgentSessionTransport = {
+      listAdapters: vi.fn(async () => [
+        {
+          id: "claude-code",
+          label: "Claude Code",
+          control_mode: "GATEWAY_ENFORCED" as const,
+          verified_on: "x",
+          available: true,
+        },
+        {
+          id: "demo",
+          label: "演示 Agent（不调用模型）",
+          control_mode: "UNCONTROLLED_EXTERNAL" as const,
+          verified_on: "",
+          available: true,
+        },
+      ]),
+      listSessions: vi.fn(async () => [
+        {
+          id: "d1",
+          adapter_id: "demo",
+          title: "你好",
+          created_at: "",
+          updated_at: "",
+          native_session_id: "demo-1",
+          busy: false,
+        },
+      ]),
+      createSession: vi.fn(),
+      getSession: vi.fn(async () => ({
+        id: "d1",
+        adapter_id: "demo",
+        title: "你好",
+        created_at: "",
+        updated_at: "",
+        native_session_id: "demo-1",
+        busy: false,
+        events: [],
+      })),
+      send: vi.fn(async () => "started" as const),
+      interrupt: vi.fn(async () => true),
+      subscribe: () => () => undefined,
+    };
+    render(<AgentChatPane transport={t} />);
+    const line = await screen.findByTestId("current-agent");
+    expect(line.textContent).toContain(
+      "当前对话使用：演示 Agent（不调用模型）",
+    );
+    expect(line.textContent).toContain("不会真的读文件");
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("选择 Agent") as HTMLSelectElement).value,
+      ).toBe("demo"),
+    );
+  });
+});
