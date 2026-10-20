@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ClaudeCodeAdapter,
+  FORWARD_ENV,
   HOOK_SCRIPT,
   redactSecret,
   translate,
@@ -111,7 +112,13 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
     expect(launch.env["ANTHROPIC_API_KEY"]).toBe(KEY);
     expect(launch.args.join(" ")).not.toContain(KEY);
     expect(fs.readFileSync(launch.settingsPath, "utf8")).not.toContain(KEY);
-    expect(Object.keys(launch.env).sort()).toEqual(
+    // Daemon 环境里若设置了兼容端点变量（FORWARD_ENV），它们会被有意转发，不计入「其他变量」
+    const forwarded = new Set<string>(FORWARD_ENV);
+    expect(
+      Object.keys(launch.env)
+        .filter((k) => !forwarded.has(k))
+        .sort(),
+    ).toEqual(
       [
         "ANTHROPIC_API_KEY",
         "HOME",

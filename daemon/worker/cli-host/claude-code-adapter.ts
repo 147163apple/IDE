@@ -13,8 +13,10 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
 /**
  * TASK-W.5a Claude Code 适配器（headless + stream-json）。
  *
- * 用户决定（2026-10-20）：一律使用 ANTHROPIC_API_KEY 按量计费，所有模式都以
- * 以 `--setting-sources ""` 启动（原为 --bare，但 --bare 会连 --settings 的 hooks 一起跳过）—— 不加载仓库里的 .claude/settings.json hooks 与 .mcp.json（否则是绕过口），
+ * 用户决定（2026-10-20）：一律使用 ANTHROPIC_API_KEY 按量计费。
+ * 隔离方式（草案，待 Tina 决定，见 docs/reports/W5a-isolation-design.md）：以
+ * `--setting-sources ""` + `--tools` 启动（规范写的是 --bare，但实测 2.1.296 的 --bare 会连
+ * --settings 里的 hooks 一起跳过）—— 不加载仓库里的 .claude/settings.json hooks 与 .mcp.json（否则是绕过口），
  * 只加载 Stagent 生成的 `--settings` 与 `--mcp-config`（配合 --strict-mcp-config）。
  *
  * 硬限制不只靠 hook（hook 崩溃 / 超时 / exit 1 会放行）：同时用 --disallowedTools 与
