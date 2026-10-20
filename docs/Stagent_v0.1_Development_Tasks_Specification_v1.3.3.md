@@ -518,7 +518,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   - 新增：`daemon/worker/cli-host/process-host.ts`（spawn 托管与进程树回收）
   - 测试：`tests/unit/cli-host-claude-code.test.ts`（确定性，含 hook 层 4 类绕过负例）；`tests/e2e/claude-code-isolation.real.test.ts`（真实 CLI，`STAGENT_REAL_CLAUDE=1` 时运行：配置注入负例、4 类绕过、专用配置目录续接）
 * **Pass/Fail 验收判定**：
-  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭；`verified_on` 非空；流式输出与打断/续接实测达标。
+  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭（本轮实测覆盖默认禁 Bash 配置；allowBash 配置的 Shell 绕过负例列为后续补充项，见 `docs/reports/W5a-isolation-design.md` §3 未测清单）；`verified_on` 非空；流式输出与打断/续接实测达标。
   - **FAIL**：任一绕过路径可用；未实测即标记受控。
 
 #### 【Task W.5b】cursor-agent 适配器黑盒实测 (v1.3.3 新增)
