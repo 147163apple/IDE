@@ -13,6 +13,8 @@ export interface WorkspaceHeaderProps {
   runMode: RunMode;
   contract?: ActiveContract | null | undefined;
   workerControl: WorkerControl;
+  /** 与 Daemon 的连接状态；false 时受控徽章变暗（P.1 顺手修） */
+  daemonConnected?: boolean;
   onOpenStudio: () => void;
   extra?: ReactNode;
 }
@@ -24,12 +26,18 @@ export function WorkspaceHeader({
   runMode,
   contract,
   workerControl,
+  daemonConnected = true,
   onOpenStudio,
   extra,
 }: WorkspaceHeaderProps) {
-  const active = !!contract?.approved;
-  const branch = active ? `task/${contract!.contractId}` : baseBranch;
+  // P.1 顺手修：显示主工作区真实分支（由 Daemon 读取），不再按合同拼字符串
+  const branch = baseBranch;
   const enforced = workerControl === "GATEWAY_ENFORCED";
+  const badgeClass = !daemonConnected
+    ? "rounded bg-muted px-2 text-muted-foreground opacity-60"
+    : enforced
+      ? "rounded bg-green-100 px-2 text-green-800"
+      : "rounded bg-yellow-100 px-2 text-yellow-800";
   return (
     <header
       data-testid="workspace-header"
@@ -54,14 +62,14 @@ export function WorkspaceHeader({
       )}
       <span
         data-testid="worker-control"
-        data-control={workerControl}
-        className={
-          enforced
-            ? "rounded bg-green-100 px-2 text-green-800"
-            : "rounded bg-yellow-100 px-2 text-yellow-800"
-        }
+        data-control={daemonConnected ? workerControl : "OFFLINE"}
+        className={badgeClass}
       >
-        {enforced ? "GATEWAY_ENFORCED 受控" : "UNCONTROLLED_EXTERNAL 非受控"}
+        {!daemonConnected
+          ? "未连上后台 · 受控状态未知"
+          : enforced
+            ? "GATEWAY_ENFORCED 受控"
+            : "UNCONTROLLED_EXTERNAL 非受控"}
       </span>
       {extra}
       <button

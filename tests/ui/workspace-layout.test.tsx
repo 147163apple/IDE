@@ -57,6 +57,14 @@ describe("TASK-C.1 三栏工作台", () => {
     expect(b().className).toMatch(/yellow/);
   });
 
+  it("P.1 顺手修：断开后台时受控徽章变暗，不再假装受控", () => {
+    render(<WorkspaceLayout {...base} daemonConnected={false} />);
+    const b = screen.getByTestId("worker-control");
+    expect(b).toHaveTextContent("未连上后台");
+    expect(b).toHaveAttribute("data-control", "OFFLINE");
+    expect(b.className).toMatch(/opacity-60/);
+  });
+
   it("Supervisor 入口打开系统 Studio 标签", () => {
     render(<WorkspaceLayout {...base} />);
     fireEvent.click(screen.getByTestId("open-studio"));
@@ -77,9 +85,10 @@ describe("TASK-C.1 三栏工作台", () => {
     );
   });
 
-  it("审批后绑定 Worktree，切回主工作树有提示与执行状态", () => {
+  it("审批后绑定 Worktree，分支显示真实检出分支，切回主工作树有提示与执行状态", () => {
     render(<WorkspaceLayout {...base} contract={approved} />);
-    expect(screen.getByTestId("current-branch")).toHaveTextContent("task/c-42");
+    // P.1 顺手修：顶栏显示主工作区真实分支，不再按合同拼 task/xxx
+    expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
     expect(screen.getByTestId("contract-info")).toHaveTextContent(
       approved.worktreePath,
     );

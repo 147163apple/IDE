@@ -24,6 +24,8 @@ export interface WorkspaceLayoutProps {
   baseBranch: string;
   runMode: RunMode;
   workerControl: WorkerControl;
+  /** Daemon 连接状态；断线时徽章变暗（P.1 顺手修） */
+  daemonConnected?: boolean;
   contract?: ActiveContract | null | undefined;
   files: FileNode[];
   /** 以下为接入主页面用的插槽，均可选 */
@@ -118,6 +120,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         runMode={props.runMode}
         contract={contract}
         workerControl={props.workerControl}
+        daemonConnected={props.daemonConnected ?? true}
         onOpenStudio={openStudio}
         extra={props.headerExtra}
       />

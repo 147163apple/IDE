@@ -19,6 +19,8 @@ export interface DaemonHealth {
   pid: number;
   port: number;
   repoRoot: string;
+  /** 主工作区真实分支（P.1 顺手修） */
+  currentBranch?: string | null;
   uptime: number;
 }
 
@@ -304,6 +306,12 @@ export interface MergeResult {
   commitMessage: string;
   contract: SoftwareContract;
   worktreeRemoved: boolean;
+  /** P.1 User-First Discard：发生冲突时是否以用户主分支版本为准自动仲裁 */
+  conflictResolution?: "USER_FIRST_DISCARD" | null;
+  /** AI 改动全部被用户版本覆盖，没有可提交内容（不是错误） */
+  nothingToMerge?: boolean;
+  /** nothingToMerge 时的白话提示 */
+  message?: string;
 }
 
 export async function mergeContract(
@@ -431,5 +439,116 @@ export async function saveWorktreeFile(
       content,
       ...(contractId ? { contract_id: contractId } : {}),
     }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// TASK-P.1 保护清单 / 本轮授权 / 撤销
+// ---------------------------------------------------------------------------
+
+export interface ProtectionEntryView {
+  id: string;
+  name: string;
+  patterns: string[];
+  createdAt: string;
+}
+
+export interface ProtectionCardView {
+  id: string;
+  files: string[];
+  entryNames: string[];
+  createdAt: string;
+}
+
+export interface ProtectionStateView {
+  /** CORRUPT：清单损坏，门卫按全拦截运行（不能显示为自由模式） */
+  mode: "VIBE" | "PROTECTED" | "CORRUPT";
+  entries: ProtectionEntryView[];
+  corrupt: string | null;
+  round: {
+    roundId: string;
+    startedAt: string;
+    pending: ProtectionCardView[];
+    approvedFiles: string[];
+  };
+  checkpoint: { roundId: string; at: string } | null;
+}
+
+export interface ProtectionRecommendationView {
+  name: string;
+  patterns: string[];
+  reason: string;
+}
+
+export async function fetchProtection(
+  conn: DaemonConnection,
+): Promise<ProtectionStateView> {
+  return request<ProtectionStateView>(conn, "/api/protection");
+}
+
+export async function fetchProtectionRecommendations(
+  conn: DaemonConnection,
+): Promise<ProtectionRecommendationView[]> {
+  const body = await request<{
+    recommendations: ProtectionRecommendationView[];
+  }>(conn, "/api/protection/recommendations");
+  return body.recommendations;
+}
+
+export async function applyProtectionRecommendations(
+  conn: DaemonConnection,
+  names: string[],
+): Promise<void> {
+  await request(conn, "/api/protection/recommendations/apply", {
+    method: "POST",
+    body: JSON.stringify({ names }),
+  });
+}
+
+export async function lockProtectionPath(
+  conn: DaemonConnection,
+  name: string,
+  patterns: string[],
+): Promise<void> {
+  await request(conn, "/api/protection/entries", {
+    method: "POST",
+    body: JSON.stringify({ name, patterns }),
+  });
+}
+
+export async function unlockProtectionEntry(
+  conn: DaemonConnection,
+  id: string,
+): Promise<void> {
+  await request(conn, "/api/protection/entries/remove", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export async function decideProtectionCard(
+  conn: DaemonConnection,
+  cardId: string,
+  decision: "approve" | "deny",
+): Promise<void> {
+  await request(conn, "/api/protection/decisions", {
+    method: "POST",
+    body: JSON.stringify({ cardId, decision }),
+  });
+}
+
+export interface UndoRoundResult {
+  undone: boolean;
+  roundId?: string;
+  restoredFrom?: string;
+  deletedFiles?: string[];
+  reason?: string;
+}
+
+export async function undoProtectionRound(
+  conn: DaemonConnection,
+): Promise<UndoRoundResult> {
+  return request<UndoRoundResult>(conn, "/api/protection/undo", {
+    method: "POST",
   });
 }
