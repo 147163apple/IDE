@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+
+/** 清理兜底：沙箱拒绝删除临时目录时不影响断言 */
+function safeRm(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup failures
+  }
+}
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -56,7 +65,7 @@ describe("Chaos 4 / 狂暴输出炸弹：内存有界与头尾截断", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(workdir, { recursive: true, force: true });
+    safeRm(workdir);
   });
 
   it("50MB 狂暴输出：进程存活、内存有界、真实尾部被保留", async () => {
@@ -148,7 +157,7 @@ describe("Chaos 4 / Evidence 体积硬上限", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRm(repo);
   });
 
   it("验证命令狂喷日志：Evidence JSON 仍处于安全上限内且只留尾巴", async () => {
@@ -219,10 +228,14 @@ describe("Chaos 4 / Evidence 体积硬上限", () => {
         ],
       });
       const gateway = new ScopedWorktreeGateway(worktree, contract);
-      const res = await gateway.callTool("stagent_exec_command", {
-        executable: "node",
-        args: ["-e", bombScript(12 * 1024 * 1024, "GW-TAIL")],
-      });
+      const res = await gateway.callTool(
+        "stagent_exec_command",
+        {
+          executable: "node",
+          args: ["-e", bombScript(12 * 1024 * 1024, "GW-TAIL")],
+        },
+        { internal: true },
+      );
       const data = res.data as {
         truncated: boolean;
         stdoutBytes: number;
@@ -234,7 +247,7 @@ describe("Chaos 4 / Evidence 体积硬上限", () => {
       expect(data.stdout.length).toBeLessThan(100_000 + 400);
       expect(data.stdout.trimEnd().endsWith("GW-TAIL")).toBe(true);
     } finally {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRm(worktree);
     }
   }, 90_000);
 });

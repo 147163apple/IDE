@@ -1,5 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+
+/** 清理兜底：沙箱拒绝删除临时目录时不影响断言 */
+function safeRm(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true });
+  } catch {
+    // ignore cleanup failures
+  }
+}
 import path from "node:path";
 import os from "node:os";
 import {
@@ -16,17 +25,16 @@ describe("Task 1.3: Command Runner & Security Validator", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempDir, { recursive: true, force: true });
+    safeRm(tempDir);
   });
 
   it("should run safe whitelisted commands and capture stdout and exit code", async () => {
-    const result = await runCommand(
-      "node -e \"console.log('hello stagent')\"",
-      {
-        cwd: tempDir,
-        allowedCommands: ["node -e"],
-      },
-    );
+    const cmd = "node -e \"console.log('hello stagent')\"";
+    const result = await runCommand(cmd, {
+      cwd: tempDir,
+      // W.3：白名单只做精确匹配，不再允许「前缀 + 空格」放行
+      allowedCommands: [cmd],
+    });
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout.trim()).toBe("hello stagent");

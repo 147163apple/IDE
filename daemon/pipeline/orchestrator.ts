@@ -329,10 +329,14 @@ export class ContractOrchestrator {
     }> = [];
 
     for (const command of current.verification_spec.commands) {
-      const res = await gateway.callTool("stagent_exec_command", {
-        executable: command.executable,
-        args: command.args,
-      });
+      const res = await gateway.callTool(
+        "stagent_exec_command",
+        {
+          executable: command.executable,
+          args: command.args,
+        },
+        { internal: true },
+      );
       const data = (res.data ?? {}) as {
         exitCode?: number;
         stdout?: string;

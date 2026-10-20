@@ -168,9 +168,11 @@ describe("M2 / TASK-A.2 stagent_declare_complete", () => {
       contract.verification_spec.commands[0]?.executable,
       ...(contract.verification_spec.commands[0]?.args ?? []),
     ].join(" ");
-    const execRes = await gateway.callTool("stagent_exec_command", {
-      command: cmd,
-    });
+    const execRes = await gateway.callTool(
+      "stagent_exec_command",
+      { command: cmd },
+      { internal: true },
+    );
     expect(execRes.isError).toBe(false);
 
     const res = await gateway.callTool("stagent_declare_complete", {});

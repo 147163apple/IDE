@@ -19,7 +19,10 @@
 export const E_UNAUTHORIZED_COMMAND = "E_UNAUTHORIZED_COMMAND";
 
 export type AliasArgumentViolation =
-  "INTERPRETER_EVAL_FLAG" | "INTERPRETER_STDIN_SCRIPT" | "OPTION_INJECTION";
+  | "INTERPRETER_EVAL_FLAG"
+  | "INTERPRETER_STDIN_SCRIPT"
+  | "BARE_INTERPRETER"
+  | "OPTION_INJECTION";
 
 export class CommandPolicyError extends Error {
   readonly code = E_UNAUTHORIZED_COMMAND;
@@ -42,6 +45,8 @@ function describeViolation(violation: AliasArgumentViolation): string {
       return "Interpreter dynamic-evaluation flag is not allowed in worker-supplied args";
     case "INTERPRETER_STDIN_SCRIPT":
       return "Reading an interpreter script from stdin is not allowed";
+    case "BARE_INTERPRETER":
+      return "Bare interpreter template accepts no worker-supplied arguments";
     case "OPTION_INJECTION":
       return "Worker-supplied args must be positional; option injection is not allowed";
   }
@@ -105,12 +110,19 @@ function isEvalFlag(argument: string): boolean {
 
 /**
  * 校验 Worker 追加参数；违规抛 `CommandPolicyError`（码 `E_UNAUTHORIZED_COMMAND`）。
+ *
+ * `templateArgs` 是合同里该别名固定携带的参数。裸解释器（如 `node` / `python3`
+ * 后面没有任何脚本或代码参数）一旦允许追加位置参数，等于允许执行任意脚本，
+ * 因此直接拒绝全部追加参数。
  */
 export function assertAliasExtraArgsAllowed(params: {
   executable: string;
+  templateArgs?: readonly string[];
   extraArgs: readonly string[];
 }): void {
   const interpreter = isInterpreterExecutable(params.executable);
+  const templateArgs = params.templateArgs ?? [];
+  const hasScriptArg = templateArgs.some((arg) => !arg.startsWith("-"));
 
   for (const argument of params.extraArgs) {
     if (interpreter && isEvalFlag(argument)) {
@@ -122,5 +134,13 @@ export function assertAliasExtraArgsAllowed(params: {
     if (argument.startsWith("-") && argument !== "-") {
       throw new CommandPolicyError("OPTION_INJECTION", argument);
     }
+  }
+
+  // 裸解释器：模板里没有任何脚本/代码参数时，任何位置参数都等于指定脚本执行
+  if (interpreter && !hasScriptArg && params.extraArgs.length > 0) {
+    throw new CommandPolicyError(
+      "BARE_INTERPRETER",
+      params.extraArgs[0] as string,
+    );
   }
 }

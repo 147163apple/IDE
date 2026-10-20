@@ -395,15 +395,8 @@ export class ScopedWorktreeGateway {
               description:
                 "Literal extra argv entries; shell metacharacters are rejected",
             },
-            command: {
-              type: "string",
-              description: "Legacy free-form command (internal verification)",
-            },
-            executable: {
-              type: "string",
-              description: "Legacy structured executable",
-            },
           },
+          required: ["command_alias"],
         },
       },
       {
@@ -461,6 +454,7 @@ export class ScopedWorktreeGateway {
   public async callTool(
     name: string,
     rawInput: unknown,
+    options: { internal?: boolean } = {},
   ): Promise<MCPToolCallResult> {
     // G-09：任何工具调用先记账；熔断后一律拒绝（含未知工具名）
     const budgetDenial = this.consumeToolCallBudget(name);
@@ -472,7 +466,7 @@ export class ScopedWorktreeGateway {
       case "stagent_write_file":
         return this.handleWriteFile(rawInput);
       case "stagent_exec_command":
-        return this.handleExecCommand(rawInput);
+        return this.handleExecCommand(rawInput, options.internal === true);
       case "stagent_list_dir":
       case "stagent_list_directory":
         return this.handleListDir(rawInput);
@@ -1053,6 +1047,7 @@ export class ScopedWorktreeGateway {
 
   private async handleExecCommand(
     rawInput: unknown,
+    internal: boolean,
   ): Promise<MCPToolCallResult> {
     const parsed = StagentExecCommandSchema.safeParse(rawInput);
     if (!parsed.success) {
@@ -1068,10 +1063,38 @@ export class ScopedWorktreeGateway {
       };
     }
 
+    // W.3：旧 command / executable 入口只允许 orchestrator 内部验证调用。
+    // 对外工具定义已删除这两个字段，Worker 只能走 command_alias。
+    if (
+      !internal &&
+      (parsed.data.command !== undefined ||
+        parsed.data.executable !== undefined)
+    ) {
+      const msg =
+        "Worker must use command_alias; free-form command/executable is internal-only";
+      this.logAudit({
+        tool: "stagent_exec_command",
+        input: {
+          has_command: parsed.data.command !== undefined,
+          has_executable: parsed.data.executable !== undefined,
+        },
+        outcome: "BLOCKED",
+        violationCode: E_UNAUTHORIZED_COMMAND,
+        details: msg,
+      });
+      return {
+        isError: true,
+        content: [{ type: "text", text: `[${E_UNAUTHORIZED_COMMAND}] ${msg}` }],
+        error: { code: E_UNAUTHORIZED_COMMAND, message: msg },
+      };
+    }
+
     // 结构化 argv 优先（§9.1）；字符串形式仅用于兼容既有调用。
     // Worker 面走 `command_alias`：别名必须存在于合同验证命令中，额外参数
     // 仅接受字面量，含 shell 元字符一律 E_UNAUTHORIZED_COMMAND。
     let structured: { executable: string; args: string[] } | undefined;
+    /** 别名 + 已校验追加参数后的完整命令：只用于让 runner 做精确白名单匹配 */
+    let authorizedAliasCommand: string | undefined;
     if (parsed.data.command_alias !== undefined) {
       const alias = parsed.data.command_alias;
       const spec = this.contract.verification_spec.commands.find(
@@ -1109,6 +1132,7 @@ export class ScopedWorktreeGateway {
       try {
         assertAliasExtraArgsAllowed({
           executable: spec.executable,
+          templateArgs: spec.args,
           extraArgs,
         });
       } catch (err) {
@@ -1169,6 +1193,8 @@ export class ScopedWorktreeGateway {
         executable: spec.executable,
         args: [...spec.args, ...extraArgs],
       };
+      authorizedAliasCommand =
+        `${structured.executable} ${structured.args.join(" ")}`.trim();
     } else if (parsed.data.executable !== undefined) {
       structured = {
         executable: parsed.data.executable,
@@ -1216,10 +1242,18 @@ export class ScopedWorktreeGateway {
     }
 
     // 2. Whitelist compilation from contract (§9.1 structured commands)
+    // 精确匹配：不再接受「前缀 + 空格」的松散放行；别名追加参数只有在
+    // assertAliasExtraArgsAllowed 校验通过后，才把完整命令加入本轮白名单。
     const vSpec = this.contract.verification_spec;
     const allowedCommands: string[] = vSpec.commands.map((c) =>
       [c.executable, ...c.args].join(" "),
     );
+    if (
+      authorizedAliasCommand !== undefined &&
+      !allowedCommands.includes(authorizedAliasCommand)
+    ) {
+      allowedCommands.push(authorizedAliasCommand);
+    }
 
     // 3. Execution
     const taskBudgetMs =
