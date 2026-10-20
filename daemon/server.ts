@@ -51,6 +51,7 @@ import { ChatSessionManager } from "./chat/session-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
+import { ClaudeCodeAdapter } from "./worker/cli-host/claude-code-adapter";
 
 export interface DaemonServerOptions extends PortFinderOptions {
   repoRoot: string;
@@ -1096,7 +1097,11 @@ export class StagentDaemon {
 }
 
 function defaultChatAdapters(): ChatAdapter[] {
-  return [new BaselineChatAdapter(), new DemoChatAdapter()];
+  return [
+    new ClaudeCodeAdapter(),
+    new BaselineChatAdapter(),
+    new DemoChatAdapter(),
+  ];
 }
 
 export function createDaemon(options: DaemonServerOptions): StagentDaemon {

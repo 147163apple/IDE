@@ -502,7 +502,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task W.5a】Claude Code 适配器与 cli-host 黑盒实测 (v1.3.3 新增)
 * **任务编号**：`TASK-W.5a`
 * **前置依赖**：`TASK-W.2`, `TASK-C.6`（右栏会话通道）
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[PARTIAL]**（分支 `feat/w5a-claude-code`，未合并。已完成：cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL，假 CLI 实测 <2s）；用户决定一律 API Key + `--bare --settings <Stagent 生成> --mcp-config <空集> --strict-mcp-config`；permissions.deny + --disallowedTools 硬限制 + PreToolUse hook（异常一律拒绝，onFailure:block）；只用 `--resume <session_id>`；永不 bypassPermissions；Key 仅注入子进程且报错脱敏。hook 层 4 类绕过负例确定性测试通过。真实 CLI 2.1.296 仅用无效 Key 做过参数/流格式冒烟（403，未计费）。**未完成**：Daemon 环境无 ANTHROPIC_API_KEY，未做真实编辑/打断/续接实测；4 类绕过未在真实 CLI 上实测；Gateway MCP 端点依赖 W.4。故 `verified_on` 为空，control_mode=UNCONTROLLED_EXTERNAL。）
 * **核心目标**：
   1. 在 `daemon/worker/cli-host/` 专用子进程隔离模块中以 spawn 挂载 Claude Code CLI（结构化 argv、`shell:false`、进程树托管回收）；**全仓其余位置维持零 `child_process` 静态禁令**。
   2. **收敛策略（待实机验证，verified_on: 空）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。
