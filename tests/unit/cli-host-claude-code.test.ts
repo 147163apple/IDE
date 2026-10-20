@@ -387,3 +387,30 @@ describe("TASK-W.5a spawn 静态禁令", () => {
     expect(unexpected).toEqual([]);
   });
 });
+
+describe("TASK-W.5a 兼容端点环境转发", () => {
+  it("只转发 ANTHROPIC_BASE_URL/MODEL 等白名单变量，不泄漏其它环境", () => {
+    const saved = { ...process.env };
+    process.env["ANTHROPIC_BASE_URL"] = "https://example.invalid/anthropic";
+    process.env["ANTHROPIC_MODEL"] = "m-1";
+    process.env["SOME_OTHER_SECRET"] = "nope";
+    try {
+      const a = new ClaudeCodeAdapter({
+        apiKey: () => "k",
+        tmpRoot: os.tmpdir(),
+      });
+      const l = a.buildLaunch({
+        prompt: "x",
+        cwd: "/repo",
+        nativeSessionId: null,
+      });
+      expect(l.env["ANTHROPIC_BASE_URL"]).toBe(
+        "https://example.invalid/anthropic",
+      );
+      expect(l.env["ANTHROPIC_MODEL"]).toBe("m-1");
+      expect(l.env["SOME_OTHER_SECRET"]).toBeUndefined();
+    } finally {
+      process.env = saved;
+    }
+  });
+});

@@ -164,6 +164,8 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       STAGENT_HOOK_LOG: path.join(dir, "hook.log"),
       ...(allowBash ? { STAGENT_HOOK_ALLOW_BASH: "1" } : {}),
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
+      // 兼容端点（如 DeepSeek 的 Anthropic 兼容接口）：只转发这几个白名单变量
+      ...pickEnv(FORWARD_ENV),
     };
     return {
       command: this.opts.command ?? "claude",
@@ -292,6 +294,27 @@ export function translate(msg: Json, sawPartialText: boolean): AdapterEvent[] {
         });
       }
     }
+  }
+  return out;
+}
+
+/** 允许从 Daemon 环境转发给 Claude Code 子进程的模型/端点变量（不含其他密钥） */
+export const FORWARD_ENV = [
+  "ANTHROPIC_BASE_URL",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_SMALL_FAST_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  "API_TIMEOUT_MS",
+  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+] as const;
+
+function pickEnv(names: readonly string[]): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const n of names) {
+    const v = process.env[n];
+    if (v) out[n] = v;
   }
   return out;
 }
