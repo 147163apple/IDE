@@ -33,7 +33,7 @@ export function MonacoEditorPane({
   return (
     <div
       data-testid="monaco-pane"
-      className="flex h-full min-h-[300px] flex-col"
+      className="flex h-full min-h-[360px] flex-col"
     >
       <div className="flex items-center gap-2 border-b px-2 py-1 text-xs">
         <span className="font-mono">{path}</span>
@@ -66,20 +66,26 @@ export function MonacoEditorPane({
           {f.error}
         </div>
       )}
-      <div className={`min-h-0 flex-1 ${f.writable ? "" : "bg-zinc-50"}`}>
+      <div
+        className={`relative min-h-[300px] flex-1 ${f.writable ? "" : "bg-zinc-50"}`}
+      >
+        {/* Monaco 需要确定高度：绝对定位铺满父容器（浏览器实测发现高度为 0） */}
         {!f.loading && (
-          <Editor
-            height="100%"
-            path={path}
-            language={LANG[ext] ?? "plaintext"}
-            value={f.content}
-            onChange={(v) => f.setContent(v ?? "")}
-            options={{
-              readOnly: !f.writable,
-              minimap: { enabled: false },
-              fontSize: 12,
-            }}
-          />
+          <div data-testid="monaco-host" className="absolute inset-0">
+            <Editor
+              height="100%"
+              theme="vs-dark"
+              path={path}
+              language={LANG[ext] ?? "plaintext"}
+              value={f.content}
+              onChange={(v) => f.setContent(v ?? "")}
+              options={{
+                readOnly: !f.writable,
+                minimap: { enabled: false },
+                fontSize: 12,
+              }}
+            />
+          </div>
         )}
       </div>
     </div>
