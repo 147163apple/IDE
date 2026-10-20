@@ -28,6 +28,18 @@ import { runCommand, CommandSecurityError } from "../runner/command-runner";
 import { CostMonitor, E_COST_CAP_EXCEEDED } from "../guard/cost-monitor";
 import { LoopGuard, E_LOOP_CIRCUIT_TRIPPED } from "../guard/loop-guard";
 import {
+  guardAgentFileOperation,
+  ensureRoundStarted,
+} from "../protection/protection-list";
+import { ensureCheckpoint } from "../protection/auto-checkpoint";
+
+/** 从 Worktree 路径反推主仓库根（保护清单/快照始终归属主仓库） */
+function mainRepoRootOf(worktreeRoot: string): string {
+  const marker = `${path.sep}.stagent${path.sep}worktrees${path.sep}`;
+  const idx = worktreeRoot.indexOf(marker);
+  return idx > 0 ? worktreeRoot.slice(0, idx) : worktreeRoot;
+}
+import {
   isTestPath,
   scopeExplicitlyIncludesTests,
 } from "../guard/test-integrity";
@@ -631,6 +643,46 @@ export class ScopedWorktreeGateway {
             { type: "text", text: `[${E_TEST_FILE_WRITE_BLOCKED}] ${msg}` },
           ],
           error: { code: E_TEST_FILE_WRITE_BLOCKED, message: msg },
+        };
+      }
+    }
+
+    // 3.7 P.1 保护清单门禁（任何模式）：命中保护区先拦后写，拒绝即登记待审批卡。
+    // 清单读取出错/路径解析失败一律按拒绝处理（失败关闭），不静默放行。
+    {
+      const protectionRoot = mainRepoRootOf(this.worktreeRoot);
+      let gate: {
+        allowed: boolean;
+        reason: string;
+        cardId?: string | undefined;
+        entryName?: string | undefined;
+      };
+      try {
+        ensureRoundStarted(protectionRoot, "mcp-write");
+        await ensureCheckpoint(protectionRoot);
+        gate = guardAgentFileOperation(protectionRoot, safe.relativePath);
+      } catch (err) {
+        gate = {
+          allowed: false,
+          reason: `保护门卫不可用，按拒绝处理：${(err as Error).message}`,
+        };
+      }
+      if (!gate.allowed) {
+        this.logAudit({
+          tool: "stagent_write_file",
+          input: { path: safe.relativePath },
+          outcome: "BLOCKED",
+          violationCode: "PROTECTED_PATH",
+          details: gate.reason,
+        });
+        return {
+          isError: true,
+          content: [{ type: "text", text: gate.reason }],
+          error: {
+            code: "PROTECTED_PATH",
+            message: gate.reason,
+            details: { path: safe.relativePath, cardId: gate.cardId },
+          },
         };
       }
     }

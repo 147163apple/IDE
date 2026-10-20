@@ -36,7 +36,21 @@ vi.mock("@/lib/daemon-api", async (orig) => {
       status: "ok",
       port: 0,
       repoRoot: "/Users/tina/Desktop/1020",
+      currentBranch: "main",
     })),
+    fetchProtection: vi.fn(async () => ({
+      mode: "VIBE",
+      entries: [],
+      corrupt: null,
+      round: {
+        roundId: "round-test",
+        startedAt: "2026-10-21T00:00:00.000Z",
+        pending: [],
+        approvedFiles: [],
+      },
+      checkpoint: null,
+    })),
+    fetchProtectionRecommendations: vi.fn(async () => []),
     listContracts: vi.fn(async () => [contract]),
     fetchArchGraph: vi.fn(async () => {
       throw new Error("no graph in test");
@@ -96,10 +110,9 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     expect(screen.getByText("运行 Worker")).toBeInTheDocument();
     expect(screen.getByText("执行验证")).toBeInTheDocument();
     expect(screen.getByText(/查看 Diff/)).toBeInTheDocument();
-    // 执行中合同 → 分支与 Worktree 绑定
-    expect(screen.getByTestId("current-branch")).toHaveTextContent(
-      `task/${contract.contract_id}`,
-    );
+    // P.1 顺手修：顶栏分支改为显示主工作区真实分支（不再按合同拼 task/xxx）；
+    // 合同与 Worktree 绑定仍由 contract-info / workspace-binding 体现
+    expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
     expect(screen.getByTestId("workspace-binding")).toHaveAttribute(
       "data-bound",
       "worktree",

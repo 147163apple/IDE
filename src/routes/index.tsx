@@ -21,7 +21,11 @@ import {
 import type { EvidenceBundle } from "@/lib/evidence.schema";
 import {
   abortContract,
+  applyProtectionRecommendations,
   createChatSession,
+  decideProtectionCard,
+  fetchProtection,
+  fetchProtectionRecommendations,
   getChatSession,
   interruptChat,
   listChatAdapters,
@@ -44,9 +48,12 @@ import {
   runWorker,
   saveConnection,
   saveOpenAiKey,
+  undoProtectionRound,
   type ArchGraphPayload,
   type DaemonConnection,
   type ModelSettings,
+  type ProtectionRecommendationView,
+  type ProtectionStateView,
   type WorkerRunResult,
 } from "@/lib/daemon-api";
 import { ContractCard } from "@/components/contract/ContractCard";
@@ -62,6 +69,10 @@ import { useDaemonStream } from "@/hooks/use-daemon-stream";
 import { WorkspaceLayout } from "@/components/WorkspaceLayout";
 import { AgentChatPane } from "@/components/AgentChatPane";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
+import {
+  ProtectionApprovalCard,
+  ProtectionRecommendationCard,
+} from "@/components/ProtectionCard";
 import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
 import type { AgentSessionTransport } from "@/hooks/use-agent-session";
 import type { ChatEvent } from "@/lib/chat-events";
@@ -117,6 +128,16 @@ function Console() {
   const [mergeInfo, setMergeInfo] = useState<string | null>(null);
   const [settings, setSettings] = useState<ModelSettings | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [currentBranch, setCurrentBranch] = useState("main");
+  const [protection, setProtection] = useState<ProtectionStateView | null>(
+    null,
+  );
+  const [recommendations, setRecommendations] = useState<
+    ProtectionRecommendationView[]
+  >([]);
+  const [protectionBusy, setProtectionBusy] = useState(false);
+  const [undoInfo, setUndoInfo] = useState<string | null>(null);
+  const [recDismissed, setRecDismissed] = useState(false);
 
   const fileTree = useMemo(
     () =>
@@ -159,13 +180,101 @@ function Console() {
       setConnected(health.status === "ok");
       setDaemonPort(health.port);
       setRepoRoot(health.repoRoot);
+      setCurrentBranch(health.currentBranch || "main");
       setContracts(await listContracts(conn));
+      // P.1：保护清单/本轮授权/快照状态（轮询兜底；卡片靠它出现）
+      try {
+        const p = await fetchProtection(conn);
+        setProtection(p);
+        if (p.entries.length === 0 && !p.corrupt) {
+          setRecommendations(await fetchProtectionRecommendations(conn));
+        } else {
+          setRecommendations([]);
+        }
+      } catch {
+        // 保护接口异常不阻断主流程；门卫在后台仍按失败关闭运行
+      }
     } catch (err) {
       setConnected(false);
       setDaemonPort(null);
       setError((err as Error).message);
     }
   }, [conn]);
+
+  // P.1：推荐卡「以后再说」按仓库记住，不反复打扰
+  useEffect(() => {
+    if (!repoRoot) return;
+    try {
+      setRecDismissed(
+        localStorage.getItem(`stagent.protectionRecDismissed:${repoRoot}`) ===
+          "1",
+      );
+    } catch {
+      setRecDismissed(false);
+    }
+  }, [repoRoot]);
+
+  const dismissRecommendations = useCallback(() => {
+    setRecDismissed(true);
+    try {
+      if (repoRoot)
+        localStorage.setItem(`stagent.protectionRecDismissed:${repoRoot}`, "1");
+    } catch {
+      // 隐私模式下写不了，只影响本次会话
+    }
+  }, [repoRoot]);
+
+  const onDecideProtection = useCallback(
+    async (cardId: string, decision: "approve" | "deny") => {
+      setProtectionBusy(true);
+      try {
+        await decideProtectionCard(conn, cardId, decision);
+        await refresh();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setProtectionBusy(false);
+      }
+    },
+    [conn, refresh],
+  );
+
+  const onApplyRecommendations = useCallback(
+    async (names: string[]) => {
+      setProtectionBusy(true);
+      try {
+        await applyProtectionRecommendations(conn, names);
+        await refresh();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setProtectionBusy(false);
+      }
+    },
+    [conn, refresh],
+  );
+
+  const onUndoRound = useCallback(async () => {
+    // 白话确认：必须写明「这期间你手动改的也会一起撤销」（P1 卡核心目标 9）
+    const ok = window.confirm(
+      "回到这轮开始前的样子？这轮改过的文件会恢复；这期间你自己手动改的部分也会一起撤销。（只撤 AI、保留手改的能力以后再做）",
+    );
+    if (!ok) return;
+    setProtectionBusy(true);
+    try {
+      const result = await undoProtectionRound(conn);
+      setUndoInfo(
+        result.undone
+          ? `已回到本轮开始前${result.deletedFiles?.length ? `，并删除本轮新建的 ${result.deletedFiles.length} 个文件` : ""}。`
+          : (result.reason ?? "没有可撤销的一轮改动"),
+      );
+      await refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setProtectionBusy(false);
+    }
+  }, [conn, refresh]);
 
   // 右栏会话：CHAT_EVENT 经同一条 WS 推送，这里做一个简单的订阅分发
   const chatListeners = useRef(new Set<(e: ChatEvent) => void>());
@@ -288,6 +397,21 @@ function Console() {
     return () => clearInterval(timer);
   }, [refresh, stream.status]);
 
+  // P.1：待审批卡要“立刻”出现（AI 被拦在原地），保护状态单独 3s 轮询
+  useEffect(() => {
+    if (!connected) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        try {
+          setProtection(await fetchProtection(conn));
+        } catch {
+          // 单次取不到不影响；下一轮再试，门卫仍在后台拦截
+        }
+      })();
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [connected, conn]);
+
   // 选中已验收合同时自动恢复 Evidence：否则刷新页面后结论与「核销」按钮都消失
   useEffect(() => {
     if (!selectedId || selected?.lifecycle_state !== "AUDITED") return;
@@ -356,9 +480,10 @@ function Console() {
       <WorkspaceLayout
         repoName={repoName}
         repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
-        baseBranch={selected?.authorization.git.base_branch ?? "main"}
-        runMode="VIBE"
+        baseBranch={currentBranch}
+        runMode={protection?.mode ?? "VIBE"}
         workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
+        daemonConnected={connected}
         contract={workspaceContract}
         files={fileTree}
         defaultOpenStudio
@@ -392,6 +517,17 @@ function Console() {
         }
         headerExtra={
           <>
+            {protection?.checkpoint && (
+              <button
+                type="button"
+                data-testid="undo-round"
+                disabled={protectionBusy}
+                onClick={() => void onUndoRound()}
+                className="ml-2 flex items-center gap-1 rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
+              >
+                ↶ 撤销本轮改动
+              </button>
+            )}
             <span
               className={`ml-2 flex items-center gap-1 text-xs ${connected ? "text-emerald-500" : "text-destructive"}`}
             >
@@ -445,6 +581,31 @@ function Console() {
         }
         banner={
           <>
+            {protection?.round.pending[0] && (
+              <ProtectionApprovalCard
+                card={protection.round.pending[0]}
+                busy={protectionBusy}
+                onDecide={(id, d) => void onDecideProtection(id, d)}
+              />
+            )}
+            {!recDismissed &&
+              recommendations.length > 0 &&
+              (protection?.entries.length ?? 0) === 0 && (
+                <ProtectionRecommendationCard
+                  recommendations={recommendations}
+                  busy={protectionBusy}
+                  onApply={(names) => void onApplyRecommendations(names)}
+                  onDismiss={dismissRecommendations}
+                />
+              )}
+            {undoInfo && (
+              <div
+                data-testid="undo-info"
+                className="border-b border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700"
+              >
+                {undoInfo}
+              </div>
+            )}
             <ConnectionBar
               conn={conn}
               onChange={(next) => {
@@ -794,6 +955,10 @@ function Console() {
                           setMergeInfo(
                             `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
                               result.worktreeRemoved ? "已清理" : "保留"
+                            }${
+                              result.conflictResolution === "USER_FIRST_DISCARD"
+                                ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
+                                : ""
                             }`,
                           );
                         })

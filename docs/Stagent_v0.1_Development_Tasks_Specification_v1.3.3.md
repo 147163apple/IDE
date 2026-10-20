@@ -48,8 +48,8 @@
 | **TASK-S.1** | Supervisor 建议会话与持久化存储管理 | 建议中枢 | **[PARTIAL]**（旧版 S.1 已在 main，提交 `1a75616`；v1.3.3 增量——独立预算、规则优先 L0/L1、默认关闭 3s 防抖——**待完成**） | P4 智能建议 | • Local-First 会话落盘 (`.stagent/sessions/`)、Prompt Pipeline<br>• 依赖层静态 AST 扫描禁令 + **运行时越权调用拦截正例断言 (G-11b)**<br>• **[待完成·v1.3.3]** 独立日预算分账 `.stagent/supervisor-budget.json` (超限拒绝模型调用且不侵占 Worker)<br>• **[待完成·v1.3.3]** 规则优先 L0/L1；唤醒节流器 3s Debounce **默认关闭**（旧版节流器默认开启，专用用例 18 个为历史记录） |
 | **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[REWORK]**（旧设计实现存于未合并分支 `wip/s2-s3-supervisor-old-design`，**非 v0.1 验收依据**） | P4 合同草案 | • **v0.1**：用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• **断言未决问题 100% 保留至草案元数据供用户确认 (G-11)**<br>• 移植保留脱敏模块 `src/lib/ipc/redaction.ts`<br>• **v0.2+**：成熟度评分（原 4 维评估器）推迟 `[D4]` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** / **[REWORK]**（旧设计实现存于未合并分支 `wip/s2-s3-supervisor-old-design`，**非 v0.1 验收依据**） | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播（`MATURITY_UPDATED` / `DRAFT_PROPOSED` / `STATUS_CHANGED`）、ACCEPT/SNOOZE/DISMISS 上行 action<br>• **v0.1 保留范围**：仅脱敏模块 `redaction.ts`（并入 S.2 精简版移植）；鉴权连接过滤原则不变 |
-| **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]** | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• **`AdapterCapabilityDeclaration` 补齐第 9 项 `known_limitations` (G-10)**<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`，默认拒绝未知能力<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
-| **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]** | P2 工具管辖 | • 统一为 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• **`stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`**<br>• **强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)**<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
+| **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（卡面成果在 `wip/s2-s3-supervisor-old-design` 分支，未进 main；main 仅有旧底座 `ai-worker.ts`） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• **`AdapterCapabilityDeclaration` 补齐第 9 项 `known_limitations` (G-10)**<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`，默认拒绝未知能力<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
+| **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（卡面成果在 `wip/s2-s3-supervisor-old-design` 分支，未进 main；main 网关仍为旧 5 工具版） | P2 工具管辖 | • 统一为 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• **`stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`**<br>• **强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)**<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.3** | 测试环境、秘密脱敏与网络/端口策略守卫 | 编码内核 | **[NEW_TASK]** | P2 环境网络 | • 环境变量白名单过滤、`CI=true` 注入、`env_file_grants` 按命令授权<br>• **秘密遮蔽严密发生在日志截断之前**<br>• 网络策略拦截 (`DENY` / `EXPLICIT_TARGETS` / `USER_APPROVED`)、动态端口 |
 | **TASK-W.4** | 高风险执行威胁守卫与运行时能力复检 (闭环 G-01 & G-20) | 编码内核 | **[NEW_TASK]** | P2 安全威胁 | • **闭环 G-01 & G-20**：落地 `daemon/worker/threat-guard.ts`<br>• 命令 argv 与仓库信任检查，高风险特权命令抛 `E_UNSAFE_EXECUTION` 并阻断<br>• 会话期周期性复检，检测到绕过立即降级为 `UNCONTROLLED_EXTERNAL` 并阻断 Evidence<br>• **落实 4 类绕过路径不可用负例断言** |
 | **TASK-B.1** | 本地 AST 增量依赖图分析引擎 | 架构感知 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | A §3 架构引擎 | • **统一路径前缀：`src/**/*.{ts,tsx,js,jsx,mjs,cjs,json}` (G-16)**<br>• 冷启动 ≤1.5s，单文件增量修补 ≤20ms |
@@ -685,7 +685,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task C.6】右栏 Agent 流式会话与打断续接 (v1.3.3 新增)
 * **任务编号**：`TASK-C.6`
 * **前置依赖**：`TASK-C.1`, `TASK-D.1`
-* **任务状态**：**[COMPLETED]**（分支 `feat/c6-agent-chat`，未合并主线。已用假适配器 + 演示 Agent 测过：流式、工具卡片、排队、打断（门闩立即生效、适配器 <2s 停止）、`.stagent/sessions/` 持久化与重启续接；真实 Claude Code 的流式/打断/续接见 W.5a。Adapter：自研保底（OpenAI 兼容，只聊天）/ 演示 Agent（不调用模型）。打断会清空排队消息。）
+* **任务状态**：**[COMPLETED]**（已合并主线 `43496c0`。已用假适配器 + 演示 Agent 测过：流式、工具卡片、排队、打断（门闩立即生效、适配器 <2s 停止）、`.stagent/sessions/` 持久化与重启续接；真实 Claude Code 的流式/打断/续接见 W.5a。Adapter：自研保底（OpenAI 兼容，只聊天）/ 演示 Agent（不调用模型）。打断会清空排队消息。）
 * **核心目标**：
   1. 右栏会话流式渲染（逐 Token）、工具调用卡片、改动预览；
   2. Stop/打断：用户随时中断，Agent 进程 2s 内停止输出；排队追加消息；

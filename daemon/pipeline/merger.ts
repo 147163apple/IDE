@@ -35,6 +35,8 @@ export interface MergeResult {
   commitMessage: string;
   contract: SoftwareContract;
   worktreeRemoved: boolean;
+  /** P.1 User-First Discard：发生冲突时是否按「用户主分支永远胜出」自动仲裁 */
+  conflictResolution: "USER_FIRST_DISCARD" | null;
 }
 
 export class MergeGateError extends Error {
@@ -93,6 +95,7 @@ export function buildMergeCommitMessage(
   contract: SoftwareContract,
   evidence: EvidenceBundle,
   reviewer: string,
+  conflictResolution: "USER_FIRST_DISCARD" | null = null,
 ): string {
   const trailers = [
     `Stagent-Contract-ID: ${contract.contract_id}`,
@@ -108,6 +111,11 @@ export function buildMergeCommitMessage(
     `feat(${contract.contract_id.replace(/^contract_/, "")}): ${contract.intent.title}`,
     "",
     "由 Stagent 受限执行并通过全部门禁验证。",
+    ...(conflictResolution
+      ? [
+          "冲突处理：以用户主分支版本为准，Worker 冲突改动已丢弃（User-First Discard）。",
+        ]
+      : []),
     "",
     ...trailers,
   ].join("\n");
@@ -218,17 +226,34 @@ async function mergeInternal(
   await assertMainTreeClean(repoRoot);
 
   // 4. Squash merge（先确认主分支无未完成 merge 状态）
-  const merge = await execGit(["merge", "--squash", branch], repoRoot);
+  let merge = await execGit(["merge", "--squash", branch], repoRoot);
+  let conflictResolution: "USER_FIRST_DISCARD" | null = null;
   if (merge.exitCode !== 0) {
     await execGit(["merge", "--abort"], repoRoot);
-    throw new MergeGateError(
-      "E_MERGE_CONFLICT",
-      `git merge --squash failed: ${merge.stderr || merge.stdout}`,
+    // P.1 User-First Discard Rule（架构 §0.6.4）：不向用户抛 Git 冲突界面，
+    // 冲突处永远以用户当前主分支版本为准，丢弃 Worker 的冲突改动，AI 需基于最新代码重做。
+    merge = await execGit(
+      ["merge", "--squash", "-X", "ours", branch],
+      repoRoot,
     );
+    if (merge.exitCode === 0) {
+      conflictResolution = "USER_FIRST_DISCARD";
+    } else {
+      await execGit(["merge", "--abort"], repoRoot);
+      throw new MergeGateError(
+        "E_MERGE_CONFLICT",
+        `git merge --squash failed: ${merge.stderr || merge.stdout}`,
+      );
+    }
   }
 
   // 5. 生成 Trailer 提交
-  const message = buildMergeCommitMessage(contract, snapshot, options.reviewer);
+  const message = buildMergeCommitMessage(
+    contract,
+    snapshot,
+    options.reviewer,
+    conflictResolution,
+  );
   const commit = await execGit(["commit", "-m", message], repoRoot);
   if (commit.exitCode !== 0) {
     throw new MergeGateError(
@@ -264,6 +289,7 @@ async function mergeInternal(
     commitMessage: message,
     contract: merged,
     worktreeRemoved,
+    conflictResolution,
   };
 }
 

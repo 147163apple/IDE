@@ -33,6 +33,8 @@ dist-ssr
 
 # Stagent runtime
 .stagent/
+# 本地临时目录（含 .tmp/deepseek.env 等本机配置，绝不入库）
+.tmp/
 
 # Local build / test scratch (not part of source)
 .tmp/

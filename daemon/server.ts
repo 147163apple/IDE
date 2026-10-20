@@ -39,6 +39,24 @@ import {
   loadLatestEvidenceSnapshot,
   squashMerge,
 } from "./pipeline/merger";
+import {
+  addProtectionEntry,
+  closeRound,
+  decideApproval,
+  drainProtectionRequests,
+  ensureRoundStarted,
+  loadProtectionList,
+  loadRoundState,
+  protectionMode,
+  recommendProtections,
+  removeProtectionEntry,
+} from "./protection/protection-list";
+import {
+  clearCheckpoint,
+  ensureCheckpoint,
+  getCheckpoint,
+  undoLatestCheckpoint,
+} from "./protection/auto-checkpoint";
 import { softwareContractSchema } from "../src/lib/contract.schema";
 import type { SoftwareContract } from "../src/lib/contract.schema";
 import type { EvidenceBundle } from "../src/lib/evidence.schema";
@@ -54,7 +72,7 @@ import {
   recordViolation,
   type FileAccessContext,
 } from "./editor/worktree-files";
-import { getWorktreePath } from "./git/worktree-manager";
+import { getWorktreePath, execGit } from "./git/worktree-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
@@ -87,6 +105,8 @@ export interface DaemonStatusResponse {
   pid: number;
   port: number;
   repoRoot: string;
+  /** 主工作区真实检出的分支（P.1 顺手修：顶栏显示实际分支，不再硬编码 main） */
+  currentBranch: string | null;
   uptime: number;
   activeContracts: string[];
 }
@@ -734,6 +754,174 @@ export class StagentDaemon {
     }
   }
 
+  /**
+   * TASK-P.1 保护清单与本轮授权的控制面 API。
+   * 清单修改只走这里（UI 开关/推荐卡），AI 的任何写通道都被门卫挡住；
+   * hook 通道投递的拦截请求在每次访问时并入待审批卡（文件队列，不新增 WS 帧）。
+   */
+  private async handleProtection(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+  ): Promise<void> {
+    try {
+      drainProtectionRequests(this.repoRoot);
+
+      if (method === "GET" && pathname === "/api/protection") {
+        let entries: unknown[] = [];
+        let corrupt: string | null = null;
+        try {
+          entries = loadProtectionList(this.repoRoot).entries;
+        } catch (err) {
+          corrupt = (err as Error).message;
+        }
+        const state = loadRoundState(this.repoRoot);
+        const cp = getCheckpoint(this.repoRoot);
+        this.sendJson(res, 200, {
+          mode: entries.length > 0 ? "PROTECTED" : "VIBE",
+          entries,
+          corrupt,
+          round: {
+            roundId: state.roundId,
+            startedAt: state.startedAt,
+            pending: state.pending,
+            approvedFiles: state.approvedFiles,
+          },
+          checkpoint: cp ? { roundId: cp.roundId, at: cp.at } : null,
+        });
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/protection/recommendations") {
+        this.sendJson(res, 200, {
+          recommendations: recommendProtections(this.repoRoot),
+        });
+        return;
+      }
+
+      if (
+        method === "POST" &&
+        pathname === "/api/protection/recommendations/apply"
+      ) {
+        const body = (await this.readJsonBody(req)) as { names?: string[] };
+        const wanted = new Set(body.names ?? []);
+        const recs = recommendProtections(this.repoRoot);
+        const added = recs
+          .filter((r) => wanted.has(r.name))
+          .map((r) => addProtectionEntry(this.repoRoot, r.name, r.patterns));
+        this.sendJson(res, 200, {
+          added,
+          entries: loadProtectionList(this.repoRoot).entries,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/protection/entries") {
+        const body = (await this.readJsonBody(req)) as {
+          name?: string;
+          patterns?: string[];
+        };
+        const name = (body.name ?? "").trim();
+        const patterns = (body.patterns ?? []).filter(
+          (p) => typeof p === "string" && p.trim().length > 0,
+        );
+        if (!name || patterns.length === 0) {
+          this.sendJson(res, 400, { error: "name 与 patterns 均必填" });
+          return;
+        }
+        const entry = addProtectionEntry(this.repoRoot, name, patterns);
+        this.sendJson(res, 201, {
+          entry,
+          entries: loadProtectionList(this.repoRoot).entries,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/protection/entries/remove") {
+        const body = (await this.readJsonBody(req)) as { id?: string };
+        if (!body.id || !removeProtectionEntry(this.repoRoot, body.id)) {
+          this.sendJson(res, 404, { error: "entry not found" });
+          return;
+        }
+        this.sendJson(res, 200, {
+          entries: loadProtectionList(this.repoRoot).entries,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/protection/decisions") {
+        const body = (await this.readJsonBody(req)) as {
+          cardId?: string;
+          decision?: string;
+        };
+        if (
+          !body.cardId ||
+          (body.decision !== "approve" && body.decision !== "deny")
+        ) {
+          this.sendJson(res, 400, { error: "cardId 与 decision 必填" });
+          return;
+        }
+        const card = decideApproval(this.repoRoot, body.cardId, body.decision);
+        if (!card) {
+          this.sendJson(res, 404, { error: "card not found" });
+          return;
+        }
+        const state = loadRoundState(this.repoRoot);
+        this.sendJson(res, 200, {
+          card,
+          pending: state.pending,
+          approvedFiles: state.approvedFiles,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/protection/round/start") {
+        try {
+          const state = ensureRoundStarted(this.repoRoot, "manual");
+          const cp = await ensureCheckpoint(this.repoRoot);
+          this.sendJson(res, 200, {
+            roundId: state.roundId,
+            checkpointAt: cp.at,
+          });
+        } catch (err) {
+          this.sendJson(res, 409, {
+            error: "E_CHECKPOINT_FAILED",
+            message: `快照失败，本轮不开工：${(err as Error).message}`,
+          });
+        }
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/protection/undo") {
+        try {
+          const result = await undoLatestCheckpoint(this.repoRoot);
+          this.sendJson(res, result.undone ? 200 : 404, result);
+        } catch (err) {
+          this.sendJson(res, 409, {
+            error: "E_UNDO_FAILED",
+            message: (err as Error).message,
+          });
+        }
+        return;
+      }
+
+      if (method === "GET" && pathname === "/api/protection/pending") {
+        const state = loadRoundState(this.repoRoot);
+        this.sendJson(res, 200, {
+          roundId: state.roundId,
+          pending: state.pending,
+          approvedFiles: state.approvedFiles,
+        });
+        return;
+      }
+
+      this.sendJson(res, 404, { error: "Not Found", path: pathname });
+    } catch (err) {
+      this.sendJson(res, 400, { error: (err as Error).message });
+    }
+  }
+
   /** TASK-C.6 右栏会话 REST；流式事件经 WS CHAT_EVENT 推送 */
   private async handleChat(
     req: http.IncomingMessage,
@@ -769,6 +957,17 @@ export class StagentDaemon {
           return;
         }
         if (method === "POST" && action === "messages") {
+          // P.1：本轮开工前必须有快照（快照失败则本轮不开工）
+          try {
+            ensureRoundStarted(this.repoRoot, "chat");
+            await ensureCheckpoint(this.repoRoot);
+          } catch (err) {
+            this.sendJson(res, 409, {
+              error: "E_CHECKPOINT_FAILED",
+              message: `快照失败，本轮不开工：${(err as Error).message}`,
+            });
+            return;
+          }
           const body = (await this.readJsonBody(req)) as { text?: string };
           const result = this.chat.send(id, String(body.text ?? ""));
           this.sendJson(res, 202, { result });
@@ -820,12 +1019,18 @@ export class StagentDaemon {
       method === "GET" &&
       (pathname === "/health" || pathname === "/api/status")
     ) {
+      const branchRes = await execGit(
+        ["rev-parse", "--abbrev-ref", "HEAD"],
+        this.repoRoot,
+      ).catch(() => null);
       const payload: DaemonStatusResponse = {
         status: this.stopping ? "stopping" : "ok",
         version: this.version,
         pid: process.pid,
         port: this.currentPort ?? 0,
         repoRoot: this.repoRoot,
+        currentBranch:
+          branchRes?.exitCode === 0 ? branchRes.stdout || null : null,
         uptime: process.uptime(),
         activeContracts: [...this.activeContracts],
       };
@@ -892,6 +1097,15 @@ export class StagentDaemon {
         return;
       }
       await this.handleWorktreeFiles(req, res, method, parsedUrl);
+      return;
+    }
+
+    if (pathname.startsWith("/api/protection")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleProtection(req, res, method, pathname);
       return;
     }
 
@@ -1029,6 +1243,9 @@ export class StagentDaemon {
               evidence: snapshot,
               reviewer: body.reviewer ?? "local-user",
             });
+            // P.1：合并完成即关闭本轮（授权作废、快照不再可撤，避免撤掉已合并提交）
+            closeRound(this.repoRoot, "MERGED");
+            clearCheckpoint(this.repoRoot);
             this.emitContractUpdate(result.contract);
             this.sendJson(res, 200, { result });
           } catch (err) {
