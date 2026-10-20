@@ -537,7 +537,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task C.1】Cursor 式三栏 IDE 响应式工作台骨架与 Studio 视口
 * **任务编号**：`TASK-C.1`
 * **前置依赖**：`TASK-D.1`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（分支 `feat/c1-three-column-layout`，待合并主线；门禁：tsc 0 错、eslint 0 错、npm test 53 文件 / 435 用例全过，其中 tests/ui/workspace-layout.test.tsx 7 用例）
 * **核心目标**：
   1. 构建左栏（文件树/雷达）、中栏（Monaco/Diff/Supervisor Studio 多标签与分屏）、右栏（Coding Agent 对话）的三栏 IDE 布局。
   2. **中栏多标签与分屏架构**：
@@ -546,7 +546,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   3. **Header 补齐 5 项展示要素与 HUD 胶囊 (G-06)**：
      - 仓库名称；
      - **当前分支**（活动合同执行期展示 `task/{contract_id}`，平时展示 Base 分支）；
-     - **运行模式**（清晰展示 `EXPLORATION` 探索模式 vs `CONTRACT_EXECUTION` 合同执行模式）；
+     - **运行模式**（v1.3.3：清晰展示 `VIBE` 自由模式（默认）vs `PROTECTED` 保护模式；是否有合同正在执行由合同信息与执行状态单独展示）；
      - 当前合同 ID 与绑定的 Worktree 物理绝对路径；
      - **Worker 受控状态徽标**（`GATEWAY_ENFORCED` 绿色受控 vs `UNCONTROLLED_EXTERNAL` 黄色非受控）；
      - **Supervisor 入口**（v0.1：一键打开 Studio 快捷入口；成熟度打分徽章、未决风险气泡推迟 v0.2+）。
