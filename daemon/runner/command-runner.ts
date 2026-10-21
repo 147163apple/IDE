@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { StringDecoder } from "node:string_decoder";
-import { applyNetworkPolicy } from "../worker/policy-guard";
-import { sanitizeEnvironment, type EnvSanitizerOptions } from "./env-filter";
+import { resolveEnvironment } from "../worker/policy-guard";
+import { type EnvSanitizerOptions } from "./env-filter";
 import { killProcessTree, type ProcessTreeKillResult } from "./process-tree";
 
 export const E_COMMAND_REJECTED = "COMMAND_REJECTED";
@@ -398,10 +398,7 @@ export async function runCommand(
   const maxOutputChars = options.maxOutputChars ?? 100_000;
   const env =
     options.resolvedEnv ??
-    applyNetworkPolicy(
-      sanitizeEnvironment(process.env, options.envOptions),
-      options.networkPolicy,
-    );
+    resolveEnvironment(process.env, options.envOptions, options.networkPolicy);
 
   const startTime = Date.now();
   let timedOut = false;

@@ -25,10 +25,19 @@ import {
 import { killProcessTree } from "../runner/process-tree";
 import { writeStateFile } from "../guard/state-store";
 import {
+  loadCurrentGatewayViolation,
+  saveGatewayViolation,
+} from "../guard/gateway-violation-store";
+import {
   AiWorker,
   type WorkerModelClient,
   type WorkerRunResult,
 } from "../worker/ai-worker";
+import {
+  RuntimeInterceptor,
+  type GatewayViolation,
+} from "../worker/runtime-interceptor";
+import { assessCommandThreat, isRepoTrusted } from "../worker/threat-guard";
 import { OpenAiWorkerClient } from "../worker/openai-client";
 import { planDependencyStrategy, runIsolatedInstall } from "../deps/strategy";
 import { mountDependencySymlink } from "../deps/resolver";
@@ -53,6 +62,8 @@ export interface OrchestratorOptions {
   onTerminalLine?:
     | ((contractId: string, stream: "stdout" | "stderr", line: string) => void)
     | undefined;
+  /** TASK-W.4：Gateway 运行时违规广播出口 */
+  onGatewayViolation?: ((violation: GatewayViolation) => void) | undefined;
 }
 
 export interface ExecutionOutcome {
@@ -68,6 +79,8 @@ export class ContractOrchestrator {
   private readonly onTerminalLine?:
     | ((contractId: string, stream: "stdout" | "stderr", line: string) => void)
     | undefined;
+  private readonly onGatewayViolation?:
+    ((violation: GatewayViolation) => void) | undefined;
   /** 在途执行（execute/runWorker）的中止控制器：abort 端点凭此强杀子进程树 */
   private readonly abortControllers = new Map<string, AbortController>();
   /** 已请求中止但执行尚未开始的合同：注册控制器时立即进入已中止态 */
@@ -78,6 +91,7 @@ export class ContractOrchestrator {
     this.store = new ContractStore(this.repoRoot);
     this.acknowledgeDirty = options.acknowledgeDirty ?? false;
     this.onTerminalLine = options.onTerminalLine;
+    this.onGatewayViolation = options.onGatewayViolation;
   }
 
   getStore(): ContractStore {
@@ -302,10 +316,8 @@ export class ContractOrchestrator {
       );
     }
 
-    const { gateway, costMonitor, loopGuard, worktreePath } = this.buildRuntime(
-      current,
-      signal,
-    );
+    const { gateway, costMonitor, loopGuard, worktreePath, interceptor } =
+      this.buildRuntime(current, signal);
 
     this.store.transition({ contractId, lifecycleState: "VERIFYING" });
 
@@ -328,8 +340,45 @@ export class ContractOrchestrator {
       passed: boolean;
     }> = [];
     const portConflictAliases: string[] = [];
+    const threatBlockedAliases: string[] = [];
+    // W.4：执行前信任校验；真实 Worktree 带 .git 文件，视为已信任仓库
+    const repoTrusted = isRepoTrusted(worktreePath);
 
     for (const command of current.verification_spec.commands) {
+      // W.4：运行时复检降级后，内部验证调用不再豁免，直接跳过且不产生子进程
+      if (interceptor.isStopped() || !interceptor.canProduceEvidence()) {
+        threatBlockedAliases.push(command.alias);
+        verificationResults.push({
+          alias: command.alias,
+          exitCode: 1,
+          stdout: "",
+          stderr: "运行时复检已降级为 UNCONTROLLED_EXTERNAL，受控执行停止",
+          durationMs: 0,
+          passed: false,
+        });
+        continue;
+      }
+
+      // W.4：威胁守卫必须在创建子进程之前；拒绝即跳过 gateway，不产生任何进程
+      const threat = assessCommandThreat({
+        executable: command.executable,
+        args: command.args,
+        worktreeRoot: worktreePath,
+        repoTrusted,
+      });
+      if (!threat.allowed) {
+        threatBlockedAliases.push(command.alias);
+        verificationResults.push({
+          alias: command.alias,
+          exitCode: 1,
+          stdout: "",
+          stderr: threat.reason,
+          durationMs: 0,
+          passed: false,
+        });
+        continue;
+      }
+
       const res = await gateway.callTool(
         "stagent_exec_command",
         {
@@ -372,37 +421,66 @@ export class ContractOrchestrator {
       gateway.wasTestsModified() || worktreeChanged.some(isTestPath);
     const allPassed = verificationResults.every((r) => r.passed);
     const tripped = loopGuard.isTripped() || costMonitor.isTripped();
-    const portConflict = portConflictAliases.length > 0;
+    // 只有「除端口冲突外没有别的失败」时，才把整轮归因为端口冲突；
+    // 若同时存在断言失败，仍按 FAILED/UNSAFE_EXECUTION 处理。
+    const failedNonPort = verificationResults.some(
+      (r) => !r.passed && !portConflictAliases.includes(r.alias),
+    );
+    const portConflict = portConflictAliases.length > 0 && !failedNonPort;
+    const threatBlocked = threatBlockedAliases.length > 0;
+    const interceptorBlocked =
+      interceptor.isStopped() ||
+      !interceptor.canProduceEvidence() ||
+      loadCurrentGatewayViolation(
+        this.repoRoot,
+        current.contract_id,
+        current.contract_revision,
+      ) !== null;
 
     // 端口冲突属于环境问题，不按断言失败处理：BLOCKED + E_PORT_CONFLICT，
     // 由用户清理端口后重跑，而不是让 Worker 误以为用例写错去改代码。
-    const status = portConflict
+    const status = interceptorBlocked
       ? "BLOCKED"
-      : allPassed
-        ? "PASSED"
-        : tripped
+      : threatBlocked
+        ? "BLOCKED"
+        : portConflict
           ? "BLOCKED"
-          : "FAILED";
-    const reasonCode = portConflict
+          : allPassed
+            ? "PASSED"
+            : tripped
+              ? "BLOCKED"
+              : "FAILED";
+    const reasonCode = interceptorBlocked
       ? ("UNSAFE_EXECUTION" as const)
-      : allPassed
-        ? undefined
-        : costMonitor.isTripped()
-          ? ("BUDGET_EXHAUSTED" as const)
-          : loopGuard.isTripped()
-            ? ("VERIFICATION_RETRY_LIMIT" as const)
-            : ("UNSAFE_EXECUTION" as const);
+      : threatBlocked
+        ? ("UNSAFE_EXECUTION" as const)
+        : portConflict
+          ? ("UNSAFE_EXECUTION" as const)
+          : allPassed
+            ? undefined
+            : costMonitor.isTripped()
+              ? ("BUDGET_EXHAUSTED" as const)
+              : loopGuard.isTripped()
+                ? ("VERIFICATION_RETRY_LIMIT" as const)
+                : ("UNSAFE_EXECUTION" as const);
 
     const evidence = await this.writeEvidence(
       current,
       {
         status,
         ...(reasonCode === undefined ? {} : { reasonCode }),
-        summary: portConflict
-          ? `验证被端口占用阻断（${portConflictAliases.join(", ")}）：这是环境冲突，不是断言失败。请停止占用端口的进程后重试`
-          : allPassed
-            ? `All ${verificationResults.length} verification command(s) passed`
-            : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
+        workerControlMode: interceptorBlocked
+          ? "UNCONTROLLED_EXTERNAL"
+          : current.worker_spec.control_mode,
+        summary: interceptorBlocked
+          ? "运行时复检发现 Adapter 能力漂移或越权通道，已降级为 UNCONTROLLED_EXTERNAL 并停止受控执行"
+          : threatBlocked
+            ? `验证被威胁守卫阻断（${threatBlockedAliases.join(", ")}）：命令可能在受控边界之外，已拒绝执行且未产生子进程`
+            : portConflict
+              ? `验证被端口占用阻断（${portConflictAliases.join(", ")}）：这是环境冲突，不是断言失败。请停止占用端口的进程后重试`
+              : allPassed
+                ? `All ${verificationResults.length} verification command(s) passed`
+                : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
         verificationResults,
         scopePassed: true,
         forbiddenViolations: [],
@@ -573,6 +651,7 @@ export class ContractOrchestrator {
     costMonitor: CostMonitor;
     loopGuard: LoopGuard;
     worktreePath: string;
+    interceptor: RuntimeInterceptor;
   } {
     const worktreePath = getWorktreePath(this.repoRoot, contract.contract_id);
     const guardDir = path.join(this.repoRoot, ".stagent", "guard");
@@ -591,9 +670,33 @@ export class ContractOrchestrator {
       maxRetries: contract.authorization.budget_limits.max_verification_retries,
       statePath: path.join(guardDir, "loop.json"),
     });
+    const interceptor = new RuntimeInterceptor({
+      snapshot: {
+        adapter_id: contract.worker_spec.adapter_id,
+        control_mode: contract.worker_spec.control_mode,
+        tool_interception_supported: true,
+        filesystem_permissions: "GATEWAY_ONLY",
+        command_permissions: "WHITELIST_ONLY",
+        config_fingerprint: `${contract.schema_version}:${contract.contract_revision}:${contract.worker_spec.adapter_id}`,
+      },
+      worktreeRoot: worktreePath,
+      allowedAliases: contract.verification_spec.commands.map((c) => c.alias),
+      onDowngrade: (violation) => {
+        // 按合同隔离落盘；revision 变化后旧记录自动失效
+        saveGatewayViolation(
+          this.repoRoot,
+          contract.contract_id,
+          contract.contract_revision,
+          violation,
+        );
+        this.onGatewayViolation?.(violation);
+      },
+    });
     const gateway = new ScopedWorktreeGateway(worktreePath, contract, {
       costMonitor,
       loopGuard,
+      runtimeInterceptor: interceptor,
+      requireRepoTrust: true,
       ...(signal === undefined ? {} : { signal }),
       ...(this.onTerminalLine === undefined
         ? {}
@@ -602,7 +705,7 @@ export class ContractOrchestrator {
               this.onTerminalLine?.(contract.contract_id, stream, line),
           }),
     });
-    return { gateway, costMonitor, loopGuard, worktreePath };
+    return { gateway, costMonitor, loopGuard, worktreePath, interceptor };
   }
 
   private async readWorktreeInfo(
@@ -638,6 +741,8 @@ export class ContractOrchestrator {
       modifiedFiles: string[];
       /** 本任务是否修改过测试文件（写入 Evidence 供核销人预警复核） */
       testsModified?: boolean;
+      /** TASK-W.4：运行时降级后 Evidence 记录实际控制模式 */
+      workerControlMode?: "GATEWAY_ENFORCED" | "UNCONTROLLED_EXTERNAL";
     },
     costMonitor?: CostMonitor,
     worktreePath?: string,
@@ -663,6 +768,8 @@ export class ContractOrchestrator {
       evidence_id: evidenceId,
       contract_id: contract.contract_id,
       generated_at: new Date().toISOString(),
+      worker_control_mode:
+        input.workerControlMode ?? contract.worker_spec.control_mode,
       usage:
         totals && totals.totalTokens > 0
           ? {

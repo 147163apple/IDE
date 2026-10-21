@@ -33,6 +33,10 @@ import {
   recoverDaemonState,
   type RecoveryReport,
 } from "./recovery/crash-recovery";
+import {
+  clearGatewayViolation,
+  loadCurrentGatewayViolation,
+} from "./guard/gateway-violation-store";
 import { ContractOrchestrator } from "./pipeline/orchestrator";
 import {
   loadEvidenceSnapshot,
@@ -171,6 +175,10 @@ export class StagentDaemon {
           stream,
           line,
         });
+      },
+      // TASK-W.4：运行时违规广播（能力漂移 / 未知通道 / 越界路径）
+      onGatewayViolation: (violation) => {
+        this.broadcast("GATEWAY_VIOLATION", violation);
       },
     });
     this.chat = new ChatSessionManager({
@@ -1184,6 +1192,41 @@ export class StagentDaemon {
         } catch (err) {
           this.sendJson(res, 400, { error: (err as Error).message });
         }
+        return;
+      }
+
+      const violationMatch = pathname.match(
+        /^\/api\/contracts\/([^/]+)\/gateway-violation$/,
+      );
+      if (violationMatch) {
+        let contractId: string;
+        try {
+          contractId = decodeURIComponent(violationMatch[1] as string);
+        } catch {
+          this.sendJson(res, 400, { error: "Invalid URL encoding" });
+          return;
+        }
+        const contract = store.get(contractId);
+        if (!contract) {
+          this.sendJson(res, 404, { error: "Contract not found" });
+          return;
+        }
+        if (method === "GET") {
+          const violation = loadCurrentGatewayViolation(
+            this.repoRoot,
+            contractId,
+            contract.contract_revision,
+          );
+          this.sendJson(res, 200, { violation });
+          return;
+        }
+        // 只允许用户显式清除；Worker 没有 API token，也不暴露 MCP 工具
+        if (method === "DELETE") {
+          const cleared = clearGatewayViolation(this.repoRoot, contractId);
+          this.sendJson(res, 200, { cleared });
+          return;
+        }
+        this.sendJson(res, 405, { error: "Method not allowed" });
         return;
       }
 

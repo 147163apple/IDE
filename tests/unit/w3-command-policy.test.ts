@@ -69,6 +69,61 @@ const COMMANDS: CommandSpec[] = [
     expected_exit_code: 0,
     timeout_seconds: 30,
   },
+  {
+    alias: "pnpmExec",
+    executable: "pnpm",
+    args: ["--silent", "exec", "eslint"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "yarnExec",
+    executable: "yarn",
+    args: ["--silent", "exec", "eslint"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "bunX",
+    executable: "bun",
+    args: ["x", "vite"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "npmRun",
+    executable: "npm",
+    args: ["--silent", "run", "build"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "npxCmd",
+    executable: "npx.cmd",
+    args: ["vitest", "run"],
+    expected_exit_code: 0,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "portMention",
+    executable: "node",
+    args: [
+      "-e",
+      "console.log('EADDRINUSE is a common error meaning the port is busy'); process.exit(1);",
+    ],
+    expected_exit_code: 1,
+    timeout_seconds: 30,
+  },
+  {
+    alias: "portAssert",
+    executable: "node",
+    args: [
+      "-e",
+      "console.log('Error: listen EADDRINUSE: address already in use :::3000'); console.error('AssertionError: expected 1 to be 2'); process.exit(1);",
+    ],
+    expected_exit_code: 1,
+    timeout_seconds: 30,
+  },
 ];
 
 function makeContract() {
@@ -195,6 +250,43 @@ describe("W.3 命令白名单与参数策略", () => {
     expect(
       (npmRes.error?.details as { violation?: string } | undefined)?.violation,
     ).toBe("LAUNCHER_POSITIONAL_ARGS");
+  });
+
+  it("启动器判定跳过模板选项，覆盖 pnpm/yarn exec、bun x、npm run 与 .cmd 后缀", async () => {
+    const aliases = [
+      "pnpmExec",
+      "yarnExec",
+      "bunX",
+      "npmRun",
+      "npxCmd",
+    ] as const;
+    for (const alias of aliases) {
+      const res = await gateway.callTool("stagent_exec_command", {
+        command_alias: alias,
+        args: ["extra-target"],
+      });
+      expect(res.isError, alias).toBe(true);
+      expect(
+        (res.error?.details as { violation?: string } | undefined)?.violation,
+        alias,
+      ).toBe("LAUNCHER_POSITIONAL_ARGS");
+    }
+  });
+
+  it("仅提到 EADDRINUSE 不足以判端口冲突；有断言失败时也不归因端口冲突", async () => {
+    const mention = await gateway.callTool(
+      "stagent_exec_command",
+      { command_alias: "portMention" },
+      { internal: true },
+    );
+    expect(mention.error?.code).toBe("E_VERIFICATION_FAILED");
+
+    const assertion = await gateway.callTool(
+      "stagent_exec_command",
+      { command_alias: "portAssert" },
+      { internal: true },
+    );
+    expect(assertion.error?.code).toBe("E_VERIFICATION_FAILED");
   });
 
   it("runCommand 白名单只做精确匹配，不再按前缀放行", async () => {

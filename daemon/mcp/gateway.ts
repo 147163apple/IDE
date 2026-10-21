@@ -36,6 +36,8 @@ import {
 } from "../runner/command-policy";
 import { type EnvSanitizerOptions } from "../runner/env-filter";
 import { buildCommandEnvironment } from "../worker/policy-guard";
+import type { RuntimeInterceptor } from "../worker/runtime-interceptor";
+import { assessCommandThreat, isRepoTrusted } from "../worker/threat-guard";
 import {
   CostMonitor,
   E_COST_CAP_EXCEEDED,
@@ -47,6 +49,27 @@ import {
   scopeExplicitlyIncludesTests,
 } from "../guard/test-integrity";
 import { guardAgentFileOperation } from "../protection/protection-list";
+
+/**
+ * 端口冲突判定（W.4 收紧）：
+ * 1. 同一行必须同时出现「EADDRINUSE / address already in use」与 listen/bind 语义；
+ * 2. 输出里不能出现断言失败标记（AssertionError / Tests failed / FAIL 等）；
+ * 仅「提到这句话」不足以归因，避免把真正的断言失败误判成环境问题。
+ */
+const PORT_CONFLICT_LINE = /EADDRINUSE|address already in use/i;
+const PORT_LISTEN_BIND_LINE = /\b(listen|listening|bind|binding)\b/i;
+const ASSERTION_FAILURE = /AssertionError|\bTests?\s+failed\b|\bFAIL\b|[✕✗]/i;
+
+export function isPortConflictOutput(stdout: string, stderr: string): boolean {
+  const text = `${stdout}\n${stderr}`;
+  if (ASSERTION_FAILURE.test(text)) return false;
+  return text
+    .split("\n")
+    .some(
+      (line) =>
+        PORT_CONFLICT_LINE.test(line) && PORT_LISTEN_BIND_LINE.test(line),
+    );
+}
 
 /** 从 Worktree 路径反推主仓库根（保护清单/快照始终归属主仓库） */
 function mainRepoRootOf(worktreeRoot: string): string {
@@ -104,6 +127,10 @@ export interface ScopedGatewayOptions {
   /** TASK-C.5：命令输出的逐行实时回放（行内容已脱敏） */
   onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
+  /** TASK-W.4：运行时复检（能力漂移 / 未知通道 / 越界路径） */
+  runtimeInterceptor?: RuntimeInterceptor | undefined;
+  /** TASK-W.4：是否强制仓库信任标记（orchestrator 置 true；单测默认关闭） */
+  requireRepoTrust?: boolean | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -129,6 +156,8 @@ export class ScopedWorktreeGateway {
   private readonly signal?: AbortSignal | undefined;
   private readonly onTerminalLine?:
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
+  private readonly runtimeInterceptor?: RuntimeInterceptor | undefined;
+  private readonly requireRepoTrust: boolean;
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -155,6 +184,8 @@ export class ScopedWorktreeGateway {
     this.loopGuard = options.loopGuard;
     this.signal = options.signal;
     this.onTerminalLine = options.onTerminalLine;
+    this.runtimeInterceptor = options.runtimeInterceptor;
+    this.requireRepoTrust = options.requireRepoTrust ?? false;
   }
 
   public getWorktreeRoot(): string {
@@ -434,6 +465,31 @@ export class ScopedWorktreeGateway {
     // G-09：任何工具调用先记账；熔断后一律拒绝（含未知工具名）
     const budgetDenial = this.consumeToolCallBudget(name);
     if (budgetDenial) return budgetDenial;
+
+    // W.4：每个工具调用前复检通道与路径；内部验证调用仅在未降级时豁免
+    if (
+      this.runtimeInterceptor &&
+      (options.internal !== true || this.runtimeInterceptor.isStopped())
+    ) {
+      const guard = this.runtimeInterceptor.checkToolCall(name, rawInput);
+      if (!guard.allowed) {
+        const violation = guard.violation;
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[E_UNSAFE_EXECUTION] ${violation?.reason ?? "运行时复检失败"}`,
+            },
+          ],
+          error: {
+            code: "E_UNSAFE_EXECUTION",
+            message: violation?.reason ?? "运行时复检失败",
+            details: { violation: violation?.code },
+          },
+        };
+      }
+    }
 
     switch (name) {
       case "stagent_read_file":
@@ -1180,6 +1236,41 @@ export class ScopedWorktreeGateway {
       ? [structured.executable, ...structured.args].join(" ")
       : (parsed.data.command ?? "");
 
+    // W.4：Worker 的 command_alias 路径同样过威胁守卫（含追加参数）
+    if (!internal && structured !== undefined) {
+      const assessment = assessCommandThreat({
+        executable: structured.executable,
+        args: structured.args,
+        worktreeRoot: this.worktreeRoot,
+        repoTrusted: this.requireRepoTrust
+          ? isRepoTrusted(this.worktreeRoot)
+          : true,
+      });
+      if (!assessment.allowed) {
+        this.logAudit({
+          tool: "stagent_exec_command",
+          input: { command_alias: parsed.data.command_alias },
+          outcome: "BLOCKED",
+          violationCode: "E_UNSAFE_EXECUTION",
+          details: assessment.reason,
+        });
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `[E_UNSAFE_EXECUTION] ${assessment.reason}`,
+            },
+          ],
+          error: {
+            code: "E_UNSAFE_EXECUTION",
+            message: assessment.reason,
+            details: { category: assessment.category },
+          },
+        };
+      }
+    }
+
     // 0. 主动中止检查：abort 之后在途命令已被整树强杀，后续命令一律拒绝，
     //    保证 execute 的命令循环立刻收尾而不是继续跑剩余验证
     if (this.signal?.aborted) {
@@ -1282,9 +1373,7 @@ export class ScopedWorktreeGateway {
       // 识别后返回 E_PORT_CONFLICT + 白话说明，且不计入连续失败熔断。
       const portConflict =
         result.exitCode !== 0 &&
-        /EADDRINUSE|address already in use/i.test(
-          `${result.stdout}\n${result.stderr}`,
-        );
+        isPortConflictOutput(result.stdout, result.stderr);
 
       // Update loop guard if this matches a verification test command
       const isTestCommand = allowedCommands.some(

@@ -101,10 +101,28 @@ const EVAL_FLAG_PREFIXES = ["--eval=", "--command=", "--print=", "--import="];
 /** 包启动器：位置参数本身就是「要运行的包/命令」，追加即任意执行 */
 const LAUNCHER_EXECUTABLES = new Set(["npx", "bunx"]);
 const LAUNCHER_SUBCOMMANDS: Record<string, Set<string>> = {
-  npm: new Set(["exec", "x"]),
-  pnpm: new Set(["dlx"]),
-  yarn: new Set(["dlx"]),
+  npm: new Set(["exec", "x", "run", "run-script"]),
+  pnpm: new Set(["exec", "dlx", "run"]),
+  yarn: new Set(["exec", "dlx", "run"]),
+  bun: new Set(["x"]),
 };
+
+/**
+ * 跳过模板开头的选项参数，取第一个位置参数作为子命令。
+ * 例：`npm --silent exec foo` → 子命令 `exec`；`pnpm -C repo dlx foo` → `dlx`。
+ * 说明：不解析「选项自带值」的情况（如 `--prefix /tmp`），宁可把 `/tmp` 当子命令
+ * 而漏判，也不放松对真实启动器的限制；漏判会落回普通别名的选项注入检查。
+ */
+function firstPositionalArg(
+  templateArgs: readonly string[],
+): string | undefined {
+  for (const arg of templateArgs) {
+    if (arg === "--") continue;
+    if (arg.startsWith("-")) continue;
+    return arg.toLowerCase();
+  }
+  return undefined;
+}
 
 function isLauncherTemplate(
   executable: string,
@@ -114,14 +132,14 @@ function isLauncherTemplate(
   if (LAUNCHER_EXECUTABLES.has(name)) return true;
   const subcommands = LAUNCHER_SUBCOMMANDS[name];
   if (!subcommands) return false;
-  const first = templateArgs[0]?.toLowerCase();
-  return first !== undefined && subcommands.has(first);
+  const subcommand = firstPositionalArg(templateArgs);
+  return subcommand !== undefined && subcommands.has(subcommand);
 }
 
-/** 取可执行文件名（去掉目录与 Windows 扩展名），用于解释器判定 */
+/** 取可执行文件名（去掉目录与 Windows 扩展名），用于解释器/启动器判定 */
 export function normalizeExecutableName(executable: string): string {
   const base = executable.split(/[\\/]/).pop() ?? executable;
-  return base.toLowerCase().replace(/\.exe$/, "");
+  return base.toLowerCase().replace(/\.(exe|cmd|bat)$/, "");
 }
 
 export function isInterpreterExecutable(executable: string): boolean {
