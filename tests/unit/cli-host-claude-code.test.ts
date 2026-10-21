@@ -484,7 +484,7 @@ describe("TASK-W.5a 专用 CLAUDE_CONFIG_DIR 与实测记录", () => {
       verifiedOn: CLAUDE_CODE_VERIFIED_ON,
     }).info();
     expect(info.verified_on).toBe(
-      "Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20",
+      "Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21",
     );
     expect(info.control_mode).toBe("GATEWAY_ENFORCED");
   });

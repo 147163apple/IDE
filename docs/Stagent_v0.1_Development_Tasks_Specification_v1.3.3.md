@@ -21,10 +21,17 @@
 >
 > **状态校正（2026-10-21，只读核验对齐；仅改「任务状态」与门禁说明，不改任务定义、验收判据、依赖边与排期）**：
 > 依据基线：`main`@`208a570`（本地无远端），`npm run typecheck` 退出码 0，`npm test` 77 文件通过 / 1 跳过（78），672 用例通过 / 4 跳过（676）。
-> 1. **主校正（5 张卡）**：`TASK-P.1` → **[COMPLETED]**（提交 `08e95da` 已在 main 且为 HEAD 祖先）；`TASK-C.5` / `TASK-W.3` / `TASK-W.4` → **[COMPLETED]**；`TASK-D.2` → **[PARTIAL]**（主体落地，缺核心目标 1 的「Scope 与保护清单无交集自动批准」）。
+> 1. **主校正（5 张卡）**：`TASK-P.1` → **[COMPLETED]**（提交 `08e95da` 已在 main 且为 HEAD 祖先）；`TASK-C.5` / `TASK-W.3` / `TASK-W.4` → **[COMPLETED]**；`TASK-D.2` → **[PARTIAL]**（主体落地，缺核心目标 1 的「Scope 与保护清单无交集自动批准」；**同日步骤 D 收口已升级为 [COMPLETED]**，见下方「步骤 D 收口校正」）。
 > 2. **交叉一致性校正（9 行）**：`TASK-C.1`（`e48f614`）/ `TASK-C.3`（`88aec68`）/ `TASK-C.6`（`43496c0`）总表仍标 `[NEW_TASK]`，实为已合入 main → 改 **[COMPLETED]**；`TASK-W.1` / `TASK-W.2` 的「卡面成果未进 main」注记已被 `2e1290c` 推翻 → 改写为已合入；`TASK-W.5a` 卡片已填 `verified_on` 而总表仍标 `[NEW_TASK]` → 改 **[PASS]**；`TASK-B.1` / `TASK-B.2` / `TASK-C.4` 卡片仍标 `[NEW_TASK]`/`[INCREMENTAL_UPGRADE]` 而总表已按 D4 决议标 `[DEFERRED → v0.2+]` → 卡片统一为 DEFERRED。**合计 14 行（5 主校正 + 9 交叉校正）状态已同步**，核验证据（文件路径、提交、用例数、残余偏差）写入卡内；§1.1 总表与任务卡状态经脚本交叉比对已一致（31 行总表 / 24 张有状态卡片，0 处冲突）。
 > 3. **未变更状态、仅补记证据**：`TASK-S.1` 维持 **[PARTIAL]**，但卡片与总表补记「v1.3.3 增量①独立预算分账已落地（`supervisor/budget.ts`，6 例绿）」，②规则优先 L0/L1 与③节流器增量仍未落地；`TASK-S.2`/`TASK-S.3`/`TASK-C.2`/`TASK-E.1`/`TASK-E.2`/`TASK-W.5b`/`TASK-W.5c` 状态不变。
-> 4. 本次校正暴露的待办（另行排期，不在本次范围）：① D.2 交集自动批准 + `tests/unit/contract-auto-approve.test.ts`；② W.5a `allowBash` 场景的真实 CLI Shell 绕过负例；③ P.1「静默合同」口径统一（JSONL 备案 vs 正式合同落盘）与【撤销本轮改动】常驻化。
+> 4. 本次校正暴露的待办（另行排期，不在本次范围）：① D.2 交集自动批准 + `tests/unit/contract-auto-approve.test.ts`（**已于步骤 D 闭环**：`9691b23`，合并 `742d27d`，9 用例绿）；② W.5a `allowBash` 场景的真实 CLI Shell 绕过负例（**仍待办**）；③ P.1「静默合同」口径统一（JSONL 备案 vs 正式合同落盘）与【撤销本轮改动】常驻化（**仍待办**）。
+
+> **步骤 D 收口校正（2026-10-21 晚，真实 CLI 复测与 D.2 升级；仅改「任务状态」与实测记录，不改任务定义、验收判据、依赖边与排期）**：
+> 依据基线：`main`@`742d27d`；`Claude Code 2.1.296` + DeepSeek `deepseek-chat` @ `https://api.deepseek.com/anthropic`（Anthropic 兼容端点）；`npm run typecheck` 退出码 0；全量 `682 用例通过 / 4 跳过`。
+> 1. **`TASK-W.5a` 实测回填**：`verified_on` 更新为 `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`，真实 CLI 负例 **4/4 全绿**（`tests/e2e/claude-code-isolation.real.test.ts`，25.94s）。此前 `2026-10-20` 为设计期实测；本次为可复现的归档复测，并首次落盘 `PreToolUse hook` 的 `deny` 日志原文。
+> 2. **`TASK-D.2` → `[COMPLETED]`**：核心目标 1「合同 Scope 与保护清单无交集 → 自动批准」已落地（`9691b23`，合并 `742d27d`），缺口 **G-1 闭环**；`tests/unit/contract-auto-approve.test.ts` 9 用例绿，全量测试基线由 672 升至 **682**。残余一项（不阻塞 v0.1）：`resume` 在「触碰保护清单时要求新审批版本」未实现，已记入卡片。
+> 3. **端点踩坑固化**：DeepSeek 接入 Claude Code 必须用 **Anthropic 兼容端点** `https://api.deepseek.com/anthropic`；误用 OpenAI 端点 `/v1` 会因路径拼接成 `/v1/v1/messages` 而报「模型不可用」，该现象易被误判为"门卫失效"。
+> 4. **证据归档**：`docs/reports/W5a-真实CLI验证报告-2026-10-21.md`（4/4 记录、拦截日志原文、Token 口径、凭据审计、复现步骤）。
 
 > **v1.3.2 历史修订成果（存档）**：
 > 1. **彻底闭环错误码与预算契约 (闭环 P1-N1 / P1-N2)**：对齐法典 A §6.4(3) 超时分列错误码（`E_COMMAND_TIMEOUT` / `E_TASK_TIMEOUT`）；对齐法典 A §9.1 `budget_limits` 增补的 `max_command_executions?` 与 `max_tool_calls?` 可选预算字段，使 TASK-W.3 与 0.2b 命令/工具调用计数熔断断言完全合法自洽。
@@ -66,12 +73,12 @@
 | **TASK-C.3** | Monaco 核心编辑器集成与受控 Worktree 读写 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`88aec68` 已在 main；`MonacoEditorPane` + `useWorktreeFile`；越权保存 403 + `GATEWAY_VIOLATION`；`monaco-editor-pane` 4 用例绿） | P3 代码编辑 | • Monaco Editor 嵌入，可写/只读视觉区分，**编辑器内 Evidence STALE 指示 (G-18)**<br>• 服务端保存校验：`POST /api/worktree/files` 越权写入由 Daemon 403 拒绝 |
 | **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P3 架构雷达 | • 1000 节点拓扑渲染 (≤16ms patch, ≤30MB 内存)<br>• 交互式 Scope 圈选，已批准合同圈选禁止原地扩权 |
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`components/diff/*` + `StructuredTerminal.tsx`；`GET /api/contracts/:id/diff-files` 逐文件真实内容；先脱敏后截断；5 用例绿） | P3 差异终端 | • 双栏/内联 Git Diff 审阅<br>• 结构化终端流式日志展示、ANSI 渲染、先脱敏后截断 |
-| **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[PARTIAL]**（2026-10-21 核验：approve/execute/merge/resume/abort/diff-files/evidence 端点、Gate 0~4、4 条 Trailer、User-First Discard、一键合并均已落地；**缺**核心目标 1「Scope 与保护清单无交集自动批准」） | P5 核销合并 | • 提供 `POST /api/contracts/:id/approve` (防 TOCTOU)<br>• `resume` 提供**双路径裁决负例断言** (违规返回 409，G-14)<br>• **并发互斥锁守卫**：同合同 execute/resume/abort/merge 冲突返回 409 / `E_WORKSPACE_LOCKED` 并生成 BLOCKED Evidence (G-21)<br>• **合并成功后原子落盘合同与证据快照至 `.stagent/` 目录 (G-05)**<br>• 对齐 A §5.2 的 4 个 Git Trailer，执行合并门禁（**v1.3.3**：删除 Gate 5 二次确认弹窗改一键合并，保留 Gate 0~4 与后台指纹复核；冲突按 User-First Discard 仲裁） |
+| **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口：approve/execute/merge/resume/abort/diff-files/evidence 端点、Gate 0~4、4 条 Trailer、User-First Discard、一键合并均已落地；**核心目标 1「Scope 与保护清单无交集 → 自动批准」已闭环**（`9691b23`，合并 `742d27d`；`contract-auto-approve` 9 用例绿，全量 682 通过 / 4 跳过）；残余：`resume` 触碰清单时的"新审批版本"未实现，见卡片） | P5 核销合并 | • 提供 `POST /api/contracts/:id/approve` (防 TOCTOU)<br>• `resume` 提供**双路径裁决负例断言** (违规返回 409，G-14)<br>• **并发互斥锁守卫**：同合同 execute/resume/abort/merge 冲突返回 409 / `E_WORKSPACE_LOCKED` 并生成 BLOCKED Evidence (G-21)<br>• **合并成功后原子落盘合同与证据快照至 `.stagent/` 目录 (G-05)**<br>• 对齐 A §5.2 的 4 个 Git Trailer，执行合并门禁（**v1.3.3**：删除 Gate 5 二次确认弹窗改一键合并，保留 Gate 0~4 与后台指纹复核；冲突按 User-First Discard 仲裁） |
 | **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[NEW_TASK]** | P6 集成自举 | • 覆盖 Happy Path 全生命周期无人值守自动化回归<br>• **覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离，G-07）** |
 | **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[NEW_TASK]** | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（2026-10-21 核验：提交 `08e95da` 已在 main；门卫/一张卡+补充卡/待审批持久化/自锁/失败关闭/快照撤销/规则推荐/Prompt 注入全部落地，13+1+3 用例绿；残余口径差见卡片） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`43496c0` 已在 main；`AgentChatPane` + `use-agent-session`；`agent-chat-pane` 8 用例绿；真实 Claude Code 流式/打断/续接见 W.5a） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume（映射 CLI 原生会话 ID）。 |
-| **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（2026-10-21 核验：卡片已填 `verified_on: Claude Code 2.1.296（DeepSeek API 兼容模式）2026-10-20`；真实 CLI 负例 `tests/e2e/claude-code-isolation.real.test.ts` 默认跳过，需 `STAGENT_REAL_CLAUDE=1` 复跑；`allowBash` 场景 Shell 绕过负例仍为后续项） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
+| **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（2026-10-21 步骤 D 实测收口：`verified_on: Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`；真实 CLI 负例 `tests/e2e/claude-code-isolation.real.test.ts` **4/4 全绿**（25.94s，`STAGENT_REAL_CLAUDE=1` + `deepseek-chat` @ `https://api.deepseek.com/anthropic`），hook `deny` 日志已落盘；证据见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`；`allowBash` 场景 Shell 绕过负例仍为后续项） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
 | **TASK-W.5b** | cursor-agent 适配器（cli-host 黑盒实测） | 编码内核 | **[NEW_TASK]** (v1.3.3) | P5.5 受控实测 | 权限 deny 实测；不能完全关闭原生写能力则仅登记 `UNCONTROLLED_EXTERNAL`（仅 Vibe）。 |
 | **TASK-W.5c** | OpenHands 适配器（容器隔离） | 编码内核 | **[NEW_TASK]** (v1.3.3) | P5.5 受控实测 | 容器内仅挂载任务 Worktree；`control_mode = SANDBOX_ENFORCED`。 |
 
@@ -509,10 +516,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task W.5a】Claude Code 适配器与 cli-host 黑盒实测 (v1.3.3 新增)
 * **任务编号**：`TASK-W.5a`
 * **前置依赖**：`TASK-W.2`, `TASK-C.6`（右栏会话通道）
-* **任务状态**：**[PASS · verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20`]**（分支 `feat/w5a-claude-code`。cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL）；一律 API Key；隔离启动见核心目标 2；真实 CLI 上流式输出、工具卡片、打断（约 0.5s）、跨 Daemon 重启 `--resume` 续接、4 类绕过负例均实测通过，证据见 `docs/reports/W5a-isolation-design.md`。**后续回归项（不阻塞）**：用官方 Anthropic 原装模型 + 官方 CLI 重跑负例；每次升级 CLI 重跑 `STAGENT_REAL_CLAUDE=1` 真实测试；Gateway MCP 端点依赖 W.4。）
+* **任务状态**：**[PASS · verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`]**（分支 `feat/w5a-claude-code`。cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL）；一律 API Key；隔离启动见核心目标 2；真实 CLI 上流式输出、工具卡片、打断（约 0.5s）、跨 Daemon 重启 `--resume` 续接、4 类绕过负例均实测通过，证据见 `docs/reports/W5a-isolation-design.md`。**2026-10-21 步骤 D 实测收口**：以 `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑真实 CLI 负例 **4/4 全绿**（25.94s），首次落盘 `PreToolUse hook` 的 `deny` 日志原文（含 symlink 逃逸判定），证据归档 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`。**后续回归项（不阻塞）**：用官方 Anthropic 原装模型 + 官方 CLI 重跑负例；`allowBash=true` 的 Shell 绕过负例；每次升级 CLI 重跑 `STAGENT_REAL_CLAUDE=1` 真实测试；Gateway MCP 端点依赖 W.4。）
 * **核心目标**：
   1. 在 `daemon/worker/cli-host/` 专用子进程隔离模块中以 spawn 挂载 Claude Code CLI（结构化 argv、`shell:false`、进程树托管回收）；**全仓其余位置维持零 `child_process` 静态禁令**。
-  2. **收敛策略（已实测，verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20`）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。**隔离启动（`[用户已确认 · 2026-10-20]`，替代 `--bare`——实测 2.1.296 的 `--bare` 会跳过 `--settings` 中的 hooks）**：
+  2. **收敛策略（已实测，verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。**隔离启动（`[用户已确认 · 2026-10-20]`，替代 `--bare`——实测 2.1.296 的 `--bare` 会跳过 `--settings` 中的 hooks）**：
      - argv：`claude --setting-sources "" --tools Read,Glob,Grep,LS,Edit,Write,MultiEdit,TodoWrite -p <prompt> --output-format stream-json --verbose --include-partial-messages --settings <Stagent 生成> --mcp-config <Stagent 生成> --strict-mcp-config --permission-mode acceptEdits --allowedTools <同 --tools> --disallowedTools WebFetch,WebSearch,NotebookEdit,Task,Bash [--resume <session_id>]`（允许 Bash 时 `--tools`/`--allowedTools` 加 Bash、`--disallowedTools` 去掉 Bash）；永不 `--bare`、永不 bypassPermissions、永不 `--continue`。
      - `permissions.deny`：`WebFetch, WebSearch, NotebookEdit, Task, Bash, Edit/Write(./.git/**), Edit/Write(./.stagent/**), Edit/Write(./.claude/**), Read(./.stagent/claude-config/**), Read(./.stagent/session-token)`；PreToolUse hook `matcher:"*"`、`onFailure:"block"`。
      - 子进程 env 白名单：`PATH, HOME, LANG, STAGENT_HOOK_ROOT, STAGENT_HOOK_LOG, [STAGENT_HOOK_ALLOW_BASH], ANTHROPIC_API_KEY, CLAUDE_CONFIG_DIR`，另仅转发 `ANTHROPIC_BASE_URL, ANTHROPIC_MODEL, ANTHROPIC_SMALL_FAST_MODEL, ANTHROPIC_DEFAULT_{HAIKU,SONNET,OPUS}_MODEL, API_TIMEOUT_MS, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`。
@@ -525,7 +532,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   - 新增：`daemon/worker/cli-host/process-host.ts`（spawn 托管与进程树回收）
   - 测试：`tests/unit/cli-host-claude-code.test.ts`（确定性，含 hook 层 4 类绕过负例）；`tests/e2e/claude-code-isolation.real.test.ts`（真实 CLI，`STAGENT_REAL_CLAUDE=1` 时运行：配置注入负例、4 类绕过、专用配置目录续接）
 * **Pass/Fail 验收判定**：
-  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭（本轮实测覆盖默认禁 Bash 配置；allowBash 配置的 Shell 绕过负例列为后续补充项，见 `docs/reports/W5a-isolation-design.md` §3 未测清单）；`verified_on` 非空；流式输出与打断/续接实测达标。
+  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭（2026-10-21 复测 **4/4 全绿**，覆盖默认禁 Bash 配置；allowBash 配置的 Shell 绕过负例列为后续补充项，见 `docs/reports/W5a-isolation-design.md` §3 未测清单）；`verified_on` 非空；流式输出与打断/续接实测达标。
   - **FAIL**：任一绕过路径可用；未实测即标记受控。
 
 #### 【Task W.5b】cursor-agent 适配器黑盒实测 (v1.3.3 新增)
@@ -742,7 +749,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task D.2】控制面 API 补齐、合并门禁（一键合并）与 Git Trailer 审计
 * **任务编号**：`TASK-D.2`
 * **前置依赖**：`TASK-D.1`, `TASK-W.4`, `TASK-C.5`, `TASK-P.1`（v1.3.3：移除已推迟的 `TASK-B.2`）
-* **任务状态**：**[PARTIAL]**（2026-10-21 只读核验，状态校正：**已落地**——控制面 `approve` / `execute` / `run-worker` / `merge` / `resume` / `abort` / `diff-files` / `evidence` 端点（`daemon/server.ts:1234+`）；`squashMerge` 门禁链 Gate 0~4（AUDITED、Evidence 快照存在且同合同、STALE 阻断、Worktree 指纹复核 `assertEvidenceIntegrity`、主树 clean、重复合并防御）；4 条标准 Git Trailer（`merger.ts:98`）；User-First Discard 冲突仲裁（`merger.ts:232-254`，含 `nothingToMerge` 兜底）；前端一键合并无二次确认（`index.tsx:1014`）。**未落地**——核心目标 1 的「合同 Scope 与全局保护清单**无交集 → 自动批准**」：`orchestrator.approve()` 仍无条件推进 `PREPARING`，缺交集判定与对应用例；`resume` 的预算类「不重批」减负亦未按 §0.2 实现。**待补任务**：`daemon/pipeline/orchestrator.ts` 交集判定 + `tests/unit/contract-auto-approve.test.ts`）
+* **任务状态**：**[COMPLETED]**（2026-10-21 步骤 D 收口。**已落地**——控制面 `approve` / `execute` / `run-worker` / `merge` / `resume` / `abort` / `diff-files` / `evidence` 端点（`daemon/server.ts:1234+`）；`squashMerge` 门禁链 Gate 0~4（AUDITED、Evidence 快照存在且同合同、STALE 阻断、Worktree 指纹复核 `assertEvidenceIntegrity`、主树 clean、重复合并防御）；4 条标准 Git Trailer（`merger.ts:98`）；User-First Discard 冲突仲裁（`merger.ts:232-254`，含 `nothingToMerge` 兜底）；前端一键合并无二次确认（`index.tsx:1014`）。**核心目标 1（原缺口 G-1）已闭环**（`9691b23`，合并 `742d27d`）：`daemon/protection/protection-list.ts` 新增 `intersectWithProtection()`（见证路径 `witnessPath()` + glob 双向覆盖判定 + 清单解析异常一律返回 `hit:true` 的失败关闭）；`daemon/pipeline/orchestrator.ts` 新增 `admit()`，产出 `AUTO_APPROVED` / `AUTO_APPROVAL_FAILED` / `NEEDS_APPROVAL` / `SKIPPED` 四态，无交集或本轮全部同意且无拒绝时自动 `approve()`（`approved_by: "stagent-auto"`）并写 `contract_auto_approved`，门卫异常写 `contract_admission_fail_closed` 阻断，**拒绝优先于同意**；`POST /api/contracts` 创建即准入（响应回传 `admission`），新增 `POST /api/contracts/:id/admit`（`NEEDS_APPROVAL` 返回 202）；并发撞状态机以 `SKIPPED` 兜底不误报失败。`tests/unit/contract-auto-approve.test.ts` 9 用例绿（空清单/无交集/glob×glob/具体路径/本轮同意/本轮拒绝/清单损坏/清单自锁/幂等），全量基线 **682 通过 / 4 跳过**。**残余（不阻塞 v0.1）**——`resume` 在"触碰保护清单时要求新审批版本"未实现：当前 `PENDING_RESUME → EXECUTING` 不区分是否触碰清单，即始终不重批（未触清单的"不重批"减负已满足，触碰清单的"应重批"缺失），与 P.1「静默合同」口径统一一并列为 v0.2+ 待办。）
 * **核心目标**：
   1. `POST /api/contracts/:id/approve`：校验 `contract_revision` 与授权指纹（防 TOCTOU），原子推进双状态并创建 Worktree。**v1.3.3 减负**：合同 Scope 与全局保护清单**无交集时自动批准**（记录备案，无需用户点击）；有交集时向用户发**至多一个**白话是/否问题。
   2. `POST /api/contracts/:id/resume`：**双路径裁决负例断言 (G-14)**：
@@ -761,6 +768,9 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   - 修改：`daemon/server.ts`
   - 修改：`daemon/pipeline/merger.ts`
   - 修改：`daemon/pipeline/evidence-verifier.ts`
+  - 修改：`daemon/pipeline/orchestrator.ts`（`admit()` 准入判定，步骤 D 新增）
+  - 修改：`daemon/protection/protection-list.ts`（`intersectWithProtection()` / `witnessPath()`，步骤 D 新增）
+  - 测试：`tests/unit/contract-auto-approve.test.ts`（步骤 D 新增，9 用例：无交集自动批准 / 拒绝优先 / Fail-Closed / 幂等）
   - 测试：`tests/unit/control-plane-approve.test.ts`
   - 测试：`tests/unit/control-plane-merge-gates.test.ts`
   - 测试：`tests/unit/control-plane-resume.test.ts`
@@ -840,7 +850,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 > **Sprint 2 / Sprint 3 实际完成情况（2026-10-21 只读核验）**：
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例（P.1 17 例、C.5 5 例、W.3 14 例、W.4 26 例）；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 部分达成**：`TASK-D.2` 主体已落地——一键合并（无二次确认）、Gate 0~4、4 条 Git Trailer、User-First Discard、快照持久化均在位，可直接演示"验证全绿 → 点一次合并"。
-> - **Sprint 3 门禁尚未成立项**：门禁要求「未触保护区交互 = 1 次（合并按钮）」，但当前 `POST /api/contracts/:id/approve` 仍需用户手动触发（`src/routes/index.tsx:805`），未触保护区实际为 2 次交互。**须先补齐 D.2 核心目标 1 的交集自动批准，该门禁才可端到端成立。**
+> - **Sprint 3 门禁原未成立项（已于 2026-10-21 步骤 D 闭环）**：门禁要求「未触保护区交互 = 1 次（合并按钮）」，而此前 `POST /api/contracts/:id/approve` 需用户手动触发（`src/routes/index.tsx:805`），未触保护区实际为 2 次交互。`9691b23`（合并 `742d27d`）补齐 D.2 核心目标 1 的交集自动批准后，**无交集合同创建即 `EXECUTING`（`approved_by: "stagent-auto"`），前端不弹窗，交互收敛为 1 次合并按钮**；有交集合同仍为 ≤2 次（是/否 + 合并）。该门禁端到端成立。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -877,7 +887,7 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 | 模块 | 路径 | 说明 |
 |---|---|---|
 | 成熟 Agent 子进程隔离 | `daemon/worker/cli-host/` | **全仓唯一允许 `child_process`/spawn 的位置**；强制结构化 argv + `shell:false` + 进程树托管回收 |
-| Claude Code 适配器 | `daemon/worker/cli-host/claude-code-adapter.ts` | Headless 结构化输出、Pre-tool hook 拦截、会话续接；`verified_on`: Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20（官方 Anthropic 复测为后续回归项） |
+| Claude Code 适配器 | `daemon/worker/cli-host/claude-code-adapter.ts` | Headless 结构化输出、Pre-tool hook 拦截、会话续接；`verified_on`: Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21（真实 CLI 负例 4/4 全绿；官方 Anthropic 复测为后续回归项） |
 | 全局保护清单 | `daemon/protection/protection-list.ts` + `.stagent/protection.json` | 路径 glob + 白话名称；任何模式下规则拦截 |
 | Vibe 自动快照 | `daemon/protection/auto-checkpoint.ts` | Agent 改动前自动快照，支撑【撤销本轮改动】 |
 | Supervisor 独立预算 | `.stagent/supervisor-budget.json` | 与合同/Worker 预算分账，不互相侵占 |

@@ -1,6 +1,6 @@
 # W.5a Claude Code 隔离设计（Tina 已批准 · 2026-10-20）
 
-- 状态：**W.5a 已实测通过（verified_on = `Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20`）**。用官方 Anthropic 原装模型复测是**后续回归项，不阻塞**。方案已同步进架构/任务规范 v1.3.3。
+- 状态：**W.5a 已实测通过（verified_on = `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`；2026-10-21 步骤 D 以 `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑 4/4 全绿，详见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`）**。用官方 Anthropic 原装模型复测是**后续回归项，不阻塞**。方案已同步进架构/任务规范 v1.3.3。
 - 分支：`feat/w5a-claude-code`（本稿与自动化负例测试已提交在这个分支上，尚未合并主线）
 - 实测环境：macOS（Tina 的 Mac），Claude Code CLI **2.1.296**，模型走 DeepSeek 的 Anthropic 兼容接口（`deepseek-chat`）
 - 日期：2026-10-20（香港时间）
@@ -170,7 +170,7 @@ claude --restricted -p "..." --settings s.json --tools Read,Write,Edit,Glob,Grep
 
 在 DeepSeek 上**四类都测过**。没测的：允许 Bash 时（`allowBash: true`）的各种 Shell 绕过；MCP 工具（因为目前 MCP 列表为空）；Read 越界读（hook 规则有，但没有专门写负例）。
 
-**验收结论**：四类在 DeepSeek + CLI 2.1.296 上全部失败关闭，Tina 已批准据此填写 `verified_on = "Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20"`，适配器 `control_mode` 随之为 `GATEWAY_ENFORCED`。是否拦截取决于 CLI 本身而不是模型，但模型「会不会去试」取决于模型，所以**用原装 Claude（Anthropic Key）+ 官方 CLI 重跑这组负例列为后续回归项，不阻塞**。另：每次升级 Claude Code CLI 都必须重跑 `STAGENT_REAL_CLAUDE=1` 的真实测试。
+**验收结论**：四类在 DeepSeek + CLI 2.1.296 上全部失败关闭，Tina 已批准据此填写 `verified_on = "Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21"`（2026-10-21 步骤 D 复跑 4/4 全绿后回填），适配器 `control_mode` 随之为 `GATEWAY_ENFORCED`。是否拦截取决于 CLI 本身而不是模型，但模型「会不会去试」取决于模型，所以**用原装 Claude（Anthropic Key）+ 官方 CLI 重跑这组负例列为后续回归项，不阻塞**。另：每次升级 Claude Code CLI 都必须重跑 `STAGENT_REAL_CLAUDE=1` 的真实测试。
 
 ---
 

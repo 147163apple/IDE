@@ -46,9 +46,14 @@ export interface ClaudeCodeAdapterOptions {
   configDir?: string;
 }
 
-/** 实测记录（Tina 2026-10-20 批准）：官方 Anthropic 原装模型复测为后续回归项，不阻塞 */
+/**
+ * 实测记录：2026-10-20 首次实测（Tina 批准），2026-10-21 步骤 D 以
+ * `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑真实 CLI 负例 4/4 全绿后回填。
+ * 证据见 docs/reports/W5a-真实CLI验证报告-2026-10-21.md。
+ * 官方 Anthropic 原装模型复测为后续回归项，不阻塞。
+ */
 export const CLAUDE_CODE_VERIFIED_ON =
-  "Claude Code 2.1.296 (DeepSeek API 兼容模式) 2026-10-20";
+  "Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21";
 
 /** 准备专用配置目录：不存在则创建，权限恒为 0700 */
 export function ensureConfigDir(dir: string): string {
