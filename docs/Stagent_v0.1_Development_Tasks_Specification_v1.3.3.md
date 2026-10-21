@@ -38,7 +38,7 @@
 > 依据基线：分支 `feat/e2-dogfooding-and-release`（基于 `main`@`b1ede2a`，即 `TASK-E.1` 合并提交）；`npm run typecheck` 退出码 0；`npx vitest run` **86 文件通过 / 1 跳过，785 用例通过 / 6 跳过，0 失败**；`npm run build` 退出码 0。
 > 1. **`TASK-E.2` → `[COMPLETED]`**：目标 1「真仓库自举闭环」由合同 `contract_1792607266038_110hd` 完成——准入自动批准 → 真 Worktree → 受控写入 → 真跑 `typecheck` + 定向单测 → `EvidenceBundleV11`（`PASSED`/`can_merge=true`/0 重试）→ Gate 0~4 `squashMerge` → 自举提交 `69f61bd`（3 files，+96/−3）；目标 2 报告 `docs/reports/v0.1-dogfooding-report.md` 重写为真仓库实测版；目标 3 `package.json` 0.1.0 + `dist/` 33 文件 / 3.15 MB。
 > 2. **Trailer 由 4 条扩至 7 条（含任务卡要求的 4 项）**：新增 `Stagent-Evidence-Hash`（证据文件字节 SHA-256，可用 `shasum -a 256` 独立复算）与 `Stagent-Approval-Status`；§5.2 既有命名（`Stagent-Contract-ID` / `Reviewed-By`）保持不动，任务卡的 `Contract-Id` / `Audited-By` 写法差异在报告 §3.1 明示。
-> 3. **本轮新发现缺陷 6 项（N-1~N-6）**：N-3（陈旧 `dist/`）、N-4（无 `version` 字段、`bin/`+`scripts/` 不过 `tsc`）、N-6（会话 HTTP 用例端口重叠 + 固定 `sleep` 假失败）已修；N-1（`scope_audit.files_changed` 为空）、N-2（`diff_stat` 空 / `patch_fingerprint` 恒为 `sha256("")`）未修并如实标注；N-5 为文档口径差异。明细见报告 §4.3。
+> 3. **本轮新发现缺陷 7 项（N-1~N-7）**：N-3（陈旧 `dist/`）、N-4（无 `version` 字段、`bin/`+`scripts/` 不过 `tsc`）、N-6（会话 HTTP 用例端口重叠 + 固定 `sleep` 假失败）、N-7（`postbuild` 清理被批量删除保护拦下，改为移入系统临时目录）已修；N-1（`scope_audit.files_changed` 为空）、N-2（`diff_stat` 空 / `patch_fingerprint` 恒为 `sha256("")`）未修并如实标注；N-5 为文档口径差异。明细见报告 §4.3。
 > 4. **不可声称项（发布口径）**：无 `OPENAI_API_KEY`，`modelClient` 为确定性实现，「真实模型生成 → 合并」未验证，Token/费用为 0（`usage.accounting_mode=UNAVAILABLE`）；跨平台、多任务并发、第三方项目试用均未验证。报告 §4~§5 为准。
 
 > **v1.3.2 历史修订成果（存档）**：
