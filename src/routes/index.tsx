@@ -85,6 +85,7 @@ import {
   toExecutionStatus,
 } from "@/components/workspace-adapters";
 import type { ActiveContract } from "@/components/workspace-types";
+import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
   EvidenceReadyPayload,
@@ -397,24 +398,34 @@ function Console() {
   // WebSocket 已连接时轮询只是兜底，降到 60s；未连接时 15s 保持可用
   useEffect(() => {
     const interval = stream.status === "connected" ? 60_000 : 15_000;
-    const timer = setInterval(() => void refresh(), interval);
+    const timer = setInterval(() => {
+      // 页面隐藏时不发起任何后台刷新（含 protection），避免空转
+      if (document.hidden) return;
+      void refresh();
+    }, interval);
     return () => clearInterval(timer);
   }, [refresh, stream.status]);
 
-  // P.1：待审批卡要“立刻”出现（AI 被拦在原地），保护状态单独 3s 轮询
+  // 缺口 4.4：有活跃合同/待审批时 3s，否则 60s；隐藏页暂停、回前台补偿一次
+  const hasActiveWork =
+    (protection?.round.pending.length ?? 0) > 0 ||
+    contracts.some((contract) =>
+      ["PREPARING", "EXECUTING", "VERIFYING", "PENDING_RESUME"].includes(
+        contract.lifecycle_state,
+      ),
+    );
+
   useEffect(() => {
     if (!connected) return;
-    const timer = setInterval(() => {
-      void (async () => {
-        try {
-          setProtection(await fetchProtection(conn));
-        } catch {
-          // 单次取不到不影响；下一轮再试，门卫仍在后台拦截
-        }
-      })();
-    }, 3_000);
-    return () => clearInterval(timer);
-  }, [connected, conn]);
+    const poller = createProtectionPoller({
+      fetchProtection: async () => {
+        setProtection(await fetchProtection(conn));
+      },
+      hasActiveWork: () => hasActiveWork,
+    });
+    poller.start();
+    return () => poller.stop();
+  }, [connected, conn, hasActiveWork]);
 
   // 选中已验收合同时自动恢复 Evidence：否则刷新页面后结论与「核销」按钮都消失
   useEffect(() => {
@@ -432,16 +443,12 @@ function Console() {
     };
   }, [conn, selectedId, selected?.lifecycle_state]);
 
+  // 缺口 4.2：建连不再自动拉取架构图；仅在用户显式点击时按需加载。
+  // 设置读取与架构图解耦，避免一次建连触发全仓 AST 计算。
   useEffect(() => {
     if (!connected) return;
     let cancelled = false;
     void (async () => {
-      try {
-        const payload = await fetchArchGraph(conn);
-        if (!cancelled) setGraph(payload);
-      } catch {
-        // 架构图失败不阻断主流程
-      }
       try {
         const modelSettings = await fetchSettings(conn);
         if (!cancelled) setSettings(modelSettings);
@@ -453,6 +460,15 @@ function Console() {
       cancelled = true;
     };
   }, [connected, conn]);
+
+  const loadArchGraph = useCallback(async () => {
+    try {
+      const payload = await fetchArchGraph(conn);
+      setGraph(payload);
+    } catch {
+      // 架构图失败不阻断主流程
+    }
+  }, [conn]);
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -711,8 +727,17 @@ function Console() {
             </div>
 
             <div className="flex h-[320px] flex-col border-t border-border">
-              <div className="px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
+              <div className="flex items-center justify-between px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                <span>
+                  架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void loadArchGraph()}
+                  className="rounded border border-border px-1.5 py-0.5 text-[9px] normal-case tracking-normal hover:bg-accent"
+                >
+                  {graph ? "刷新依赖拓扑" : "查看架构图"}
+                </button>
               </div>
               {graph ? (
                 <>
