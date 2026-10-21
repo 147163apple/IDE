@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 
 import { recoverDaemonState } from "../../daemon/recovery/crash-recovery";
 import { cleanupStaleGitLocks } from "../../daemon/recovery/git-lock";
@@ -20,15 +20,12 @@ import {
   softwareContractSchema,
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
+import { git } from "../helpers/git";
 
 /**
  * Chaos 场景 1：中途拔线党（Crash Recovery & Lock Cleanup）
  * 模拟 Daemon 在 EXECUTING/VERIFYING 期间被 SIGKILL / 掉电打断。
  */
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
 
 function gitTry(cwd: string, args: string[]): { code: number; out: string } {
   try {

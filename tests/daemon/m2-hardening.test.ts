@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 /** 清理尽力而为：沙箱安全策略可能拒绝删除临时目录，不影响断言 */
 function safeRm(dir: string): void {
@@ -28,10 +27,7 @@ import {
   DirtyWorktreeConfirmationRequiredError,
 } from "../../daemon/git/worktree-manager";
 import { createContractDraft } from "../../src/lib/contract.schema";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 describe("M2 / TASK-A.2 stagent_read_file 大小与二进制保护", () => {
   let root: string;

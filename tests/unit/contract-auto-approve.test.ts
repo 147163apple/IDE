@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -17,6 +16,7 @@ import {
   loadRoundState,
 } from "../../daemon/protection/protection-list";
 import { getWorktreePath } from "../../daemon/git/worktree-manager";
+import { git } from "../helpers/git";
 
 /**
  * TASK-D.2 核心目标 1 验收（合同 Scope × 全局保护清单 的审批准入裁决）：
@@ -25,10 +25,6 @@ import { getWorktreePath } from "../../daemon/git/worktree-manager";
  * - 异常/清单损坏 → Fail-Closed，一律按冲突阻断，绝不静默放行；
  * - 幂等 → 已推进的合同再调用返回 SKIPPED，不重复建 Worktree。
  */
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
 
 /** 读取静默合同备案（JSONL） */
 function silentRecords(repo: string): Array<Record<string, unknown>> {

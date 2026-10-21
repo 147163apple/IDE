@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -15,10 +14,7 @@ import {
   createContractDraft,
   softwareContractSchema,
 } from "../../src/lib/contract.schema";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
   let repo: string;

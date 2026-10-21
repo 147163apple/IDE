@@ -26,6 +26,7 @@ import {
   undoLatestCheckpoint,
 } from "../../daemon/protection/auto-checkpoint";
 import { execGit } from "../../daemon/git/worktree-manager";
+import { assertIsolatedGitCwd } from "../../daemon/git/test-isolation";
 
 /**
  * TASK-P.1 验收（注入式）：
@@ -38,6 +39,9 @@ import { execGit } from "../../daemon/git/worktree-manager";
 
 async function initRepo(): Promise<string> {
   const repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-p1-"));
+  // 宿主仓库隔离守卫：临时仓库必须在隔离根内，否则下面的 user.name 写入
+  // 可能落到开发者真实仓库的 .git/config（见 daemon/git/test-isolation.ts）
+  assertIsolatedGitCwd(repo);
   await execGit(["init", "-b", "main"], repo);
   await execGit(["config", "user.name", "Stagent Test"], repo);
   await execGit(["config", "user.email", "test@stagent.local"], repo);

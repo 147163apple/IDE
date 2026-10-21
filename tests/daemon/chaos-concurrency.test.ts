@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
@@ -14,15 +13,12 @@ import {
   softwareContractSchema,
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
+import { git } from "../helpers/git";
 
 /**
  * Chaos 场景 3：双开并发抢占党（Concurrent Mutation Race）
  * 同一合同的两次「执行」/「核销」在同一毫秒并发发起。
  */
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
 
 function makeContract(title: string): SoftwareContract {
   const draft = createContractDraft({

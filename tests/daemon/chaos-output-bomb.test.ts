@@ -11,7 +11,6 @@ function safeRm(dir: string): void {
 }
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { runCommand, truncateOutput } from "../../daemon/runner/command-runner";
 import { ContractStore } from "../../daemon/pipeline/contract-store";
@@ -22,15 +21,12 @@ import {
   softwareContractSchema,
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
+import { git } from "../helpers/git";
 
 /**
  * Chaos 场景 4：狂暴输出炸弹党（Stdout / Stderr Buffer Bomb）
  * 验证命令死循环输出几十兆日志：Daemon 不得 OOM、截断必须生效、Evidence 体积必须受限。
  */
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
 
 /**
  * 生成「狂暴输出 + 末尾哨兵」的 node 脚本。

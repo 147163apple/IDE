@@ -2,13 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
 import { createTaskWorktree } from "../../daemon/git/worktree-manager";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 function writeContract(repo: string, id: string, state: string): void {
   const dir = path.join(repo, ".stagent", "contracts");
