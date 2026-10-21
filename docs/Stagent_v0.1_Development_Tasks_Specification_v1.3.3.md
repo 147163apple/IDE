@@ -75,7 +75,7 @@
 | **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P3 架构雷达 | • 1000 节点拓扑渲染 (≤16ms patch, ≤30MB 内存)<br>• 交互式 Scope 圈选，已批准合同圈选禁止原地扩权 |
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`components/diff/*` + `StructuredTerminal.tsx`；`GET /api/contracts/:id/diff-files` 逐文件真实内容；先脱敏后截断；5 用例绿） | P3 差异终端 | • 双栏/内联 Git Diff 审阅<br>• 结构化终端流式日志展示、ANSI 渲染、先脱敏后截断 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口：approve/execute/merge/resume/abort/diff-files/evidence 端点、Gate 0~4、4 条 Trailer、User-First Discard、一键合并均已落地；**核心目标 1「Scope 与保护清单无交集 → 自动批准」已闭环**（`9691b23`，合并 `742d27d`；`contract-auto-approve` 9 用例绿，全量 682 通过 / 4 跳过）；残余：`resume` 触碰清单时的"新审批版本"未实现，见卡片） | P5 核销合并 | • 提供 `POST /api/contracts/:id/approve` (防 TOCTOU)<br>• `resume` 提供**双路径裁决负例断言** (违规返回 409，G-14)<br>• **并发互斥锁守卫**：同合同 execute/resume/abort/merge 冲突返回 409 / `E_WORKSPACE_LOCKED` 并生成 BLOCKED Evidence (G-21)<br>• **合并成功后原子落盘合同与证据快照至 `.stagent/` 目录 (G-05)**<br>• 对齐 A §5.2 的 4 个 Git Trailer，执行合并门禁（**v1.3.3**：删除 Gate 5 二次确认弹窗改一键合并，保留 Gate 0~4 与后台指纹复核；冲突按 User-First Discard 仲裁） |
-| **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[NEW_TASK]** | P6 集成自举 | • 覆盖 Happy Path 全生命周期无人值守自动化回归<br>• **覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离，G-07）** |
+| **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[DONE]**（2 套件 / 15 例；全量 780 passed） | P6 集成自举 | • 覆盖 Happy Path 全生命周期无人值守自动化回归<br>• **覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离，G-07）** |
 | **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[NEW_TASK]** | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（2026-10-21 核验：提交 `08e95da` 已在 main；门卫/一张卡+补充卡/待审批持久化/自锁/失败关闭/快照撤销/规则推荐/Prompt 注入全部落地，13+1+3 用例绿；残余口径差见卡片） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`43496c0` 已在 main；`AgentChatPane` + `use-agent-session`；`agent-chat-pane` 8 用例绿；真实 Claude Code 流式/打断/续接见 W.5a） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume（映射 CLI 原生会话 ID）。 |
@@ -821,7 +821,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task E.1】双 Agent 协同与全流程 E2E 自动化测试
 * **任务编号**：`TASK-E.1`
 * **前置依赖**：`TASK-D.2`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[DONE]**（2026-10-22 落地，分支 `feat/e1-e2e-dual-agent-and-fault-injection`；两个套件共 **15 例**，全量 **780 passed / 6 skipped** 无回归）
 * **核心目标**：
   1. Happy Path 全生命周期无人值守自动化回归。
   2. **覆盖 8 类故障分支自动化拦截 (闭环 G-07)**：
@@ -845,6 +845,42 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 * **Pass/Fail 验收判定**：
   - **PASS**：全链路 E2E 退出码为 0；8 类故障分支全部断言成功触发阻断。
   - **FAIL**：出现任何安全越权或测试挂起。
+* **完成记录（2026-10-22 落地，Sprint 6）**：
+  - 交付物：`tests/e2e/fault-injection-regression.test.ts`（8 例）、`tests/e2e/dual-agent-workflow.test.ts`（7 例）、`tests/helpers/e2e-repo.ts`（共享临时仓库 + 合同工厂，非用例文件）。
+  - 真实性口径（本卡最容易做假的地方，逐条说明）：
+    - **真实编排器**：全部经 `new ContractOrchestrator({ repoRoot })` 驱动 `admit()` / `execute()` / `resume()` / `abort()`，只有「模型调用」用假 `modelClient`（真模型不可确定性复现）；`ScopedWorktreeGateway`、`CostMonitor`、`LoopGuard`、`ContractStore`、`squashMerge` 全为生产实现。
+    - **真实状态机**：每个断言都读回 `store.get()` 或 `outcome.contract.lifecycle_state`，不存在「只测函数返回值」。
+    - **真实 Git 仓库**：`fs.mkdtempSync(path.join(os.tmpdir(), ...))` + 真 `git init/commit/worktree/merge --squash`，符合 `daemon/git/test-isolation.ts` 守卫（`os.tmpdir()` 属放行隔离根），**宿主 `.git/config` 零触碰**。
+    - **断言「坏事没发生」**：除异常码外，还断言主分支 HEAD 未前进、暂存区为空、无 Stagent 审计提交、Worktree 目录不存在、任务分支已删、业务文件内容原样——拒绝必须发生在落盘之前。
+  - **G-07 八大故障分支覆盖矩阵**：
+    | # | 故障分支 | 真实触发点 | 断言结论 |
+    |---|---|---|---|
+    | ① | 超时重试熔断 | `LoopGuard` 连续失败达 `max_verification_retries` | `PENDING_RESUME` + `BLOCKED` / `VERIFICATION_RETRY_LIMIT` / `can_merge=false`；熔断态合并被 `E_NOT_AUDITED` 拒；`resume()` 回 EXECUTING 但**计数不重置**（再跑仍熔断）；`abort()` 后 Worktree 与分支清零 |
+    | ② | 测试文件未经授权篡改 | 网关 `handleWriteFile` 的 Test-Integrity 门禁 + `AiWorker.validateChanges` | 广义 glob `**/*.ts` 覆盖得到 `tests/` 但非显式授权 → `E_TEST_FILE_WRITE_BLOCKED` 且原件一字未改；`src/**` 下 Worker 提测试改动 → 整批 `WorkerScopeError`（合法 `src/ok.ts` 也不落盘）；显式授权后允许写但 Evidence `tests_modified=true`，合并提交带条件 Trailer `Stagent-Tests-Modified: true` |
+    | ③ | 外部篡改触发 STALE | `computeWorktreeFingerprint` + `assertEvidenceIntegrity` | 首次核销 `E_EVIDENCE_FINGERPRINT_MISMATCH`；磁盘证据被改写为 `STALE` / `can_merge=false` / `reason_code=EVIDENCE_STALE` 且**指纹字段不改**；二次核销 `E_EVIDENCE_STALE`；主分支无 Stagent 提交 |
+    | ④ | 主树 Dirty 阻断合并 | `assertMainTreeClean`（排除 `.stagent/`） | `E_MAIN_TREE_DIRTY`；HEAD 未变、暂存区为空、脏文件原样保留；清理后**同一份证据**可正常合并（证明不是误杀） |
+    | ⑤ | 保护模式触碰保护资产 | `admit()` → `intersectWithProtection` + `requestApproval` | `NEEDS_APPROVAL` + `entryNames=["登录"]` + 恰好 1 张卡、零 Worktree、合同停留 `PENDING_APPROVAL`；`deny` 后重入仍阻断且**不重复弹卡**；写闸门 `guardAgentWrite` 同步拒绝（Fail-Closed） |
+    | ⑥ | Supervisor 尝试直接触发执行 | `createSupervisorControlPlane` Proxy + `assertSupervisorActionAllowed` | 4 类特权动作 `approveContract` / `mergeContract` / `setVerdict` / `execCommand` 全部抛 `SupervisorPermissionDeniedError`（`E_UNAUTHORIZED_COMMAND`），每条越权**先审计后抛错**（4 条 `GATEWAY_VIOLATION`）；只读方法透传；属性写入同样被拒；合同未批准、零 Worktree、HEAD 未变 |
+    | ⑦ | Worker 完成声明不得改判 PASSED | `execute()` 的 `allPassed` 只认 `verification_results[].passed` | Worker 日志写「全部通过」也不产生效力：`FAILED` / `UNSAFE_EXECUTION` / `can_merge=false` / `exit_code=1`；verdict 内不含该自述；合并被 `E_NOT_AUDITED` 拒；`src/b.ts` 未进主分支 |
+    | ⑧ | 非受控 Agent 输出不得作为受控 Evidence | contract Schema §9.1 不变式 + `sanitizeEnvironment` 白名单 | `UNCONTROLLED_EXTERNAL` + `EXECUTING`/`PREPARING` 构造即被 Schema 拒绝（`DRAFT` 允许，证明只禁执行态）；宿主 `OPENAI_API_KEY` / 自定义探针变量均不进入验证子进程（命令只在两者皆不可见时退出 0），配置 `**/*.ts` 也无法让子进程读到 |
+  - **Vibe / Protected 全链路覆盖**：
+    | 场景 | 断言要点 |
+    |---|---|
+    | Vibe 自动准入 | `protectionMode=VIBE` → `AUTO_APPROVED`、`approved_by=stagent-auto`、`pending` 为空、静默备案 `mode=VIBE` / `protected_files=[]`；重复 `admit` 返回 `SKIPPED` |
+    | Auto-Checkpoint | `execute` 前自动 `chore(stagent): contract <id> changes` 提交；Worktree 干净；主分支仍在 `init`；任务分支领先 1 提交；`git_info.task_commit_sha` 与检查点 SHA 一致 |
+    | 一键撤销 | `abort` → `ABORTED`；Worktree 目录消失、`task/<id>` 分支不存在、HEAD 未动、`src/b.ts` 未出现、工作树零残留 |
+    | Protected ≤2 次交互 | 弹 1 张卡（`pending.length=1`）→ `decideApproval(approve)` → 第二次 `admit` 即 `AUTO_APPROVED`；`approval_decision` 备案恰好 1 条；授权范围严格等于卡上清单；备案 `mode=PROTECTED_AUTHORIZED` |
+    | 拒绝即中止 | `decideApproval(deny)` + `abort` → `ABORTED × REJECTED`，驳回理由落盘；零 Worktree / 零任务分支 / 业务代码零改动 |
+    | Gate 0~4 | `E_CONTRACT_NOT_FOUND` → `E_NOT_AUDITED` → `E_EVIDENCE_MISSING`（删盘上证据）→ `E_EVIDENCE_MISMATCH`（换 contract_id）→ `E_CANNOT_MERGE`（改判 BLOCKED）逐级拦截；恢复证据后一键合并成功，4 字段 Trailer 齐全、`Stagent-Tests-Modified` 缺席、HEAD 前进、Worktree 清理而存证留存 |
+    | User-First Discard | Worker 改 `login.ts` + 新增 `session.ts`，用户在验证后自行提交 `login.ts` → 合并 `conflictResolution=USER_FIRST_DISCARD`、提交信息含「以用户主分支版本为准」、冲突处是 `USER` 版本、非冲突的 `AI` 改动正常入主干、代码中无冲突标记残留 |
+  - 关键实现口径：
+    - **一例一仓库**：`beforeEach` 新建临时仓库、`afterEach` 递归删除，故障之间零状态串扰（`.stagent/protection-state.json`、`guard/*.json` 这类轮次态不会跨例泄漏）。
+    - **Protected 链路用具体文件声明 scope**：合同 `writable_paths` 写 `src/auth/login.ts` 而非 `src/auth/**`。原因是写闸门 `guardAgentWrite` 按**具体路径**精确匹配本轮授权清单，而准入卡记录的授权键是合同 scope 字符串——写 glob 时两者对不上（见残余第 1 条）。
+    - **Vibe 的「撤销」语义落在 `abort`**：v0.1 无独立 checkpoint 存储，检查点即任务分支提交，撤销 = 删 Worktree + 删任务分支 + 合同转 `ABORTED`，主分支从头到尾没被写过一个字节。
+  - 如实保留的残余（不阻塞本卡验收，已记录待评审）：
+    - **授权粒度不一致**：准入/拒绝以合同 scope 字符串为键，写闸门以具体路径为键 → 合同写 glob 且命中保护清单时，用户同意后 Worker 逐文件写入仍会**再弹一张卡**。安全性无问题（Fail-Closed，仍写入 `pending` 而非放行），但违背「≤2 次交互」，属产品侧待修（建议在 `guardAgentWrite` 内对 `approvedFiles`/`deniedFiles` 做 glob 匹配）。
+    - **Vibe 下「无合同直写」路径**未在本卡覆盖：本卡所有链路都经合同；不建合同、Agent 直接改文件的守卫属 `TASK-P.1/P.2`（`tests/unit/protection-silent-contract.test.ts` 已覆盖规则层），E2E 层留待 `TASK-E.2` Dogfooding。
+    - **UI 层「自由模式」标识**（Header 文案与点击切换）不在本卡，已由 `TASK-C.2` 落地的 `WorkspaceHeader` + `tests/ui/supervisor-studio-approval.test.tsx` 覆盖。
 
 ---
 
