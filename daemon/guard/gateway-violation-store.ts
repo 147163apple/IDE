@@ -17,8 +17,24 @@ export interface StoredGatewayViolation {
   violation: GatewayViolation;
 }
 
+const SAFE_CONTRACT_ID = /^[A-Za-z0-9_-]+$/;
+
+/** 合同 ID 白名单：拒绝路径分隔符、`..` 与任何非 [A-Za-z0-9_-] 字符 */
+export function assertSafeContractId(contractId: string): void {
+  if (!SAFE_CONTRACT_ID.test(contractId)) {
+    throw new Error(`Unsafe contract id for violation store: ${contractId}`);
+  }
+}
+
 function violationDir(repoRoot: string, contractId: string): string {
-  return path.join(repoRoot, ".stagent", "guard", contractId);
+  assertSafeContractId(contractId);
+  const base = path.resolve(repoRoot, ".stagent", "guard");
+  const dir = path.resolve(base, contractId);
+  // 双保险：即使白名单被放宽，也不允许解析结果跳出 guard 根
+  if (dir === base || !dir.startsWith(`${base}${path.sep}`)) {
+    throw new Error(`Violation path escapes guard root: ${contractId}`);
+  }
+  return dir;
 }
 
 export function violationPath(repoRoot: string, contractId: string): string {
@@ -41,10 +57,22 @@ export function saveGatewayViolation(
     contract_revision: contractRevision,
     violation,
   };
-  fs.writeFileSync(
-    violationPath(repoRoot, contractId),
-    JSON.stringify(payload, null, 2),
-  );
+  const target = violationPath(repoRoot, contractId);
+  const tmp = `${target}.tmp-${process.pid}-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  try {
+    fs.writeFileSync(tmp, JSON.stringify(payload, null, 2));
+    // 原子替换：进程骤死时目标文件要么是旧完整 JSON，要么是新完整 JSON
+    fs.renameSync(tmp, target);
+  } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // 清理尽力而为
+    }
+    throw err;
+  }
 }
 
 /** 读取并校验 revision；不匹配视为无违规（旧记录失效） */
@@ -53,6 +81,7 @@ export function loadCurrentGatewayViolation(
   contractId: string,
   contractRevision: number,
 ): GatewayViolation | null {
+  assertSafeContractId(contractId);
   try {
     const raw = fs.readFileSync(violationPath(repoRoot, contractId), "utf-8");
     const parsed = JSON.parse(raw) as StoredGatewayViolation;
@@ -73,6 +102,7 @@ export function clearGatewayViolation(
   repoRoot: string,
   contractId: string,
 ): boolean {
+  assertSafeContractId(contractId);
   const file = violationPath(repoRoot, contractId);
   try {
     fs.unlinkSync(file);

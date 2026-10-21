@@ -211,8 +211,6 @@ function isExistingOrFileLikePath(arg: string): boolean {
   return segments.length >= 2 || arg.endsWith("/");
 }
 
-const HOST_PATH_PREFIXES = ["/", "~", "C:\\", "c:\\", "\\\\"];
-
 /**
  * 纯函数评估：不触碰子进程，可在执行前安全调用。
  * `repoTrusted` 由调用方用 `isRepoTrusted` 计算，便于测试与审计。
