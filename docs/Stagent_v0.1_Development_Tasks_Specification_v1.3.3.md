@@ -34,6 +34,13 @@
 > 4. **G-3 闭环 + 加固**：`allowBash=true` 分支负例已补测通过——Shell 触碰保护清单路径（`rm`/`mv`）被 `shellProtectionVerdict` 按字面量拒绝并投递确认卡，目标文件完好。**同轮发现的潜伏缺口已加固**（2026-10-22）：Bash 分支新增 `reservedMetadataHit()`（`.stagent/.git/.claude/.cursor/.env` 按路径段拒绝）与 `shellEscapeVerdict()`（重定向目标与全部词元的越界判定），此前可绕的 `echo pwn > ../outside/probe.txt`、`rm -rf .stagent` 现均被拒；21 条命令矩阵（`npm run`/`git status`/`npx vitest`/`> /dev/null`/`cat .gitignore` 等）零误伤。
 > 5. **证据归档**：`docs/reports/W5a-真实CLI验证报告-2026-10-21.md`（5/5 记录、拦截日志原文、新缺口证据 §4.5、Token 口径、凭据审计、复现步骤）。
 
+> **E.2 收官校正（2026-10-22，Sprint 6 收口；仅改「任务状态」与实测记录，不改任务定义、验收判据、依赖边与排期）**：
+> 依据基线：分支 `feat/e2-dogfooding-and-release`（基于 `main`@`b1ede2a`，即 `TASK-E.1` 合并提交）；`npm run typecheck` 退出码 0；`npx vitest run` **86 文件通过 / 1 跳过，785 用例通过 / 6 跳过，0 失败**；`npm run build` 退出码 0。
+> 1. **`TASK-E.2` → `[COMPLETED]`**：目标 1「真仓库自举闭环」由合同 `contract_1792607266038_110hd` 完成——准入自动批准 → 真 Worktree → 受控写入 → 真跑 `typecheck` + 定向单测 → `EvidenceBundleV11`（`PASSED`/`can_merge=true`/0 重试）→ Gate 0~4 `squashMerge` → 自举提交 `69f61bd`（3 files，+96/−3）；目标 2 报告 `docs/reports/v0.1-dogfooding-report.md` 重写为真仓库实测版；目标 3 `package.json` 0.1.0 + `dist/` 33 文件 / 3.15 MB。
+> 2. **Trailer 由 4 条扩至 7 条（含任务卡要求的 4 项）**：新增 `Stagent-Evidence-Hash`（证据文件字节 SHA-256，可用 `shasum -a 256` 独立复算）与 `Stagent-Approval-Status`；§5.2 既有命名（`Stagent-Contract-ID` / `Reviewed-By`）保持不动，任务卡的 `Contract-Id` / `Audited-By` 写法差异在报告 §3.1 明示。
+> 3. **本轮新发现缺陷 6 项（N-1~N-6）**：N-3（陈旧 `dist/`）、N-4（无 `version` 字段、`bin/`+`scripts/` 不过 `tsc`）、N-6（会话 HTTP 用例端口重叠 + 固定 `sleep` 假失败）已修；N-1（`scope_audit.files_changed` 为空）、N-2（`diff_stat` 空 / `patch_fingerprint` 恒为 `sha256("")`）未修并如实标注；N-5 为文档口径差异。明细见报告 §4.3。
+> 4. **不可声称项（发布口径）**：无 `OPENAI_API_KEY`，`modelClient` 为确定性实现，「真实模型生成 → 合并」未验证，Token/费用为 0（`usage.accounting_mode=UNAVAILABLE`）；跨平台、多任务并发、第三方项目试用均未验证。报告 §4~§5 为准。
+
 > **v1.3.2 历史修订成果（存档）**：
 > 1. **彻底闭环错误码与预算契约 (闭环 P1-N1 / P1-N2)**：对齐法典 A §6.4(3) 超时分列错误码（`E_COMMAND_TIMEOUT` / `E_TASK_TIMEOUT`）；对齐法典 A §9.1 `budget_limits` 增补的 `max_command_executions?` 与 `max_tool_calls?` 可选预算字段，使 TASK-W.3 与 0.2b 命令/工具调用计数熔断断言完全合法自洽。
 > 2. **完善工作区与并发互斥锁双向断言 (闭环 P2-R5)**：在 §1.1 与 TASK-D.1 补齐存活 PID 锁冲突抛出 `E_WORKSPACE_LOCKED` 断言；与 TASK-D.2 (G-21) 运行时并发互斥锁协同闭环。
@@ -76,7 +83,7 @@
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`components/diff/*` + `StructuredTerminal.tsx`；`GET /api/contracts/:id/diff-files` 逐文件真实内容；先脱敏后截断；5 用例绿） | P3 差异终端 | • 双栏/内联 Git Diff 审阅<br>• 结构化终端流式日志展示、ANSI 渲染、先脱敏后截断 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口：approve/execute/merge/resume/abort/diff-files/evidence 端点、Gate 0~4、4 条 Trailer、User-First Discard、一键合并均已落地；**核心目标 1「Scope 与保护清单无交集 → 自动批准」已闭环**（`9691b23`，合并 `742d27d`；`contract-auto-approve` 9 用例绿，全量 682 通过 / 4 跳过）；残余：`resume` 触碰清单时的"新审批版本"未实现，见卡片） | P5 核销合并 | • 提供 `POST /api/contracts/:id/approve` (防 TOCTOU)<br>• `resume` 提供**双路径裁决负例断言** (违规返回 409，G-14)<br>• **并发互斥锁守卫**：同合同 execute/resume/abort/merge 冲突返回 409 / `E_WORKSPACE_LOCKED` 并生成 BLOCKED Evidence (G-21)<br>• **合并成功后原子落盘合同与证据快照至 `.stagent/` 目录 (G-05)**<br>• 对齐 A §5.2 的 4 个 Git Trailer，执行合并门禁（**v1.3.3**：删除 Gate 5 二次确认弹窗改一键合并，保留 Gate 0~4 与后台指纹复核；冲突按 User-First Discard 仲裁） |
 | **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[DONE]**（2 套件 / 15 例；全量 780 passed） | P6 集成自举 | • 覆盖 Happy Path 全生命周期无人值守自动化回归<br>• **覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离，G-07）** |
-| **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[NEW_TASK]** | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
+| **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[COMPLETED]**（真仓库自举 1 次闭环；v0.1.0 构建 `dist/` 3.15 MB / 0 error；全量 785 passed） | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（2026-10-21 核验：提交 `08e95da` 已在 main；门卫/一张卡+补充卡/待审批持久化/自锁/失败关闭/快照撤销/规则推荐/Prompt 注入全部落地，13+1+3 用例绿；残余口径差见卡片） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`43496c0` 已在 main；`AgentChatPane` + `use-agent-session`；`agent-chat-pane` 8 用例绿；真实 Claude Code 流式/打断/续接见 W.5a） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume（映射 CLI 原生会话 ID）。 |
 | **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（2026-10-21 步骤 D 实测收口：`verified_on: Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`；真实 CLI 负例 `tests/e2e/claude-code-isolation.real.test.ts` **4/4 全绿**（25.94s，`STAGENT_REAL_CLAUDE=1` + `deepseek-chat` @ `https://api.deepseek.com/anthropic`），hook `deny` 日志已落盘；`allowBash` 分支负例亦已补测（合计 **6/6，48.58s**），并完成 `allowBash` 的 Shell 加固（元数据保留区 + 越界目标两道门禁，21 条命令矩阵零误伤）；证据见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
@@ -887,7 +894,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task E.2】Stagent 仓库自举 (Dogfooding) 与发版交付
 * **任务编号**：`TASK-E.2`
 * **前置依赖**：`TASK-E.1`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（2026-10-22 落地，分支 `feat/e2-dogfooding-and-release`；真仓库自举提交 `69f61bd`，v0.1.0 生产包 0 error，全量 **785 passed / 6 skipped**）
 * **核心目标**：
   1. 在 Stagent 自身代码库中通过本地工作台完成真实自举演练。
   2. 输出演练报告 (`docs/reports/v0.1-dogfooding-report.md`)，客观披露实际开销与平台边界。
@@ -898,6 +905,16 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 * **Pass/Fail 验收判定**：
   - **PASS**：自举 Commit 合规包含 4 个 Trailer，CLI 输出正常，生产构建 0 错误。
   - **FAIL**：生产构建失败或缺少依赖。
+* **完成记录（2026-10-22 落地，Sprint 6 收官）**：
+  - 交付物：自举提交 `69f61bd`（`bin/stagent.ts` +13/−3、`bin/version.ts` 新增 41 行、`tests/unit/cli-version.test.ts` 新增 45 行）；`scripts/dogfooding-run.ts`（演练驱动器）、`scripts/worktree-bench.ts`（Worktree 微基准）、`scripts/package-dist.mjs`（发版装配）；`docs/reports/v0.1-dogfooding-report.md`（重写，取代 2026-10-19 副本版）；`package.json` v0.1.0 + `postbuild`。
+  - **真实链路（不是副本、不是脚本绕过）**：合同 `.stagent/contracts/contract_1792607266038_110hd.json` → `admit()` 无交集自动批准（`approved_by=stagent-auto`）→ 真 Worktree（`task/contract_…`）→ `AiWorker` + `ScopedWorktreeGateway` 受控写入 3 文件 → Worktree 内真跑 `npm run typecheck`（2 484 ms）+ `npx vitest run tests/unit/cli-version.test.ts`（729 ms）→ `EvidenceBundleV11`：`PASSED` / `can_merge=true` / `verification_retry_count=0` → `squashMerge()` Gate 0~4 + Trailer → `worktree remove` + 分支删除，主工作区零残留。
+  - **耗时实测**：准入+Worktree 338 ms、受控写入 23 ms、验证 3 577 ms、合并+清理 241 ms、合计 **4 216 ms**。Worktree 建/销独立微基准（3 次）均值 **267 ms / 130 ms**（含依赖共享视图挂载，未安装依赖）。
+  - **用量如实**：本次无 `OPENAI_API_KEY`，`modelClient` 为确定性实现 → Token 0 / 费用 0，证据 `usage.accounting_mode=UNAVAILABLE`。「真实模型生成 → 合并」**未被验证**，报告中明确不可声称。
+  - **Trailer 实测（7 条，含任务卡要求的 4 项）**：`Stagent-Contract-ID` / `Stagent-Evidence-ID` / **`Stagent-Evidence-Hash`** / `Stagent-Verdict: PASSED` / **`Stagent-Approval-Status: APPROVED`** / `Reviewed-By` / `Stagent-Tests-Modified: true`。Evidence-Hash 可用 `shasum -a 256` 独立复算校验（`327de330…672e9`）。命名以 §5.2 为准（保留 `Contract-ID` 大写与 `Reviewed-By`），任务卡中 `Contract-Id`/`Audited-By` 的差异已在报告 §3.1 明示。
+  - **合并提交格式扩展**：`daemon/pipeline/merger.ts` 新增 `MergeCommitMessageOptions.evidenceHash`，`mergeInternal` 以证据文件字节 SHA-256 填充；新增恒写字段 `Stagent-Approval-Status`。既有 §5.2 四字段与条件字段 `Stagent-Tests-Modified` 语义不变（5 个既有套件断言全绿），纯函数未提供哈希时不生成伪哈希（`tests/daemon/merger.test.ts` 新增 1 例锁定顺序与缺席）。
+  - **发版**：`package.json` 补 `version: 0.1.0`（此前无该字段）；`npm run build` 0 error → `dist/` 33 文件 / 3.15 MB（前端 4 / 1.00 MB、后端 25 / 2.15 MB）+ `BUILD-INFO.json`（版本/提交/分支/时间/体积）。**核实发现**：原 `dist/` 为 2026-10-19 陈旧目录，`vite build` 只产 `.output/`，旧报告「dist 已生成」与构建无因果关系 → 新增 `postbuild` 装配并先删旧包。
+  - 门禁：`npm run typecheck` 0 error（含新增 `bin/**`、`scripts/**` 覆盖，此前 CLI 入口与脚本不过 tsc）；ESLint / Prettier 干净；全量 **785 passed / 6 skipped**（780 + 4 自举单测 + 1 Trailer 单测）。
+  - 如实保留的残余：真实模型生成未验证；`execute()` 重建 runtime 导致 Evidence `scope_audit.files_changed` 为空（N-1，未修）；`git_info.diff_stat` 为空且 `patch_fingerprint` 恒为 `sha256("")`（N-2，未修，因 `commitWorktree` 先提交后取 diff）；`TASK-C.2` Studio 内改 Scope（R-1）；Protected 授权粒度 glob/具体路径不一致（R-2，沿用 `TASK-E.1` 记录）；网络 `DENY` 为非对抗性离线约束（R-3/ADR-003）；单任务串行、仅 macOS 实测、外部项目未试用（R-4/R-5）。详见 `docs/reports/v0.1-dogfooding-report.md` §4。
 
 ---
 

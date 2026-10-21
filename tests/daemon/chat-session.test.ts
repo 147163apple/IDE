@@ -166,8 +166,11 @@ describe("TASK-C.6 会话 HTTP + WS 帧", () => {
     repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-chat-http-"));
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3690,
-      endPort: 3699,
+      // 端口必须与 integration/resume-abort.test.ts（3690~3695）错开：
+      // 两者曾共用 3690，在 8 路并发下随机撞出 EADDRINUSE，表现为「与本次改动
+      // 无关的偶发失败」。这里固定到 3646~3655（该区间无其他套件占用）。
+      startPort: 3646,
+      endPort: 3655,
       enableCrashRecovery: false,
       chatAdapters: [new FakeAdapter(500, 10)],
     });
@@ -196,7 +199,22 @@ describe("TASK-C.6 会话 HTTP + WS 帧", () => {
       body: JSON.stringify({ text: "hi" }),
     });
     expect(sent.status).toBe(202);
-    await new Promise((r) => setTimeout(r, 80));
+    // 不要用固定 sleep：全量 8 路并发时 80ms 未必够本轮真正进入「在跑」，
+    // 而 interrupt() 找不到 controller 会返回 false，表现为与本次改动无关的假失败。
+    // 改为轮询会话 busy 标志，把「在跑」等成可观测事实。
+    let busy = false;
+    const deadline = Date.now() + 5000;
+    while (Date.now() < deadline) {
+      const cur = await (
+        await fetch(`${base}/api/chat/sessions/${id}`, { headers: h })
+      ).json();
+      if (cur.session?.busy === true) {
+        busy = true;
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    expect(busy, "会话应在 5s 内进入 busy 态").toBe(true);
     const intr = await (
       await fetch(`${base}/api/chat/sessions/${id}/interrupt`, {
         method: "POST",

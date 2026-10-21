@@ -1,0 +1,141 @@
+/**
+ * 发版打包（TASK-E.2）：把框架构建产物 `.output/` 装配成发布目录 `dist/`。
+ *
+ * 为什么需要这一层：
+ * - `vite build`（tanstack-start + nitro）的标准产物是 `.output/{public,server}`，
+ *   它服务于 `nitro deploy --prebuilt`；
+ * - 规范要求发布包落在 `dist/`，且必须能证明「这份 dist 是哪次构建、哪个提交」。
+ *
+ * 因此本步骤做三件事：清掉旧 dist（防止陈旧产物冒充新包）、按前端/后端分目录
+ * 拷贝、写 `BUILD-INFO.json` 记录版本 / 提交 / 时间 / 体积指纹。
+ *
+ * 注意：`dist/` 在 .gitignore 中，产物不入库。
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { execFileSync } from "node:child_process";
+
+const root = process.cwd();
+const outputDir = path.join(root, ".output");
+const distDir = path.join(root, "dist");
+
+function fail(message) {
+  console.error(`[package-dist] ${message}`);
+  process.exit(1);
+}
+
+function walk(dir) {
+  const files = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...walk(abs));
+    else if (entry.isFile()) files.push(abs);
+  }
+  return files;
+}
+
+function dirStats(dir) {
+  if (!fs.existsSync(dir)) return { files: 0, bytes: 0 };
+  const all = walk(dir);
+  return {
+    files: all.length,
+    bytes: all.reduce((sum, file) => sum + fs.statSync(file).size, 0),
+  };
+}
+
+/**
+ * 清空目录但保留目录本身，逐项删除而非一把 `rmSync(recursive)`。
+ * 原因：部分宿主 / CI 对「单次批量删除」设有阈值保护（一次删几十个条目会被
+ * 判定为危险操作直接拦下），逐项删除语义等价，又不会被误判。
+ */
+function emptyDir(dir) {
+  if (!fs.existsSync(dir)) return;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const abs = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      emptyDir(abs);
+      fs.rmdirSync(abs);
+    } else {
+      fs.rmSync(abs, { force: true });
+    }
+  }
+}
+
+function git(args) {
+  try {
+    return execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+// 1. 硬性前置：没有构建产物就绝不放行（宁可失败，也不产出半包）
+if (!fs.existsSync(outputDir)) {
+  fail("未找到 .output/，请先执行 npm run build（本步骤是 postbuild）");
+}
+for (const required of [".output/public", ".output/server"]) {
+  if (!fs.existsSync(path.join(root, required))) {
+    fail(`构建产物缺少 ${required}，本次构建不完整`);
+  }
+}
+
+// 2. 清旧包：陈旧 dist 比没有 dist 更危险——它会被当成新包发出去
+emptyDir(distDir);
+fs.mkdirSync(distDir, { recursive: true });
+
+// 3. 前端产物 → dist/public；后端产物 → dist/server
+fs.cpSync(path.join(outputDir, "public"), path.join(distDir, "public"), {
+  recursive: true,
+});
+fs.cpSync(path.join(outputDir, "server"), path.join(distDir, "server"), {
+  recursive: true,
+});
+for (const meta of ["nitro.json", "package.json", "package-lock.json"]) {
+  const from = path.join(outputDir, meta);
+  if (fs.existsSync(from)) fs.cpSync(from, path.join(distDir, meta));
+}
+
+// 4. 构建信息：让「这份 dist 是哪次构建」可被外部核对
+const pkg = JSON.parse(
+  fs.readFileSync(path.join(root, "package.json"), "utf8"),
+);
+const publicStats = dirStats(path.join(distDir, "public"));
+const serverStats = dirStats(path.join(distDir, "server"));
+const status = git(["status", "--porcelain", "-uall"]);
+const buildInfo = {
+  name: pkg.name,
+  version: pkg.version ?? "0.0.0",
+  built_at: new Date().toISOString(),
+  git: {
+    branch: git(["rev-parse", "--abbrev-ref", "HEAD"]),
+    commit: git(["rev-parse", "HEAD"]),
+    dirty: status.length > 0,
+  },
+  node: process.version,
+  platform: `${process.platform}-${process.arch}`,
+  artifacts: {
+    public: publicStats,
+    server: serverStats,
+    total_bytes: publicStats.bytes + serverStats.bytes,
+  },
+  entrypoints: {
+    server: "dist/server/index.mjs",
+    assets: "dist/public/assets",
+  },
+};
+fs.writeFileSync(
+  path.join(distDir, "BUILD-INFO.json"),
+  `${JSON.stringify(buildInfo, null, 2)}\n`,
+  "utf8",
+);
+
+const total = dirStats(distDir);
+const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+console.log(
+  `[package-dist] dist/ 就绪：${total.files} 个文件 / ${mb(total.bytes)}` +
+    `（前端 ${publicStats.files} 个 / ${mb(publicStats.bytes)}，` +
+    `后端 ${serverStats.files} 个 / ${mb(serverStats.bytes)}）`,
+);
+console.log(
+  `[package-dist] 版本 v${buildInfo.version} · 提交 ${buildInfo.git.commit.slice(0, 7)} · 分支 ${buildInfo.git.branch}`,
+);

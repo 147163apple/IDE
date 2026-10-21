@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -103,6 +104,19 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
     );
     expect(log).toContain("Stagent-Verdict: PASSED");
     expect(log).toContain("Reviewed-By: tina");
+
+    // TASK-E.2：合并时的审批事实与证据文件哈希必须进提交，且哈希可被独立复算
+    expect(log).toContain("Stagent-Approval-Status: APPROVED");
+    const evidenceFile = path.join(
+      repo,
+      ".stagent",
+      "evidence",
+      `${contract.contract_id}-${outcome.evidence.evidence_id}.json`,
+    );
+    const expectedHash = createHash("sha256")
+      .update(fs.readFileSync(evidenceFile))
+      .digest("hex");
+    expect(log).toContain(`Stagent-Evidence-Hash: ${expectedHash}`);
 
     // 存证归档仍在
     expect(
@@ -366,6 +380,63 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
       "r",
     );
     expect(tamperedMessage).toContain("Stagent-Tests-Modified: true");
+  });
+
+  it("审批状态恒写入；证据哈希仅在提供时写入（纯函数不伪造哈希）", () => {
+    const contract = makeContract("trailer approval/hash");
+    const evidence = {
+      evidence_id: "evi_3",
+      contract_id: contract.contract_id,
+      generated_at: "",
+      usage: {
+        currency: "CNY",
+        pricing_version: "v1",
+        accounting_mode: "UNAVAILABLE" as const,
+        limit_reached: false,
+      },
+      worktree_snapshot: {
+        head_sha: "a",
+        snapshot_fingerprint: "b",
+        captured_at: "",
+      },
+      verdict: { status: "PASSED" as const, can_merge: true, summary: "" },
+      scope_audit: {
+        passed: true,
+        files_changed: [],
+        forbidden_violations: [],
+        budget_exhausted: false,
+      },
+      verification_results: [],
+      git_info: {
+        base_commit_sha: "a",
+        task_commit_sha: "b",
+        diff_stat: "",
+        patch_fingerprint: "c",
+      },
+    };
+
+    // 未提供哈希：不能凭空造一个「看起来像哈希」的值
+    const noHash = buildMergeCommitMessage(contract, evidence, "r");
+    expect(noHash).toContain(
+      `Stagent-Approval-Status: ${contract.approval.status}`,
+    );
+    expect(noHash).not.toContain("Stagent-Evidence-Hash");
+
+    // 提供哈希：原样写入，且 Trailer 顺序稳定（Contract → Evidence → Hash → Verdict → Approval → Reviewer）
+    const withHash = buildMergeCommitMessage(contract, evidence, "r", null, {
+      evidenceHash: "f".repeat(64),
+    });
+    const trailerLines = withHash
+      .split("\n")
+      .filter((line) => /^(Stagent-|Reviewed-By)/.test(line));
+    expect(trailerLines).toEqual([
+      `Stagent-Contract-ID: ${contract.contract_id}`,
+      "Stagent-Evidence-ID: evi_3",
+      `Stagent-Evidence-Hash: ${"f".repeat(64)}`,
+      "Stagent-Verdict: PASSED",
+      `Stagent-Approval-Status: ${contract.approval.status}`,
+      "Reviewed-By: r",
+    ]);
   });
 
   it("MergeGateError 携带标准错误码", () => {
