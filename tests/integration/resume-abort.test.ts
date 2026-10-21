@@ -86,6 +86,10 @@ describe("M8 / Resume 与 Abort 动作端点（Bearer 保护）", () => {
     });
   }
 
+  /**
+   * TASK-D.2（v1.3.3 §0.2）：合同与保护清单无交集时，创建即自动批准并推进到 EXECUTING。
+   * 因此这里不再调用 /approve（对已推进的合同会返回 409），而是校验自动批准结果。
+   */
   async function createAndApprove(contract: SoftwareContract): Promise<void> {
     const created = await fetch(`${base}/api/contracts`, {
       method: "POST",
@@ -93,11 +97,11 @@ describe("M8 / Resume 与 Abort 动作端点（Bearer 保护）", () => {
       body: JSON.stringify({ contract }),
     });
     expect(created.status).toBe(201);
-    const approved = await fetch(
-      `${base}/api/contracts/${contract.contract_id}/approve`,
-      { method: "POST", headers: auth(), body: JSON.stringify({}) },
-    );
-    expect(approved.status).toBe(200);
+    const body = (await created.json()) as {
+      contract: { lifecycle_state: string; approval: { approved_by?: string } };
+    };
+    expect(body.contract.lifecycle_state).toBe("EXECUTING");
+    expect(body.contract.approval.approved_by).toBe("stagent-auto");
   }
 
   /** 直接把合同落盘状态改写为 PENDING_RESUME（模拟熔断/崩溃自愈后的挂起态） */
@@ -155,12 +159,34 @@ describe("M8 / Resume 与 Abort 动作端点（Bearer 保护）", () => {
 
   it("abort：待审批合同被驳回 → ABORTED + REJECTED + rejection_reason", async () => {
     const contract = makeContract();
+    // TASK-D.2（v1.3.3 §0.2）：无交集的合同会在创建时自动批准，而「驳回」只对
+    // 待审批态有意义。这里先锁一个与合同范围相交的保护项，让合同停在 PENDING_APPROVAL。
+    fs.mkdirSync(path.join(repo, ".stagent"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, ".stagent", "protection.json"),
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            id: "pe-src",
+            name: "源码",
+            patterns: ["src/**"],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+      "utf8",
+    );
     const created = await fetch(`${base}/api/contracts`, {
       method: "POST",
       headers: auth(),
       body: JSON.stringify({ contract }),
     });
     expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as {
+      contract: { lifecycle_state: string };
+    };
+    expect(createdBody.contract.lifecycle_state).toBe("PENDING_APPROVAL");
 
     const aborted = await fetch(
       `${base}/api/contracts/${contract.contract_id}/abort`,

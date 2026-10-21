@@ -48,6 +48,13 @@ import {
   removeTaskWorktree,
   type WorktreeInfo,
 } from "../git/worktree-manager";
+import {
+  appendSilentContractRecord,
+  intersectWithProtection,
+  loadRoundState,
+  protectionMode,
+  requestApproval,
+} from "../protection/protection-list";
 
 /**
  * 服务端合同编排器（规范 §1 / §5.2 / §6）：
@@ -70,6 +77,22 @@ export interface ExecutionOutcome {
   contract: SoftwareContract;
   evidence: EvidenceBundle;
   worktree: WorktreeInfo;
+}
+
+/** TASK-D.2：审批前的准入裁决（合同 Scope × 保护清单） */
+export type AdmissionDecision =
+  "AUTO_APPROVED" | "AUTO_APPROVAL_FAILED" | "NEEDS_APPROVAL" | "SKIPPED";
+
+export interface AdmissionResult {
+  decision: AdmissionDecision;
+  contract: SoftwareContract;
+  /** 白话原因：用于卡片提示与日志，不暴露错误码 */
+  reason?: string | undefined;
+  /** 命中的受保护条目（无交集时为空） */
+  protectedFiles: string[];
+  entryNames: string[];
+  /** NEEDS_APPROVAL 时的待审批卡 id */
+  cardId?: string | undefined;
 }
 
 export class ContractOrchestrator {
@@ -165,6 +188,150 @@ export class ContractOrchestrator {
         }
       },
     );
+  }
+
+  /**
+   * TASK-D.2 核心目标 1：审批准入裁决（合同 Scope × 全局保护清单）。
+   *
+   * - **无交集**：写 `.stagent/silent-contracts.jsonl` 备案后直接自动批准并推进到
+   *   `PREPARING → EXECUTING`，前端零弹窗、用户零点击；
+   * - **有交集**：停在 `PENDING_APPROVAL`，登记一张白话待审批卡，等待用户显式决策；
+   * - **失败关闭**：清单读取/规则比对异常一律按「有冲突」阻断，绝不静默放行；
+   * - **幂等**：合同不处于待审批态时返回 `SKIPPED`，重复调用不会重建 Worktree。
+   */
+  async admit(contractId: string): Promise<AdmissionResult> {
+    const current = this.store.get(contractId);
+    if (!current) throw new Error(`Contract not found: ${contractId}`);
+
+    if (
+      current.lifecycle_state !== "PENDING_APPROVAL" ||
+      current.approval.status !== "PENDING_REVIEW"
+    ) {
+      return {
+        decision: "SKIPPED",
+        contract: current,
+        reason: `合同不处于待审批态（${current.lifecycle_state} / ${current.approval.status}）`,
+        protectedFiles: [],
+        entryNames: [],
+      };
+    }
+
+    const scope = current.authorization.file_system_scope.writable_paths;
+    const verdict = intersectWithProtection(this.repoRoot, scope);
+
+    // 失败关闭：判定过程出错 → 一律视为有冲突，直接阻断（不自动批准、不建 Worktree）
+    if (verdict.error) {
+      appendSilentContractRecord(this.repoRoot, {
+        kind: "contract_admission_fail_closed",
+        contract_id: contractId,
+        error: verdict.error,
+        scope,
+      });
+      return {
+        decision: "NEEDS_APPROVAL",
+        contract: current,
+        reason: `保护清单判定失败，已按「有冲突」阻断：${verdict.error}`,
+        protectedFiles: verdict.files.length > 0 ? verdict.files : scope,
+        entryNames: verdict.entryNames,
+      };
+    }
+
+    const state = loadRoundState(this.repoRoot);
+    const approvedThisRound = verdict.files.filter((f) =>
+      state.approvedFiles.includes(f),
+    );
+    const deniedThisRound = verdict.files.filter((f) =>
+      state.deniedFiles.includes(f),
+    );
+    const outstanding = verdict.files.filter(
+      (f) => !state.approvedFiles.includes(f) && !state.deniedFiles.includes(f),
+    );
+    // 只有「每一个交集文件都已在本轮被同意」才允许自动批准；
+    // 任一被拒绝即阻断（拒绝优先于同意，绝不被 approvedFiles 掩盖）。
+    const allApproved =
+      verdict.files.length > 0 &&
+      approvedThisRound.length === verdict.files.length;
+
+    // 无交集，或交集文件已全部在本轮被用户明确同意 → 自动批准
+    if (
+      verdict.files.length === 0 ||
+      (allApproved && deniedThisRound.length === 0)
+    ) {
+      appendSilentContractRecord(this.repoRoot, {
+        kind: "contract_auto_approved",
+        contract_id: contractId,
+        mode: verdict.hit
+          ? "PROTECTED_AUTHORIZED"
+          : protectionMode(this.repoRoot),
+        scope,
+        protected_files: verdict.files,
+        approved_this_round: approvedThisRound,
+      });
+      try {
+        const approved = await this.approve(contractId, "stagent-auto");
+        return {
+          decision: "AUTO_APPROVED",
+          contract: approved,
+          reason: verdict.hit
+            ? "合同范围已在本轮获得授权，自动批准"
+            : "合同范围未触碰保护清单，自动批准",
+          protectedFiles: verdict.files,
+          entryNames: verdict.entryNames,
+        };
+      } catch (err) {
+        // 并发下第二次调用会撞上状态机（已推进到 PREPARING/EXECUTING）：
+        // 这不是失败，按 SKIPPED 处理，避免把正常并发报成错误。
+        if (err instanceof InvalidStateTransitionError) {
+          return {
+            decision: "SKIPPED",
+            contract: this.store.get(contractId) ?? current,
+            reason: "合同已被另一次准入推进，跳过重复批准",
+            protectedFiles: verdict.files,
+            entryNames: verdict.entryNames,
+          };
+        }
+        return {
+          decision: "AUTO_APPROVAL_FAILED",
+          contract: this.store.get(contractId) ?? current,
+          reason: `自动批准未完成：${(err as Error).message}`,
+          protectedFiles: verdict.files,
+          entryNames: verdict.entryNames,
+        };
+      }
+    }
+
+    // 本轮已拒绝过同一受保护文件：直接阻断，不重复弹卡
+    if (deniedThisRound.length > 0) {
+      return {
+        decision: "NEEDS_APPROVAL",
+        contract: current,
+        reason: `你本轮已拒绝修改受保护文件：${deniedThisRound.join("、")}`,
+        protectedFiles: verdict.files,
+        entryNames: verdict.entryNames,
+      };
+    }
+
+    // 有交集且未授权：登记一张白话卡片（列出本轮全部受保护文件），等待用户显式决策
+    const { card } = requestApproval(
+      this.repoRoot,
+      outstanding,
+      verdict.entryNames,
+    );
+    appendSilentContractRecord(this.repoRoot, {
+      kind: "contract_pending_user",
+      contract_id: contractId,
+      card_id: card.id,
+      protected_files: outstanding,
+      entry_names: verdict.entryNames,
+    });
+    return {
+      decision: "NEEDS_APPROVAL",
+      contract: current,
+      reason: "合同范围触碰保护清单，需要你确认后才会开工",
+      protectedFiles: outstanding,
+      entryNames: verdict.entryNames,
+      cardId: card.id,
+    };
   }
 
   /**

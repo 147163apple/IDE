@@ -1188,7 +1188,20 @@ export class StagentDaemon {
           const contract = softwareContractSchema.parse(body.contract);
           const saved = store.save(contract);
           this.emitContractUpdate(saved);
-          this.sendJson(res, 201, { contract: saved });
+          // TASK-D.2 核心目标 1：创建即准入裁决——无交集自动批准（零点击），有交集登记白话卡
+          let admission: Awaited<
+            ReturnType<typeof this.orchestrator.admit>
+          > | null = null;
+          if (saved.lifecycle_state === "PENDING_APPROVAL") {
+            admission = await this.orchestrator.admit(saved.contract_id);
+            if (admission.contract.lifecycle_state !== saved.lifecycle_state) {
+              this.emitContractUpdate(admission.contract);
+            }
+          }
+          this.sendJson(res, 201, {
+            contract: admission?.contract ?? saved,
+            admission,
+          });
         } catch (err) {
           this.sendJson(res, 400, { error: (err as Error).message });
         }
@@ -1231,7 +1244,7 @@ export class StagentDaemon {
       }
 
       const match = pathname.match(
-        /^\/api\/contracts\/([^/]+)(?:\/(approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
+        /^\/api\/contracts\/([^/]+)(?:\/(admit|approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
       if (match) {
         // W.3：非法百分号编码（如 %E0%A4%A）会让 decodeURIComponent 抛 URIError，
@@ -1270,6 +1283,22 @@ export class StagentDaemon {
             return;
           }
           this.sendJson(res, 200, { evidence: snapshot });
+          return;
+        }
+
+        // TASK-D.2：显式准入裁决（供 UI 在用户点「同意」后重跑；创建时已自动执行一次）
+        if (method === "POST" && action === "admit") {
+          try {
+            const admission = await this.orchestrator.admit(contractId);
+            this.emitContractUpdate(admission.contract);
+            this.sendJson(
+              res,
+              admission.decision === "NEEDS_APPROVAL" ? 202 : 200,
+              { contract: admission.contract, admission },
+            );
+          } catch (err) {
+            this.sendActionError(res, err);
+          }
           return;
         }
 

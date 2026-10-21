@@ -164,6 +164,142 @@ export function matchProtected(
 }
 
 // ---------------------------------------------------------------------------
+// TASK-D.2：合同 Scope 与保护清单的交集判定（审批前守门）
+// ---------------------------------------------------------------------------
+
+/** glob 语法标记（命中则需要按「见证路径」双向求交，不能直接字符串比较） */
+const GLOB_SYNTAX = /[*?[\]{}]/;
+/** 见证路径占位符：用于把 glob 折成一个具体路径再做双向匹配 */
+const GLOB_WITNESS = "__stagent_witness__";
+
+function isGlobPattern(pattern: string): boolean {
+  return GLOB_SYNTAX.test(pattern);
+}
+
+/**
+ * 把 glob 模式折成一条「见证路径」，用于判断两个 glob 是否有交集：
+ * `src/auth/**` → `src/auth/__stagent_witness__`；`.env*` → `.env__stagent_witness__`。
+ * 仅用于求交，不落盘、不代表真实文件。
+ */
+export function witnessPath(pattern: string): string {
+  const composed = normalizePath(pattern)
+    .replace(/\*\*\/?/g, `${GLOB_WITNESS}/`)
+    .replace(/[*?]/g, GLOB_WITNESS)
+    .replace(/[{}]/g, "")
+    .replace(/\/{2,}/g, "/")
+    .replace(/\/$/, "");
+  return composed || GLOB_WITNESS;
+}
+
+export interface ProtectionIntersection {
+  /** 是否存在交集（error 非空时恒为 true） */
+  hit: boolean;
+  /** 交集条目：合同写具体路径时给具体路径；合同写 glob 时给命中的保护规则（便于白话卡片展示） */
+  files: string[];
+  /** 命中的白话名称（去重） */
+  entryNames: string[];
+  /** 判定过程出错（清单损坏/不可读）：调用方必须按 hit=true 处理（失败关闭） */
+  error?: string | undefined;
+}
+
+/**
+ * 求「合同 writable_paths」与「已启用保护清单」的交集。
+ *
+ * 判定方式（双向见证，避免枚举文件）：
+ * 1. 用合同路径的见证路径去跑 `matchProtected` —— 覆盖具体路径、目录改名/删除的基目录规则；
+ * 2. 用保护规则的见证路径去匹配合同路径（合同侧写成 glob 时）；
+ * 3. 合同写目录、保护写其子路径时，按目录前缀包含判定。
+ *
+ * 失败关闭：清单读取/匹配抛错一律返回 `hit=true` + `error`，绝不静默放行。
+ */
+export function intersectWithProtection(
+  repoRoot: string,
+  scopedPaths: string[],
+): ProtectionIntersection {
+  let list: ProtectionList;
+  try {
+    list = loadProtectionList(repoRoot);
+  } catch (err) {
+    return {
+      hit: true,
+      files: [],
+      entryNames: [],
+      error: (err as Error).message,
+    };
+  }
+
+  const files = new Set<string>();
+  const names = new Set<string>();
+
+  try {
+    // 自锁：合同把保护清单本身列为可写，等于试图改锁
+    if (
+      scopedPaths.some(
+        (p) => normalizePath(p) === normalizePath(PROTECTION_FILE_REL),
+      )
+    ) {
+      files.add(normalizePath(PROTECTION_FILE_REL));
+      names.add("保护清单本身");
+    }
+
+    for (const raw of scopedPaths) {
+      const contractPath = normalizePath(raw);
+      if (!contractPath) continue;
+      const contractIsGlob = isGlobPattern(contractPath);
+      const contractWitness = witnessPath(contractPath);
+
+      // ① 合同见证路径是否命中保护规则（复用 matchProtected：含自锁与基目录规则）
+      const contractHit = matchProtected(repoRoot, contractWitness);
+      if (contractHit.hit) {
+        files.add(
+          contractIsGlob
+            ? (contractHit.matchedPattern ?? contractPath)
+            : contractPath,
+        );
+        names.add(contractHit.entryName ?? "受保护路径");
+      }
+
+      for (const entry of list.entries) {
+        for (const rawPattern of entry.patterns) {
+          const pattern = normalizePath(rawPattern);
+          if (!pattern) continue;
+
+          // ② 保护见证路径是否落在合同 glob 内
+          const protectionWitness = witnessPath(pattern);
+          const contractCoversProtection = matchesAnyPattern(
+            protectionWitness,
+            [contractPath],
+          ).matches;
+          // ③ 合同写目录、保护写其子路径
+          const dirCoversChild =
+            !contractIsGlob &&
+            (protectionWitness === contractPath ||
+              protectionWitness.startsWith(`${contractPath}/`));
+
+          if (contractCoversProtection || dirCoversChild) {
+            files.add(contractIsGlob ? pattern : contractPath);
+            names.add(entry.name);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    return {
+      hit: true,
+      files: [...files].sort(),
+      entryNames: [...names].sort(),
+      error: (err as Error).message,
+    };
+  }
+
+  return {
+    hit: files.size > 0,
+    files: [...files].sort(),
+    entryNames: [...names].sort(),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // 本轮状态：待审批卡 + 已授权清单 + 已拒绝清单（持久化，断线/重启不丢）
 // ---------------------------------------------------------------------------
 

@@ -86,8 +86,15 @@ describe("M5 / 合同 HTTP API（Bearer 保护）", () => {
       body: JSON.stringify({ contract }),
     });
     expect(created.status).toBe(201);
+    // TASK-D.2（v1.3.3 §0.2）：无保护清单交集 → 创建即自动批准，无需用户点击审批
+    const createdBody = (await created.json()) as {
+      contract: { lifecycle_state: string; approval: { approved_by?: string } };
+    };
+    expect(createdBody.contract.lifecycle_state).toBe("EXECUTING");
+    expect(createdBody.contract.approval.approved_by).toBe("stagent-auto");
 
-    const approved = await fetch(
+    // 已自动批准的合同再次显式审批，必须被状态机拒绝（不允许重复建 Worktree）
+    const reApproved = await fetch(
       `${base}/api/contracts/${contract.contract_id}/approve`,
       {
         method: "POST",
@@ -95,12 +102,7 @@ describe("M5 / 合同 HTTP API（Bearer 保护）", () => {
         body: JSON.stringify({ reviewer: "api-tester" }),
       },
     );
-    expect(approved.status).toBe(200);
-    const approvedBody = (await approved.json()) as {
-      contract: { lifecycle_state: string; approval: { approved_by: string } };
-    };
-    expect(approvedBody.contract.lifecycle_state).toBe("EXECUTING");
-    expect(approvedBody.contract.approval.approved_by).toBe("api-tester");
+    expect(reApproved.status).toBe(409);
 
     const executed = await fetch(
       `${base}/api/contracts/${contract.contract_id}/execute`,
@@ -120,6 +122,91 @@ describe("M5 / 合同 HTTP API（Bearer 保护）", () => {
     const listed = await fetch(`${base}/api/contracts`, { headers: auth() });
     const listBody = (await listed.json()) as { contracts: unknown[] };
     expect(listBody.contracts).toHaveLength(1);
+  });
+
+  it("命中保护清单 → 创建后停在待审批并登记白话卡，用户审批后才开工", async () => {
+    fs.mkdirSync(path.join(repo, ".stagent"), { recursive: true });
+    fs.writeFileSync(
+      path.join(repo, ".stagent", "protection.json"),
+      JSON.stringify({
+        version: 1,
+        entries: [
+          {
+            id: "pe-src",
+            name: "源码",
+            patterns: ["src/**"],
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    const draft = createContractDraft({
+      title: "protected flow",
+      description: "TASK-D.2 有交集路径",
+      acceptanceCriteria: ["verify passes"],
+      writablePaths: ["src/**"],
+      commands: [
+        {
+          alias: "verify",
+          executable: "node",
+          args: ["-e", "process.exit(0)"],
+          expected_exit_code: 0,
+          timeout_seconds: 30,
+        },
+      ],
+    });
+    const contract = softwareContractSchema.parse({
+      ...draft,
+      lifecycle_state: "PENDING_APPROVAL",
+      approval: { status: "PENDING_REVIEW" },
+    });
+
+    const created = await fetch(`${base}/api/contracts`, {
+      method: "POST",
+      headers: auth(),
+      body: JSON.stringify({ contract }),
+    });
+    expect(created.status).toBe(201);
+    const createdBody = (await created.json()) as {
+      contract: { lifecycle_state: string };
+      admission: {
+        decision: string;
+        protectedFiles: string[];
+        cardId?: string;
+      };
+    };
+    expect(createdBody.admission.decision).toBe("NEEDS_APPROVAL");
+    expect(createdBody.contract.lifecycle_state).toBe("PENDING_APPROVAL");
+    expect(createdBody.admission.protectedFiles).toContain("src/**");
+    expect(createdBody.admission.cardId).toBeTruthy();
+
+    // 白话待审批卡已登记到本轮（前端据 /api/protection/pending 展示）
+    const pendingRes = await fetch(`${base}/api/protection/pending`, {
+      headers: auth(),
+    });
+    const pendingBody = (await pendingRes.json()) as {
+      pending: Array<{ id: string; files: string[] }>;
+    };
+    expect(pendingBody.pending).toHaveLength(1);
+    expect(pendingBody.pending[0]!.files).toContain("src/**");
+
+    // 用户显式审批后才推进（有交集路径保留人工决策）
+    const approved = await fetch(
+      `${base}/api/contracts/${contract.contract_id}/approve`,
+      {
+        method: "POST",
+        headers: auth(),
+        body: JSON.stringify({ reviewer: "api-tester" }),
+      },
+    );
+    expect(approved.status).toBe(200);
+    const approvedBody = (await approved.json()) as {
+      contract: { lifecycle_state: string; approval: { approved_by: string } };
+    };
+    expect(approvedBody.contract.lifecycle_state).toBe("EXECUTING");
+    expect(approvedBody.contract.approval.approved_by).toBe("api-tester");
   });
 
   it("非法合同返回 400", async () => {

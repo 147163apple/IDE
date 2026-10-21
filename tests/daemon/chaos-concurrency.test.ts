@@ -284,16 +284,11 @@ describe("Chaos 3 / HTTP 层并发语义：409 Conflict", () => {
       body: JSON.stringify({ contract }),
     });
     expect(created.status).toBe(201);
-
-    const approved = await fetch(
-      `${base}/api/contracts/${contract.contract_id}/approve`,
-      {
-        method: "POST",
-        headers: auth(),
-        body: JSON.stringify({ reviewer: "x" }),
-      },
-    );
-    expect(approved.status).toBe(200);
+    // TASK-D.2（v1.3.3 §0.2）：无保护清单交集 → 创建即自动批准（零点击），合同已在执行态
+    const createdBody = (await created.json()) as {
+      contract: { lifecycle_state: string };
+    };
+    expect(createdBody.contract.lifecycle_state).toBe("EXECUTING");
 
     const [a, b] = await Promise.all([
       fetch(`${base}/api/contracts/${contract.contract_id}/execute`, {
