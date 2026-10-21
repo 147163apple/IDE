@@ -80,9 +80,15 @@ describe("E2E / happy path：创建 → 审批 → 执行 → 验证 → 人工�
       body: JSON.stringify({ contract }),
     });
     expect(created.status).toBe(201);
+    // 2. 审批（v1.3.3 §0.2 减负）：合同与保护清单无交集 → 创建即自动批准，
+    //    不再需要人工点击；这里只校验自动批准结果，重复审批必须被状态机拒绝。
+    const createdBody = (await created.json()) as {
+      contract: { lifecycle_state: string; approval: { approved_by?: string } };
+    };
+    expect(createdBody.contract.lifecycle_state).toBe("EXECUTING");
+    expect(createdBody.contract.approval.approved_by).toBe("stagent-auto");
 
-    // 2. 审批
-    const approved = await fetch(
+    const reApproved = await fetch(
       `${base}/api/contracts/${contract.contract_id}/approve`,
       {
         method: "POST",
@@ -90,7 +96,7 @@ describe("E2E / happy path：创建 → 审批 → 执行 → 验证 → 人工�
         body: JSON.stringify({ reviewer: "e2e" }),
       },
     );
-    expect(approved.status).toBe(200);
+    expect(reApproved.status).toBe(409);
 
     // 3. Worktree 内产生真实改动
     const worktree = path.join(
