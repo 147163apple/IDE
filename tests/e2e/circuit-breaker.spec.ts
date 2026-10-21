@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
 import { ContractStore } from "../../daemon/pipeline/contract-store";
@@ -13,10 +12,7 @@ import {
   createContractDraft,
   softwareContractSchema,
 } from "../../src/lib/contract.schema";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 describe("E2E / 差异化拦截：可恢复熔断 vs 安全中止", () => {
   let repo: string;

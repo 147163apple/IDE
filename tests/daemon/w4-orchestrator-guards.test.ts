@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -31,10 +31,7 @@ vi.mock("node:child_process", async (importOriginal) => {
 });
 
 import { runCommand } from "../../daemon/runner/command-runner";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 function makeContract(
   title: string,

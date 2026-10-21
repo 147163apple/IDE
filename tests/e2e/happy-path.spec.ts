@@ -2,16 +2,12 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
 import {
   createContractDraft,
   softwareContractSchema,
 } from "../../src/lib/contract.schema";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 describe("E2E / happy path：创建 → 审批 → 执行 → 验证 → 人工核销 → Squash-Merge", () => {
   let repo: string;

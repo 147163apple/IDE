@@ -2,17 +2,13 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
 import {
   createContractDraft,
   softwareContractSchema,
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 /**
  * 临门一脚闭环：Resume 与 Abort 链路（此前 orchestrator.resume 无 HTTP 端点、

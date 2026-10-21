@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -16,16 +15,13 @@ import {
   softwareContractSchema,
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
+import { git } from "../helpers/git";
 
 /**
  * Chaos 场景 2：手贱外挂党（TOCTOU / 外部物理篡改）
  * 子场景 A：验证通过后、合并前，主仓库被塞进未提交改动
  * 子场景 B：验证通过后，用户直接编辑 Worktree 里的代码，想用旧 PASSED 证据偷渡
  */
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
 
 function makeContract(title: string): SoftwareContract {
   const draft = createContractDraft({

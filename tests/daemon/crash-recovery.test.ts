@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 
 import { recoverDaemonState } from "../../daemon/recovery/crash-recovery";
 import { createDaemon } from "../../daemon/server";
@@ -10,10 +9,7 @@ import {
   createTaskWorktree,
   listWorktrees,
 } from "../../daemon/git/worktree-manager";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 describe("M3 / TASK-A.6 Daemon 崩溃恢复与工作区自愈", () => {
   let repo: string;

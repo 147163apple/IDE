@@ -2,12 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
 import { readDiffFiles, isInsideWorktree } from "../../daemon/diff/diff-files";
-
-function git(cwd: string, args: string[]): string {
-  return execFileSync("git", args, { cwd, encoding: "utf8" });
-}
+import { git } from "../helpers/git";
 
 /** TASK-C.5：双栏 Diff 的 before/after 必须来自真实 git，而不是前端拼的。 */
 describe("TASK-C.5 文件级 Diff 数据（真实 git）", () => {
