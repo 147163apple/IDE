@@ -261,6 +261,26 @@ export class DependencyGraph {
   }
 }
 
+/** G-16：架构图只扫描 src/**，不越界到 tests/daemon/scripts 等目录 */
+const SCAN_SUBDIR = "src";
+
+interface CachedModule {
+  mtimeMs: number;
+  size: number;
+  parsed: ParsedModule;
+}
+
+/** 文件 mtime/size 不变则复用解析结果（缺口 4.2 的增量缓存） */
+const moduleCache = new Map<string, CachedModule>();
+
+export function clearArchGraphCache(): void {
+  moduleCache.clear();
+}
+
+export function archGraphCacheSize(): number {
+  return moduleCache.size;
+}
+
 function walkSourceFiles(root: string, acc: string[] = []): string[] {
   for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
     if (entry.name.startsWith(".")) continue;
@@ -274,7 +294,7 @@ function walkSourceFiles(root: string, acc: string[] = []): string[] {
   return acc;
 }
 
-/** 冷启动全量构建（规范性能基线：1000 模块 ≤1.5s） */
+/** 冷启动全量构建（规范性能基线：1000 模块 ≤1.5s）；带 mtime 增量缓存 */
 export function buildDependencyGraph(options: {
   root: string;
   aliases?: PathAliasConfig;
@@ -282,15 +302,47 @@ export function buildDependencyGraph(options: {
 }): { graph: DependencyGraph; durationMs: number } {
   const start = performance.now();
   const root = path.resolve(options.root);
+  const scanRoot = path.join(root, SCAN_SUBDIR);
   const aliases = options.aliases ?? loadPathAliases(root);
-  const files = options.files ?? walkSourceFiles(root);
+  const candidates = options.files ?? walkSourceFiles(scanRoot);
+  // 显式传入 files 时也必须收敛在 src/** 内
+  const files = candidates
+    .map((file) => path.resolve(file))
+    .filter((file) => {
+      const rel = path.relative(scanRoot, file);
+      return rel !== "" && !rel.startsWith("..") && !path.isAbsolute(rel);
+    });
+
   const graph = new DependencyGraph();
+  const seen = new Set<string>();
   for (const file of files) {
     try {
-      graph.addModule(parseFile(file, aliases));
+      const stat = fs.statSync(file);
+      const cached = moduleCache.get(file);
+      let parsed: ParsedModule;
+      if (
+        cached &&
+        cached.mtimeMs === stat.mtimeMs &&
+        cached.size === stat.size
+      ) {
+        parsed = cached.parsed;
+      } else {
+        parsed = parseFile(file, aliases);
+        moduleCache.set(file, {
+          mtimeMs: stat.mtimeMs,
+          size: stat.size,
+          parsed,
+        });
+      }
+      seen.add(file);
+      graph.addModule(parsed);
     } catch {
       // 单文件解析失败不阻断全量构建
     }
+  }
+  // 清理已删除/移出 src 的缓存条目，避免常驻内存膨胀
+  for (const key of moduleCache.keys()) {
+    if (!seen.has(key)) moduleCache.delete(key);
   }
   return { graph, durationMs: performance.now() - start };
 }
