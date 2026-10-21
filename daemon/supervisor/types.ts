@@ -35,7 +35,8 @@ export interface SupervisorMessage {
 export type SupervisorObservationState = "ACTIVE" | "PAUSED";
 
 /**
- * Supervisor 用量快照：只读镜像，权威账本始终是合同共享的 `CostMonitor`。
+ * Supervisor 用量快照：只读镜像，权威账本是**独立**的 Supervisor 预算账本
+ * （`daemon/supervisor/budget.ts` → `.stagent/supervisor-budget.json`，v1.3.3 分账）。
  * 快照仅用于 UI 展示与会话恢复时的对照，不得用于放行判断。
  */
 export interface SupervisorUsageSnapshot {

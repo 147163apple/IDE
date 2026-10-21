@@ -123,3 +123,14 @@
 3. **预算镜像仅展示**：会话文件里的 `usage` 快照不参与放行判断，唯一权威是合同 `CostMonitor`。
 4. **`CostMonitor` 币种语义为既有实现**：金额最小单位按 ×100 折算，跨币种换算能力仍属既有账本边界，本卡片未扩展。
 5. **`E_UNAUTHORIZED_COMMAND` 常量改名**：`daemon/index.ts` 的 barrel 与 `runner/command-runner` 同名导出冲突，改为 `SUPERVISOR_PERMISSION_ERROR_CODE`（值不变，避免破坏 `err.code` 判定）。
+
+---
+
+## 6. 后续修订（2026-10-22 · Sprint 4 核验发现，本报告上述口径已失效处）
+
+> 本节由 Sprint 4（分支 `feat/s1-s2-supervisor-draft-pipeline`）回填。**本报告 §1~§5 记录的 2026-10-20 交付仍成立（会话管理 / 提示词 / 越权拦截 / AST 零工具四块未改动），但"预算"部分的口径与 v1.3.3 分账要求相反，已在 Sprint 4 纠正。**
+
+1. **§5 第 3 条「唯一权威是合同 `CostMonitor`」失效**。`1a75616` 的 `daemon/supervisor/budget.ts` 是**复用合同同一个 `CostMonitor` 实例**（提交说明原文：*"复用合同同一 CostMonitor 账本"*），实为"混账"，与 v1.3.3 §S.1「Supervisor 拥有独立日预算（`.stagent/supervisor-budget.json`），不再计入当前合同账本」直接冲突。当时报告把它记为"已完成"，属**结论下得过早**，本次如实更正。
+2. **现行实现**：`SupervisorBudgetLedger.independent({ repoRoot })` 自建 `CostMonitor` 并落盘 `.stagent/supervisor-budget.json`；默认日预算 `DEFAULT_SUPERVISOR_DAILY_BUDGET` = 200k tokens / 50.00 CNY，**不读取合同 `cost_limits`**。`fromCostLimits()` 保留但已标注为测试/自定义额度辅助入口，生产路径不得用它把合同额度接进 Supervisor。
+3. **测试口径重写**：`tests/unit/supervisor-budget.test.ts` 由 6 例改为 7 例，新增「Worker 合同账本零污染」与「重启后累计值恢复」断言；S.1 四套件由 38 例变为 **39 例**（6→7）。
+4. **`throttler.ts` 归属澄清**：本报告未交付 `daemon/supervisor/throttler.ts`，该文件**从未进入 main**，仅存于未合并分支 `wip/s2-s3-supervisor-old-design`（`2319459`）；其中"18 例防抖用例"同样只在该分支。TASK-S.1 因该项仍缺而维持 `[PARTIAL]`。

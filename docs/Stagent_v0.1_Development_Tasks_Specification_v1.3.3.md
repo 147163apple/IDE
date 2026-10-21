@@ -252,7 +252,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task S.1】Supervisor 建议会话与持久化存储管理
 * **任务编号**：`TASK-S.1`
 * **前置依赖**：`TASK-D.1`
-* **任务状态**：**[PARTIAL]**（v1.3.3 第二轮修订如实化：**旧版 S.1 已完成并在 main，提交 `1a75616`**。**2026-10-21 核验更新**：v1.3.3 增量①独立预算分账**已落地**（`daemon/supervisor/budget.ts`，`tests/unit/supervisor-budget.test.ts` 6 例通过，S.1 四套件共 38 例全绿）；②规则优先 L0/L1（`rules-l0.ts` 缺失）、③3s 防抖默认关闭（`throttler.ts` 缺失）**仍待完成**，排 Sprint 4。旧版收尾记录见本卡「完成记录」，为历史记录）
+* **任务状态**：**[PARTIAL]**（v1.3.3 第二轮修订如实化：**旧版 S.1 已完成并在 main，提交 `1a75616`**（4 文件 / 38 用例）。**2026-10-22 Sprint 4 核验更新**：①独立预算分账——**此前"已落地"的结论口径有误，已纠正并真正落地**：`1a75616` 的 `budget.ts` 实为"复用合同同一 `CostMonitor` 账本"，与本卡核心目标 4 的分账要求相反；现改为 `SupervisorBudgetLedger.independent()` 独立落盘 `.stagent/supervisor-budget.json`（默认日预算 `DEFAULT_SUPERVISOR_DAILY_BUDGET` = 200k tokens / 50.00 CNY，与合同 `cost_limits` 解耦），`tests/unit/supervisor-budget.test.ts` 重写为 **7 例**并以「Worker 账本零污染」为断言口径；②规则优先 L0/L1 **已落地**（`daemon/supervisor/rules-l0.ts` + `draft-generator.ts`，17 例，交付明细见 `TASK-S.2` 完成记录）；③唤醒节流器（`throttler.ts`，3s 防抖默认关闭）**仍缺失**——该文件从未进入 main，仅存于未合并分支 `wip/s2-s3-supervisor-old-design`（`2319459`）。故本卡维持 **[PARTIAL]**。旧版收尾记录见本卡「完成记录」，为历史记录）
 * **核心目标**：
   1. Local-First 会话管理，落盘至 `.stagent/sessions/{session_id}.json`，文件模式 `0600`。
   2. 依赖层 AST 扫描禁令：禁止引入 Gateway/Merger/Verifier/ProcessRunner/child_process。
@@ -282,6 +282,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
     - Supervisor 独立预算耗尽时模型调用被阻断，且**不影响 Worker 继续执行**（v1.3.3）。
   - **FAIL**：Supervisor 能绕过控制面直接执行命令或修改工作区，或在 Worker 流式生成过程中伴随发起模型轮询。
 * **完成记录（历史记录 · 旧版 S.1，2026-10-20；当时 3s 防抖默认开启，非 v1.3.3 口径）**：
+  - ⚠️ **2026-10-22 归档校正**：以下 `throttler.ts` 与 18 例**不在 main**，仅存于未合并分支 `wip/s2-s3-supervisor-old-design`（`2319459`）；main 上 `1a75616` 只含 `session-manager.ts` / `prompt-builder.ts` / `permissions.ts` / `budget.ts` 四文件。本段整体保留为历史记录，**不得作为 v0.1 验收依据**。
   - 交付物：`daemon/supervisor/throttler.ts`（`SupervisorWakeupThrottler`）+ `daemon/supervisor/index.ts` 导出。
   - 测试：`tests/unit/supervisor-debounce-trigger.test.ts`，共 **18 个用例**全部 PASS，分组如下：
     | 分组 | 用例数 | 覆盖断言 |
@@ -299,7 +300,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task S.2】按需合同草案生成引擎（L0 规则 / L1 强模型；v1.3.3 拆分精简）
 * **任务编号**：`TASK-S.2`
 * **前置依赖**：`TASK-S.1`
-* **任务状态**：**[REWORK]**（旧设计实现——4 维成熟度评估器 + 草案编译器——**存于未合并分支 `wip/s2-s3-supervisor-old-design`，未进入 main，非 v0.1 验收依据**；v0.1 按下列精简目标在 Sprint 4 重做，草案编译器与脱敏模块可从该分支择取移植）
+* **任务状态**：**[COMPLETED]**（v0.1 精简版于 **2026-10-22** 在 `feat/s1-s2-supervisor-draft-pipeline` 落地：按需触发 + L0 规则 + L1 按需补全 + G-11 未决问题零丢失 + 独立预算记账 + `redaction.ts` 移植，三套新单测 45 例全绿；成熟度评分器/徽章/气泡按 v1.3.3 明令**未引入**。旧设计的 4 维评估器 + 草案编译器仍存于未合并分支 `wip/s2-s3-supervisor-old-design`，非 v0.1 验收依据）
 * **v1.3.3 范围拆分**：
   - **v0.1（本卡）**：按需合同草案生成——仅在用户显式请求或控制面事件触发时生成；L0 规则（保护清单匹配、路径提取、默认命令/预算）优先，L1 强模型按需补全；白话文案；计入 Supervisor 独立预算。
   - **v0.2+（推迟，`[用户已确认 D4]`）**：需求成熟度评分（4 维评估器、`maturity_assessment` 打分、HUD 徽章）。
@@ -307,12 +308,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   1. 按需生成草案：输出 `rationale`、`unresolved_questions`、`assessed_at`、`model_id`（不再要求成熟度打分）。
   2. 草案授权遵循架构规范 §0.2：Scope 与保护清单无交集自动批准，有交集仅一次白话是/否；不存在任何基于分数的门禁。
   3. **未决问题 100% 保留至草案元数据 (G-11)**：提取生成符合 `SoftwareContractV12` 的草案，状态初始为 `DRAFT`，自动注入必填的 `worker_spec`；若存在 `unresolved_questions`，必须完整保存在草案中供用户核对。
-* **涉及核心文件**（v0.1）：
-  - 新增：`daemon/supervisor/contract-draft-generator.ts`（草案编译 + `submitDraftForApproval()`；可自 `wip/s2-s3-supervisor-old-design` 择取）
-  - 新增：`daemon/supervisor/rules-l0.ts`（L0 规则草案装配）
+* **涉及核心文件**（v0.1，✅ 均已落地；文件名按实际交付校正）：
+  - 新增：`daemon/supervisor/draft-generator.ts`（原计划名 `contract-draft-generator.ts`，草案编译 + `submitDraftForApproval()`）
+  - 新增：`daemon/supervisor/rules-l0.ts`（L0 规则草案装配：路径提取 / 保护清单匹配 / 默认命令与预算）
   - 移植：`src/lib/ipc/redaction.ts`（共享深度脱敏，自旧 S.3 保留）
   - 修改：`daemon/supervisor/index.ts`（公开出口）
-  - 测试：`tests/unit/supervisor-contract-generator.test.ts`
+  - 修改：`daemon/supervisor/budget.ts`（改为独立账本 `independent()`）、`daemon/supervisor/types.ts`（快照注释口径同步）
+  - 测试：`tests/unit/supervisor-contract-generator.test.ts`、`tests/unit/ipc-redaction.test.ts`、`tests/unit/supervisor-budget.test.ts`
   - v0.2+（推迟）：`daemon/supervisor/maturity-evaluator.ts`、`tests/unit/supervisor-maturity-evaluator.test.ts`
 * **Pass/Fail 验收判定**：
   - **PASS**：
@@ -333,6 +335,24 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
   | 生成器 D 装配 | 8 | 对话提取可写路径与禁区；显式 scope 覆盖；空对话安全兜底；默认两条验证命令；命令可覆盖；默认预算含计数值上限；预算可覆盖且合规；默认命令常量防漂移 |
   | 生成器 E 溯源 | 2 | `suggestion_id` + `suggested_scope` 落元数据；`conversation_ref` 保留全部消息 id |
   - 规范说明：A §9.1.1 状态矩阵只允许 `DRAFT↔DRAFT`、`PENDING_APPROVAL↔PENDING_REVIEW`，故草案初始态为 `DRAFT/DRAFT`；`submitDraftForApproval()` 原子推进至 `PENDING_APPROVAL/PENDING_REVIEW`。`DRAFT+PENDING_REVIEW` 被显式断言拒绝，已固化为可回归事实。
+* **完成记录（v0.1 精简版 · 2026-10-22 落地，Sprint 4）**：
+  - 交付物：`daemon/supervisor/rules-l0.ts`（L0 规则引擎，零模型调用）、`daemon/supervisor/draft-generator.ts`（按需生成 + L1 补全 + G-11 + 费用分账）、`src/lib/ipc/redaction.ts`（三层脱敏）、`daemon/supervisor/budget.ts`（改独立账本）。
+  - 关键实现口径：
+    - **按需触发是结构性的，不是配置项**：`DraftTriggerKind` 中 `IDLE_TIMER` / `DEBOUNCE_TIMER` 一律返回 `{ generated: false, reason: "NOT_REQUESTED", model_calls: 0 }`，函数体在装配之前即返回，模型调用不存在发生路径。这是「VIBE 下 30 分钟连续聊天 Supervisor 调用 = 0」的结构保证。
+    - **L0 只匹配不削减**：命中保护清单的路径**仍保留在 `writable_paths`**，另外回报 `protected_files` / `protected_entry_names` / `needs_protection_approval` / `protection_error`，交由 §0.2「有交集 ≤2 次交互」处理，规则引擎不代替用户做决定。
+    - **L1 必须带账本**：`enrich` 与 `budgetLedger` 同时存在才允许调用模型，否则抛 `MISSING_BUDGET_LEDGER`，杜绝"免费调用"绕过费用分账。
+    - **G-11 不去重**：L0 与 L1 的 `unresolved_questions` 按序拼接、刻意不去重（去重会静默吞条），完整写入 `supervisor_metadata.maturity_assessment`。
+    - **剔除项**：`maturity_assessment` 只写 `rationale` / `unresolved_questions` / `model_id` / `assessed_at`，**不写 `score`**；无评估器、无徽章、无风险气泡（Schema 中 `score` 仍为可选字段以兼容旧数据，但不参与任何 refine 或授权分支）。
+  - 测试（45 例全绿，`npm test` 全量 722 passed / 6 skipped 无回归）：
+    | 套件 | 用例数 | 覆盖断言 |
+    |---|---|---|
+    | `tests/unit/ipc-redaction.test.ts` | 21 | 键名脱敏（大小写/下划线/连字符变体）、真实凭据值指纹脱敏（≥6 字符）、形态脱敏（sk-/ghp_/AKIA/xoxb-/Bearer/PEM/`KEY=`）、先脱敏后截断、嵌套对象/数组、计数按出现次数、循环引用不爆栈 |
+    | `tests/unit/supervisor-budget.test.ts` | 7 | 独立落盘 `.stagent/supervisor-budget.json`、重启后累计值恢复、超额在 `call` 之前抛 `E_BUDGET_EXCEEDED`、**Worker 合同账本零污染**、快照剩余额度口径 |
+    | `tests/unit/supervisor-contract-generator.test.ts` | 17 | 定时/防抖触发零生成零调用、L0 路径提取与默认命令、保护清单命中仍保留可写路径并置 `needs_protection_approval`、草案 100% `parse()` 通过、初始 `DRAFT/DRAFT`、`submitDraftForApproval` 状态跃迁与非法态拒绝、G-11 未决问题零丢失、L1 无账本抛错、L1 用量只记独立账本、`maturity_assessment` 不含 `score` |
+  - 如实保留的残余（不阻塞验收）：
+    - **L1 尚无生产模型适配器**：`enrich` 是注入函数，当前仅测试与未来编排层可调用；未接线前生产路径恒为纯 L0（零费用），不会误触发。
+    - **草案生成器尚未接入 UI / 控制面**：属 `TASK-C.2`（Studio 精简版）与 `TASK-S.3`（推迟 v0.2+）范围。
+    - `throttler.ts`（3s 防抖默认关闭）仍缺失，`TASK-S.1` 维持 `[PARTIAL]`。
 
 ---
 
@@ -853,6 +873,12 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例（P.1 17 例、C.5 5 例、W.3 14 例、W.4 26 例）；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 部分达成**：`TASK-D.2` 主体已落地——一键合并（无二次确认）、Gate 0~4、4 条 Git Trailer、User-First Discard、快照持久化均在位，可直接演示"验证全绿 → 点一次合并"。
 > - **Sprint 3 门禁原未成立项（已于 2026-10-21 步骤 D 闭环）**：门禁要求「未触保护区交互 = 1 次（合并按钮）」，而此前 `POST /api/contracts/:id/approve` 需用户手动触发（`src/routes/index.tsx:805`），未触保护区实际为 2 次交互。`9691b23`（合并 `742d27d`）补齐 D.2 核心目标 1 的交集自动批准后，**无交集合同创建即 `EXECUTING`（`approved_by: "stagent-auto"`），前端不弹窗，交互收敛为 1 次合并按钮**；有交集合同仍为 ≤2 次（是/否 + 合并）。该门禁端到端成立。
+
+> **Sprint 4 实际完成情况（2026-10-22 首次核验）**：
+> - **`TASK-S.2`（精简版）已达成**：按需触发（定时/防抖结构性拒绝）+ L0 规则引擎 + L1 按需补全 + G-11 未决问题零丢失 + 独立预算记账 + `redaction.ts` 三层脱敏全部落地，三套新单测 45 例全绿；成熟度评分器/徽章/气泡按 v1.3.3 明令未引入。
+> - **`TASK-S.1` 仍为 `[PARTIAL]`**：增量①（独立预算）本轮纠正旧口径后真正落地，增量②（规则优先）已随 S.2 落地，增量③（唤醒节流器 `throttler.ts`，3s 防抖默认关闭）仍缺失——该文件仅存于未合并分支 `wip/s2-s3-supervisor-old-design`。
+> - **门禁判定**：「草案 100% parse 通过」已成立；「VIBE 下 30 分钟连续聊天 Supervisor 调用 = 0（未点击时）」在生成器层面已结构性成立（`IDLE_TIMER`/`DEBOUNCE_TIMER` 直接返回、`model_calls: 0`），但端到端仍需 `TASK-C.2` 接线后以真实会话复测。
+> - **`TASK-C.2`（Studio 精简版）尚未启动**。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
