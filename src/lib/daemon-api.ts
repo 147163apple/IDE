@@ -118,12 +118,60 @@ export async function createContract(
   conn: DaemonConnection,
   contract: SoftwareContract,
 ): Promise<SoftwareContract> {
-  const body = await request<{ contract: SoftwareContract }>(
-    conn,
-    "/api/contracts",
-    { method: "POST", body: JSON.stringify({ contract }) },
-  );
+  const body = await createContractWithAdmission(conn, contract);
   return body.contract;
+}
+
+export async function createContractWithAdmission(
+  conn: DaemonConnection,
+  contract: SoftwareContract,
+): Promise<{ contract: SoftwareContract; admission: AdmissionView | null }> {
+  const body = await request<{
+    contract: SoftwareContract;
+    admission?: AdmissionView | null;
+  }>(conn, "/api/contracts", {
+    method: "POST",
+    body: JSON.stringify({ contract }),
+  });
+  return { contract: body.contract, admission: body.admission ?? null };
+}
+
+// ---------------------------------------------------------------------------
+// TASK-D.2 / C.2：审批准入裁决（合同 Scope × 保护清单）
+// ---------------------------------------------------------------------------
+
+export type AdmissionDecisionView =
+  "AUTO_APPROVED" | "NEEDS_APPROVAL" | "SKIPPED" | "AUTO_APPROVAL_FAILED";
+
+/**
+ * `POST /api/contracts/:id/admit` 的返回。
+ * - `AUTO_APPROVED`：无交集（或本轮已授权）→ 已自动批准并推进，前端不弹任何东西；
+ * - `NEEDS_APPROVAL`：有交集 → 前端至多弹一张白话卡，等用户点「同意」；
+ * - `SKIPPED`：合同已不在待审批态，重复调用无副作用；
+ * - `AUTO_APPROVAL_FAILED`：自动批准没走完（准备阶段失败等），如实告知用户。
+ */
+export interface AdmissionView {
+  decision: AdmissionDecisionView;
+  contract: SoftwareContract;
+  reason?: string | undefined;
+  protectedFiles: string[];
+  entryNames: string[];
+  /** NEEDS_APPROVAL 时的待审批卡 id；点「同意」前先用它记录本轮放行 */
+  cardId?: string | undefined;
+}
+
+/** 显式准入裁决：用户在确认卡上点「同意」后调用；创建合同时 Daemon 已自动跑过一次 */
+export async function admitContract(
+  conn: DaemonConnection,
+  contractId: string,
+): Promise<AdmissionView> {
+  const body = await request<{
+    contract: SoftwareContract;
+    admission: AdmissionView;
+  }>(conn, `/api/contracts/${encodeURIComponent(contractId)}/admit`, {
+    method: "POST",
+  });
+  return body.admission;
 }
 
 export async function approveContract(

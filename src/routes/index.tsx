@@ -34,7 +34,8 @@ import {
   readWorktreeFile,
   saveWorktreeFile,
   approveContract,
-  createContract,
+  createContractWithAdmission,
+  admitContract,
   executeContract,
   fetchArchGraph,
   fetchDiff,
@@ -50,7 +51,9 @@ import {
   saveConnection,
   saveOpenAiKey,
   undoProtectionRound,
+  unlockProtectionEntry,
   type ArchGraphPayload,
+  type AdmissionView,
   type DaemonConnection,
   type DiffFilesView,
   type ModelSettings,
@@ -76,6 +79,12 @@ import {
   ProtectionApprovalCard,
   ProtectionRecommendationCard,
 } from "@/components/ProtectionCard";
+import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
+import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
+import {
+  shouldConfirmAdmission,
+  toStudioDraft,
+} from "@/components/supervisor-view-model";
 import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
 import type { AgentSessionTransport } from "@/hooks/use-agent-session";
 import type { ChatEvent } from "@/lib/chat-events";
@@ -143,6 +152,11 @@ function Console() {
   const [protectionBusy, setProtectionBusy] = useState(false);
   const [undoInfo, setUndoInfo] = useState<string | null>(null);
   const [recDismissed, setRecDismissed] = useState(false);
+  /**
+   * C.2 准入裁决结果。只保存"需要人看的那一次"：
+   * AUTO_APPROVED / SKIPPED 一律置 null → 确认卡结构性不渲染（无交集 0 弹窗）。
+   */
+  const [admission, setAdmission] = useState<AdmissionView | null>(null);
 
   const fileTree = useMemo(
     () =>
@@ -249,6 +263,22 @@ function Console() {
       setProtectionBusy(true);
       try {
         await applyProtectionRecommendations(conn, names);
+        await refresh();
+      } catch (err) {
+        setError((err as Error).message);
+      } finally {
+        setProtectionBusy(false);
+      }
+    },
+    [conn, refresh],
+  );
+
+  /** C.2：Studio 内逐条解锁保护条目（不提供"一键全解"，安全网不该被一次误点清空） */
+  const onUnlockProtection = useCallback(
+    async (id: string) => {
+      setProtectionBusy(true);
+      try {
+        await unlockProtectionEntry(conn, id);
         await refresh();
       } catch (err) {
         setError((err as Error).message);
@@ -483,6 +513,42 @@ function Console() {
     }
   };
 
+  /**
+   * C.2：只有"确实需要人看"的裁决才进状态。
+   * 无交集（AUTO_APPROVED）与已推进（SKIPPED）一律置 null，
+   * 于是 `ProtectionConfirmCard` 结构性不渲染——这就是"0 弹窗"的实现方式。
+   */
+  const applyAdmission = (next: AdmissionView | null) => {
+    setAdmission(shouldConfirmAdmission(next) ? next : null);
+  };
+
+  /** 点「同意」：先记本轮放行（这张卡上的文件），再请求 Daemon 重跑准入裁决 */
+  const onApproveAdmission = (view: AdmissionView) => {
+    void runAction("admit", async () => {
+      if (view.cardId) {
+        await decideProtectionCard(conn, view.cardId, "approve");
+      }
+      const next = await admitContract(conn, view.contract.contract_id);
+      applyAdmission(next);
+    });
+  };
+
+  /** 点「不同意」：记拒绝并直接中止合同——"坚决取消"，不留半开状态 */
+  const onDenyAdmission = (view: AdmissionView) => {
+    void runAction("deny-admission", async () => {
+      if (view.cardId) {
+        await decideProtectionCard(conn, view.cardId, "deny");
+      }
+      await abortContract(
+        conn,
+        view.contract.contract_id,
+        "local-user",
+        "用户在保护确认卡上选择「不同意」",
+      );
+      applyAdmission(null);
+    });
+  };
+
   const repoName = repoRoot
     ? (repoRoot.split("/").filter(Boolean).pop() ?? "stagent")
     : "stagent";
@@ -507,8 +573,18 @@ function Console() {
         workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
         daemonConnected={connected}
         contract={workspaceContract}
+        protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
         defaultOpenStudio
+        confirmSlot={
+          // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
+          <ProtectionConfirmCard
+            admission={admission}
+            busy={busy === "admit" || busy === "deny-admission"}
+            onApprove={onApproveAdmission}
+            onDeny={onDenyAdmission}
+          />
+        }
         rightPanel={<AgentChatPane transport={chatTransport} />}
         openRequest={openRequest}
         renderFile={(filePath, bound) => {
@@ -614,13 +690,15 @@ function Console() {
                 {protection.corrupt}）
               </div>
             )}
-            {protection?.round.pending[0] && (
-              <ProtectionApprovalCard
-                card={protection.round.pending[0]}
-                busy={protectionBusy}
-                onDecide={(id, d) => void onDecideProtection(id, d)}
-              />
-            )}
+            {/* 至多一张卡：合同准入正在等用户决策时，不再叠加 P.1 的通用命中卡 */}
+            {!shouldConfirmAdmission(admission) &&
+              protection?.round.pending[0] && (
+                <ProtectionApprovalCard
+                  card={protection.round.pending[0]}
+                  busy={protectionBusy}
+                  onDecide={(id, d) => void onDecideProtection(id, d)}
+                />
+              )}
             {!recDismissed &&
               recommendations.length > 0 &&
               (protection?.entries.length ?? 0) === 0 && (
@@ -708,6 +786,8 @@ function Console() {
                     setWorkerResult(null);
                     setDiff(null);
                     setDiffFiles(null);
+                    // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
+                    setAdmission(null);
                   }}
                   className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
                     selectedId === contract.contract_id
@@ -780,15 +860,49 @@ function Console() {
         }
         studioContent={
           <div className="flex min-w-0 flex-1 flex-col">
+            <SupervisorStudioPane
+              runMode={
+                protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+              }
+              protectedEntries={protection?.entries ?? []}
+              draft={selected ? toStudioDraft(selected) : null}
+              execution={
+                selected
+                  ? {
+                      contractId: selected.contract_id,
+                      status: toExecutionStatus(selected.lifecycle_state),
+                      workerControl: selected.worker_spec.control_mode,
+                    }
+                  : null
+              }
+              busy={busy !== null || protectionBusy}
+              onEmergencyPause={() => {
+                if (!selected) return;
+                void runAction("abort", async () => {
+                  await abortContract(
+                    conn,
+                    selected.contract_id,
+                    "local-user",
+                    "Studio 紧急暂停",
+                  );
+                  setAdmission(null);
+                });
+              }}
+              onUnlockEntry={(id) => void onUnlockProtection(id)}
+            />
             {showForm && (
               <ContractForm
                 busy={busy === "create"}
                 initialPaths={scopeDraft}
                 onCreate={(contract) =>
                   runAction("create", async () => {
-                    const saved = await createContract(conn, contract);
-                    setSelectedId(saved.contract_id);
+                    const saved = await createContractWithAdmission(
+                      conn,
+                      contract,
+                    );
+                    setSelectedId(saved.contract.contract_id);
                     setShowForm(false);
+                    applyAdmission(saved.admission);
                   })
                 }
               />
