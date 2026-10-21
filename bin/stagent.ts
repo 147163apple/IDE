@@ -16,6 +16,7 @@
  *   一律报错拒绝启动，防止携带 #token= 的链接外泄会话令牌。
  */
 import path from "node:path";
+import { formatVersion, readCliVersion } from "./version";
 import process from "node:process";
 import { execFile } from "node:child_process";
 import { pathToFileURL } from "node:url";
@@ -24,7 +25,7 @@ import { readPidLock } from "../daemon/core/pid-lock";
 import { sessionTokenPath } from "../daemon/core/session-token";
 
 export interface CliOptions {
-  command: "start" | "status" | "help";
+  command: "start" | "status" | "help" | "version";
   repo: string;
   port?: number;
   /** Web UI 地址（默认 http://localhost:5173，可用 STAGENT_UI_URL 覆盖） */
@@ -64,7 +65,7 @@ export function parseArgs(argv: string[]): CliOptions {
     noBrowser,
     ...(port === undefined ? {} : { port }),
   };
-  if (!["start", "status", "help"].includes(command)) {
+  if (!["start", "status", "help", "version"].includes(command)) {
     return { command: "help", ...base };
   }
   return { command, ...base };
@@ -145,12 +146,13 @@ export function openBrowser(url: string): Promise<boolean> {
 }
 
 function printHelp(): void {
-  console.log(`Stagent v0.1 — 本地任务副驾与验收控制台
+  console.log(`${formatVersion(readCliVersion())} — 本地任务副驾与验收控制台
 
 用法:
   stagent start [--repo <path>] [--port <n>] [--ui-url <url>] [--no-browser]
                                    启动本地 Daemon（仅绑定 127.0.0.1，端口 3001~3010）
   stagent status [--repo <path>]   查看当前仓库 Daemon 状态
+  stagent version                  显示版本号
   stagent help                     显示帮助
 
 安全说明:
@@ -167,6 +169,11 @@ async function main(): Promise<void> {
 
   if (options.command === "help") {
     printHelp();
+    return;
+  }
+
+  if (options.command === "version") {
+    console.log(formatVersion(readCliVersion()));
     return;
   }
 
