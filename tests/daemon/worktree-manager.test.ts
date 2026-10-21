@@ -12,12 +12,16 @@ import {
   execGit,
   WorktreeError,
 } from "../../daemon/git/worktree-manager";
+import { assertIsolatedGitCwd } from "../../daemon/git/test-isolation";
 
 describe("Task 1.2: Git Worktree Manager Lifecycle", () => {
   let tempRepo: string;
 
   beforeEach(async () => {
     tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-wt-test-"));
+    // 宿主仓库隔离守卫：临时仓库必须在隔离根内，否则下面的 user.name 写入
+    // 可能落到开发者真实仓库的 .git/config（见 daemon/git/test-isolation.ts）
+    assertIsolatedGitCwd(tempRepo);
     // Initialize a real Git repository in temp directory
     await execGit(["init", "-b", "main"], tempRepo);
     await execGit(["config", "user.name", "Stagent Test"], tempRepo);

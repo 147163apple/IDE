@@ -5,6 +5,7 @@ import {
   generateTaskBranch,
   validateTaskBranchOperation,
 } from "./branch-guard";
+import { assertIsolatedGitCwd, isTestRuntime } from "./test-isolation";
 
 export class WorktreeError extends Error {
   constructor(message: string) {
@@ -44,15 +45,113 @@ export interface WorktreeListEntry {
   bare?: boolean;
 }
 
+/** `git config` 的写操作标志位（读取标志优先判定，避免把 `--get` 误判成写入） */
+const GIT_CONFIG_WRITE_FLAGS = new Set([
+  "--add",
+  "--unset",
+  "--unset-all",
+  "--replace-all",
+  "--rename-section",
+  "--remove-section",
+  "--edit",
+  "-e",
+]);
+
+const GIT_CONFIG_READ_FLAGS = new Set([
+  "--get",
+  "--get-all",
+  "--get-regexp",
+  "--get-urlmatch",
+  "--list",
+  "-l",
+  "--show-origin",
+  "--show-scope",
+]);
+
+/**
+ * 判断是否为 `git config` 的**写入**（而非读取）。
+ * 口径：出现写标志位，或除选项外还有 ≥2 个位置参数（`name value`）。
+ */
+export function isGitConfigWrite(args: string[]): boolean {
+  if (args[0] !== "config") return false;
+  if (args.some((arg) => GIT_CONFIG_WRITE_FLAGS.has(arg))) return true;
+  if (args.some((arg) => GIT_CONFIG_READ_FLAGS.has(arg))) return false;
+  // `git config [<file-option>] name [value]`：位置参数 ≥2 即写入
+  const positional = args.slice(1).filter((arg) => !arg.startsWith("-"));
+  return positional.length >= 2;
+}
+
+/** 会改动 git 状态（refs / index / 工作区 / 配置）的子命令 */
+const MUTATING_GIT_SUBCOMMANDS = new Set([
+  "init",
+  "add",
+  "commit",
+  "rm",
+  "mv",
+  "reset",
+  "checkout",
+  "switch",
+  "restore",
+  "branch",
+  "tag",
+  "merge",
+  "rebase",
+  "cherry-pick",
+  "revert",
+  "apply",
+  "am",
+  "stash",
+  "clean",
+  "worktree",
+  "gc",
+  "prune",
+  "submodule",
+  "update-ref",
+  "notes",
+  "replace",
+]);
+
+export function isMutatingGitCommand(args: string[]): boolean {
+  if (args.length === 0) return false;
+  if (isGitConfigWrite(args)) return true;
+  return MUTATING_GIT_SUBCOMMANDS.has(args[0] as string);
+}
+
+/**
+ * 执行前的 cwd 安全检查（fail-closed）。两道：
+ *
+ * 1. **`git config` 写入：无条件**必须在隔离目录。生产代码里没有任何一处写 config，
+ *    所以这条不会伤到 Daemon 的正常流程；一旦有人写，就必须显式落在临时目录。
+ * 2. **测试运行时（Vitest / NODE_ENV=test）的任何写操作**都不许指向宿主仓库根。
+ *    生产运行时不受此条约束——它本来就是要在真实仓库里建 Worktree、提交、合并。
+ */
+export function assertSafeGitCwd(
+  args: string[],
+  cwd: string | undefined,
+): void {
+  if (isGitConfigWrite(args)) {
+    assertIsolatedGitCwd(cwd);
+    return;
+  }
+  if (isTestRuntime() && isMutatingGitCommand(args)) {
+    assertIsolatedGitCwd(cwd);
+  }
+}
+
 /**
  * Execute Git command in target working directory.
  * raw=true 时保留 stdout 原始内容（含末尾换行/二进制文本），供 Diff 原文读取使用。
+ *
+ * 声明为 `async` 是为了让守卫的同步抛错自动变成 rejected promise，
+ * 调用方用 `await expect(...).rejects` 就能断言到。
  */
-export function execGit(
+export async function execGit(
   args: string[],
   cwd: string,
   options: { raw?: boolean } = {},
 ): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  assertSafeGitCwd(args, cwd);
+
   return new Promise((resolve, reject) => {
     const child = spawn("git", args, {
       cwd,
