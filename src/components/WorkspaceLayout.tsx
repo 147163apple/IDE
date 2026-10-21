@@ -41,6 +41,13 @@ export interface WorkspaceLayoutProps {
   openRequest?: { path: string; nonce: number } | null;
   /** 中栏顶部横幅（Evidence STALE 等） */
   middleBanner?: ReactNode;
+  /**
+   * 中栏顶部的白话确认卡插槽（C.2）。
+   * 放在 Tab 栏之上、不遮挡代码：切换文件时确认卡仍可见，不会"关掉标签就丢了问题"。
+   */
+  confirmSlot?: ReactNode;
+  /** 顶栏「已锁 N 处」（C.2） */
+  protectedCount?: number | undefined;
   /** 首次打开即显示 Supervisor Studio 标签 */
   defaultOpenStudio?: boolean;
 }
@@ -121,6 +128,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         contract={contract}
         workerControl={props.workerControl}
         daemonConnected={props.daemonConnected ?? true}
+        protectedCount={props.protectedCount ?? 0}
         onOpenStudio={openStudio}
         extra={props.headerExtra}
       />
@@ -174,6 +182,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
           className="flex min-w-0 flex-1 flex-col"
         >
           {props.middleBanner}
+          {props.confirmSlot}
           <div role="tablist" className="flex gap-1 border-b px-2 text-sm">
             {tabs.map((t) => (
               <button

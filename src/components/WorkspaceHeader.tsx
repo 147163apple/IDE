@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  RUN_MODE_LABEL,
   EXECUTION_STATUS_LABEL,
   type ActiveContract,
   type RunMode,
@@ -15,6 +14,8 @@ export interface WorkspaceHeaderProps {
   workerControl: WorkerControl;
   /** 与 Daemon 的连接状态；false 时受控徽章变暗（P.1 顺手修） */
   daemonConnected?: boolean;
+  /** 已锁定的保护条目数（C.2 顶栏「已锁 N 处」） */
+  protectedCount?: number | undefined;
   onOpenStudio: () => void;
   extra?: ReactNode;
 }
@@ -27,6 +28,7 @@ export function WorkspaceHeader({
   contract,
   workerControl,
   daemonConnected = true,
+  protectedCount = 0,
   onOpenStudio,
   extra,
 }: WorkspaceHeaderProps) {
@@ -47,13 +49,24 @@ export function WorkspaceHeader({
         {repoName}
       </span>
       <span data-testid="current-branch">分支：{branch}</span>
-      <span
+      {/*
+        C.2 模式常驻指示：永远在顶栏，不藏在菜单里。
+        点击 = 打开中栏的 Supervisor Studio（真实模式切换在那里按条目粒度做，
+        避免"点一下顶栏就全解锁"这种误操作）。
+      */}
+      <button
+        type="button"
         data-testid="run-mode"
         data-mode={runMode}
-        className="rounded border px-2"
+        data-locked-count={runMode === "PROTECTED" ? protectedCount : 0}
+        onClick={onOpenStudio}
+        title="打开 Supervisor Studio 查看/调整"
+        className="rounded border border-border px-2 hover:bg-accent"
       >
-        {RUN_MODE_LABEL[runMode]}
-      </span>
+        {runMode === "PROTECTED"
+          ? `🔒 保护模式 PROTECTED (已锁 ${protectedCount} 处)`
+          : "🔓 自由模式 VIBE"}
+      </button>
       {contract && (
         <span data-testid="contract-info">
           合同 {contract.contractId} · {contract.worktreePath} ·{" "}

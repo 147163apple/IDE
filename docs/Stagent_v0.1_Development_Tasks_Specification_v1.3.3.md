@@ -607,7 +607,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task C.2】中栏 Supervisor Studio 标签页与合同审阅面板
 * **任务编号**：`TASK-C.2`
 * **前置依赖**：`TASK-C.1`, `TASK-S.2`（v1.3.3 第二轮修订：移除已推迟的 `TASK-S.3`，与 JSON 边一致）
-* **任务状态**：**[NEW_TASK]**（v0.1 精简版）
+* **任务状态**：**[PARTIAL]**（v0.1 精简版于 **2026-10-22** 在 `feat/c2-studio-pane-simplified` 落地：中栏 Tab 审阅面板、白话理由与未决问题勾选单、结构化合同审阅、执行态 + 紧急暂停、顶栏常驻模式指示、`/admit` 联动的白话确认卡，新增 20 例 UI 用例全绿。**残余**：①"执行期实时监控面板"只做了状态 + 紧急暂停，Token 水表 / 改动文件列表 / MCP 事件流仍复用既有 `BudgetVisualizer` / `DiffViewer` / 终端面板，未并入 Studio；②"在 Studio 中直接编辑 Scope"未做——Studio 为只读审阅，改范围仍走「新建合同」表单；③`ContractEditorForm.tsx` 未创建。故维持 `[PARTIAL]`）
 * **v0.1 范围**：最小 Studio / 合同审阅 + 保护清单命中时的白话确认卡 + 模式指示。**v0.2+（推迟，不作本卡前置或验收项）**：成熟度徽章、HUD 风险气泡、Snooze、`SUPERVISOR_MATURITY_UPDATED` 实时同步。
 * **核心目标**：
   1. **中栏 `SupervisorStudioPane.tsx` 专属审阅区**：
@@ -616,16 +616,26 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
      - 结构化合同编辑：可写 Scope (`writable_paths`)、只读路径、强禁区、测试命令、Token 预算上限；
      - 执行期转为实时监控面板（Token 水表、改动文件列表、MCP 事件流、紧急暂停按钮）。
   2. **模式指示**：Header 显示当前模式（自由模式 VIBE / 保护模式 PROTECTED）与入口按钮，点击打开 Studio Tab。（原「HUD 胶囊 + 成熟度徽章 + 风险气泡」推迟 v0.2+。）
-  3. **审批交互（v1.3.3 减负）**：合同 Scope 与保护清单无交集时由 Daemon 自动批准并记录备案（前端不弹窗）；有交集时仅向用户展示一个白话是/否卡片（列出本轮全部受保护文件，同意后本轮清单内不再弹窗，超出清单才重新询问）（"AI 想修改被保护的『登录』代码，同意吗？【是 / 否】"），用户点击后才发起签署请求 (`POST /api/contracts/:id/approve`)。
+  3. **审批交互（v1.3.3 减负）**：合同 Scope 与保护清单无交集时由 Daemon 自动批准并记录备案（前端不弹窗）；有交集时仅向用户展示一个白话是/否卡片（列出本轮全部受保护文件，同意后本轮清单内不再弹窗，超出清单才重新询问）（"AI 想修改被保护的『登录』代码，同意吗？【是 / 否】"），用户点击后才发起签署请求。**接口校正（2026-10-22）**：签署请求实际为 `POST /api/contracts/:id/admit`（D.2 引入的准入裁决接口，取代直接 `approve`），流程为「先 `POST /api/protection/decisions` 记本轮放行 → 再 `POST /admit` 由 Daemon 复核并推进」；点「不同意」走 `POST /api/protection/decisions`（deny）+ `POST /api/contracts/:id/abort`，合同落 `ABORTED`。
 * **涉及核心文件**：
-  - 新增：`src/components/SupervisorStudioPane.tsx`
-  - 新增：`src/components/ContractEditorForm.tsx`
+  - 新增：`src/components/SupervisorStudioPane.tsx`（审阅面板，纯展示）
+  - 新增：`src/components/supervisor-view-model.ts`（`toStudioDraft` / `shouldConfirmAdmission` / `confirmSentence` 等纯函数）
   - 新增：`src/components/ProtectionConfirmCard.tsx`（保护清单命中白话是/否卡）
+  - 修改：`src/components/WorkspaceHeader.tsx`（模式常驻指示 + 已锁 N 处）、`src/components/WorkspaceLayout.tsx`（`confirmSlot` / `protectedCount`）、`src/lib/daemon-api.ts`（`admitContract` / `createContractWithAdmission` / `AdmissionView`）、`src/routes/index.tsx`（准入裁决状态与两个决策回调）
+  - 未创建（残余）：`src/components/ContractEditorForm.tsx`
   - v0.2+（推迟）：`src/components/SupervisorHUD.tsx`、`src/components/MaturityBadge.tsx`
-  - 测试：`tests/ui/supervisor-studio-approval.test.tsx`
+  - 测试：`tests/ui/supervisor-studio-approval.test.tsx`（16 例，组件级）、`tests/ui/supervisor-admission-route.test.tsx`（4 例，路由级真实接线）
 * **Pass/Fail 验收判定**：
   - **PASS**：用户在 Studio 中可直接编辑 Scope 并勾选未决问题；保护清单命中时仅出现一个白话是/否卡，用户点「是」前绝不向服务端发审批请求；无交集合同前端零弹窗；模式指示正确。
   - **FAIL**：保护清单命中的合同未经用户确认即被批准；弹窗超过一个是/否问题；合同审阅仍使用遮挡代码的阻断 Modal。
+* **完成记录（v0.1 精简版 · 2026-10-22）**：
+  - **无交集零弹窗是结构性的**：`applyAdmission()` 只把 `NEEDS_APPROVAL + 命中文件` 写进状态，`AUTO_APPROVED` / `SKIPPED` 一律置 `null`，`ProtectionConfirmCard` 再来一道 `if (!shouldConfirmAdmission(admission)) return null`——两道防线都不依赖样式隐藏。
+  - **至多一张卡**：合同准入确认卡在等用户决策时，P.1 的通用命中卡（`ProtectionApprovalCard`）被显式抑制，避免同一事件叠两张卡。
+  - **未决问题 100% 呈现**：`toStudioDraft()` 原样透传、不去重不截断；勾选只作"已核对"记录（`data-testid="unresolved-check-{i}"`），不构成门禁，勾掉也不消失。
+  - **紧急暂停要点两次**：Daemon 侧没有"暂停"原语，只有 `abort`（强杀进程 + 删 Worktree）。按钮首点变「确认中止？」，再点才调 `POST /abort`，并在旁边写明"会丢弃本轮未合并改动"。
+  - **模式切换按条目粒度**：顶栏点击 = 打开 Studio（不直接改模式，避免误点全解锁）；Studio 内逐条「解锁」，不提供"一键全解"。
+  - **v1.3.3 剔除项反证**：`maturity-badge` / `risk-bubble` / `snooze` / `\d+ 分` 在渲染结果中均不存在（有用例断言）。
+  - **测试口径**：组件级 16 例（0 弹窗 / 单卡 / 未点不发请求 / 未决问题条数与文案逐条比对 / 结构化字段 / 紧急暂停两段式 / 顶栏模式 / 剔除项反证）；路由级 4 例（真实 Console + mock Daemon：`AUTO_APPROVED` 无弹窗且不调 admit、`NEEDS_APPROVAL` 单卡且零请求、点同意后 `decisions(approve)→admit` 顺序、点不同意 `decisions(deny)→abort`）。
 
 ---
 
@@ -878,7 +888,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 > - **`TASK-S.2`（精简版）已达成**：按需触发（定时/防抖结构性拒绝）+ L0 规则引擎 + L1 按需补全 + G-11 未决问题零丢失 + 独立预算记账 + `redaction.ts` 三层脱敏全部落地，三套新单测 45 例全绿；成熟度评分器/徽章/气泡按 v1.3.3 明令未引入。
 > - **`TASK-S.1` 仍为 `[PARTIAL]`**：增量①（独立预算）本轮纠正旧口径后真正落地，增量②（规则优先）已随 S.2 落地，增量③（唤醒节流器 `throttler.ts`，3s 防抖默认关闭）仍缺失——该文件仅存于未合并分支 `wip/s2-s3-supervisor-old-design`。
 > - **门禁判定**：「草案 100% parse 通过」已成立；「VIBE 下 30 分钟连续聊天 Supervisor 调用 = 0（未点击时）」在生成器层面已结构性成立（`IDLE_TIMER`/`DEBOUNCE_TIMER` 直接返回、`model_calls: 0`），但端到端仍需 `TASK-C.2` 接线后以真实会话复测。
-> - **`TASK-C.2`（Studio 精简版）尚未启动**。
+> - **`TASK-C.2`（Studio 精简版）主体已落地（2026-10-22）**：中栏 Tab 审阅面板（白话理由 / 未决问题勾选单 / 可写·只读·禁区·命令·Token 预算）、执行态与紧急暂停、顶栏常驻模式指示、`/admit` 联动白话确认卡（无交集零弹窗、有交集至多一张），新增 20 例 UI 用例。**仍未做**：Studio 内直接改 Scope（`ContractEditorForm.tsx`）、Token 水表/改动文件/事件流并入 Studio，故 C.2 记 `[PARTIAL]`。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
