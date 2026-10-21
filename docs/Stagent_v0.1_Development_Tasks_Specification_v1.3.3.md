@@ -34,6 +34,13 @@
 > 4. **G-3 闭环 + 加固**：`allowBash=true` 分支负例已补测通过——Shell 触碰保护清单路径（`rm`/`mv`）被 `shellProtectionVerdict` 按字面量拒绝并投递确认卡，目标文件完好。**同轮发现的潜伏缺口已加固**（2026-10-22）：Bash 分支新增 `reservedMetadataHit()`（`.stagent/.git/.claude/.cursor/.env` 按路径段拒绝）与 `shellEscapeVerdict()`（重定向目标与全部词元的越界判定），此前可绕的 `echo pwn > ../outside/probe.txt`、`rm -rf .stagent` 现均被拒；21 条命令矩阵（`npm run`/`git status`/`npx vitest`/`> /dev/null`/`cat .gitignore` 等）零误伤。
 > 5. **证据归档**：`docs/reports/W5a-真实CLI验证报告-2026-10-21.md`（5/5 记录、拦截日志原文、新缺口证据 §4.5、Token 口径、凭据审计、复现步骤）。
 
+> **E.2 收官校正（2026-10-22，Sprint 6 收口；仅改「任务状态」与实测记录，不改任务定义、验收判据、依赖边与排期）**：
+> 依据基线：分支 `feat/e2-dogfooding-and-release`（基于 `main`@`b1ede2a`，即 `TASK-E.1` 合并提交）；`npm run typecheck` 退出码 0；`npx vitest run` **86 文件通过 / 1 跳过，785 用例通过 / 6 跳过，0 失败**；`npm run build` 退出码 0。
+> 1. **`TASK-E.2` → `[COMPLETED]`**：目标 1「真仓库自举闭环」由合同 `contract_1792607266038_110hd` 完成——准入自动批准 → 真 Worktree → 受控写入 → 真跑 `typecheck` + 定向单测 → `EvidenceBundleV11`（`PASSED`/`can_merge=true`/0 重试）→ Gate 0~4 `squashMerge` → 自举提交 `69f61bd`（3 files，+96/−3）；目标 2 报告 `docs/reports/v0.1-dogfooding-report.md` 重写为真仓库实测版；目标 3 `package.json` 0.1.0 + `dist/` 33 文件 / 3.15 MB。
+> 2. **Trailer 由 4 条扩至 7 条（含任务卡要求的 4 项）**：新增 `Stagent-Evidence-Hash`（证据文件字节 SHA-256，可用 `shasum -a 256` 独立复算）与 `Stagent-Approval-Status`；§5.2 既有命名（`Stagent-Contract-ID` / `Reviewed-By`）保持不动，任务卡的 `Contract-Id` / `Audited-By` 写法差异在报告 §3.1 明示。
+> 3. **本轮新发现缺陷 6 项（N-1~N-6）**：N-3（陈旧 `dist/`）、N-4（无 `version` 字段、`bin/`+`scripts/` 不过 `tsc`）、N-6（会话 HTTP 用例端口重叠 + 固定 `sleep` 假失败）已修；N-1（`scope_audit.files_changed` 为空）、N-2（`diff_stat` 空 / `patch_fingerprint` 恒为 `sha256("")`）未修并如实标注；N-5 为文档口径差异。明细见报告 §4.3。
+> 4. **不可声称项（发布口径）**：无 `OPENAI_API_KEY`，`modelClient` 为确定性实现，「真实模型生成 → 合并」未验证，Token/费用为 0（`usage.accounting_mode=UNAVAILABLE`）；跨平台、多任务并发、第三方项目试用均未验证。报告 §4~§5 为准。
+
 > **v1.3.2 历史修订成果（存档）**：
 > 1. **彻底闭环错误码与预算契约 (闭环 P1-N1 / P1-N2)**：对齐法典 A §6.4(3) 超时分列错误码（`E_COMMAND_TIMEOUT` / `E_TASK_TIMEOUT`）；对齐法典 A §9.1 `budget_limits` 增补的 `max_command_executions?` 与 `max_tool_calls?` 可选预算字段，使 TASK-W.3 与 0.2b 命令/工具调用计数熔断断言完全合法自洽。
 > 2. **完善工作区与并发互斥锁双向断言 (闭环 P2-R5)**：在 §1.1 与 TASK-D.1 补齐存活 PID 锁冲突抛出 `E_WORKSPACE_LOCKED` 断言；与 TASK-D.2 (G-21) 运行时并发互斥锁协同闭环。
