@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { ContractStore } from "./contract-store";
 import { readStateFile } from "../guard/state-store";
 import type { SoftwareContract } from "../../src/lib/contract.schema";
@@ -95,18 +96,38 @@ export async function assertMainTreeClean(repoRoot: string): Promise<void> {
 }
 
 /** 标准 Git Trailer（§5.2，字段顺序固定） */
+export interface MergeCommitMessageOptions {
+  /**
+   * 证据文件**字节**的 SHA-256（与 `shasum -a 256 <evidence>.json` 同源）。
+   *
+   * TASK-E.2：提供时写入 `Stagent-Evidence-Hash`，让审计方可以独立复算并发现
+   * 「合并后用另一份证据替换磁盘文件」这类事后调包——Evidence-ID 只是名字，
+   * 名字不防篡改，哈希才防。
+   */
+  evidenceHash?: string | undefined;
+}
+
 export function buildMergeCommitMessage(
   contract: SoftwareContract,
   evidence: EvidenceBundle,
   reviewer: string,
   conflictResolution: "USER_FIRST_DISCARD" | null = null,
+  options: MergeCommitMessageOptions = {},
 ): string {
   const trailers = [
     `Stagent-Contract-ID: ${contract.contract_id}`,
     `Stagent-Evidence-ID: ${evidence.evidence_id}`,
-    `Stagent-Verdict: ${evidence.verdict.status}`,
-    `Reviewed-By: ${reviewer}`,
   ];
+  if (options.evidenceHash) {
+    trailers.push(`Stagent-Evidence-Hash: ${options.evidenceHash}`);
+  }
+  trailers.push(
+    `Stagent-Verdict: ${evidence.verdict.status}`,
+    // 合并时的审批事实（AUDITED 态恒为 APPROVED，写进提交便于事后核对
+    // 「这条提交是谁批的、批的时候是什么状态」，无需回查 .stagent/）
+    `Stagent-Approval-Status: ${contract.approval.status}`,
+    `Reviewed-By: ${reviewer}`,
+  );
   // 测试完整性留痕：任务修改过测试文件时，审计提交中显式标记
   if (evidence.tests_modified === true) {
     trailers.push("Stagent-Tests-Modified: true");
@@ -276,11 +297,16 @@ async function mergeInternal(
   }
 
   // 5. 生成 Trailer 提交
+  //    Evidence-Hash = 磁盘证据文件字节哈希，写入提交后任何人可用系统 shasum 复算
+  const evidenceHash = createHash("sha256")
+    .update(fs.readFileSync(evidencePath))
+    .digest("hex");
   const message = buildMergeCommitMessage(
     contract,
     snapshot,
     options.reviewer,
     conflictResolution,
+    { evidenceHash },
   );
   const commit = await execGit(["commit", "-m", message], repoRoot);
   if (commit.exitCode !== 0) {
