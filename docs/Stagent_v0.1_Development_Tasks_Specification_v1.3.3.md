@@ -24,14 +24,14 @@
 > 1. **主校正（5 张卡）**：`TASK-P.1` → **[COMPLETED]**（提交 `08e95da` 已在 main 且为 HEAD 祖先）；`TASK-C.5` / `TASK-W.3` / `TASK-W.4` → **[COMPLETED]**；`TASK-D.2` → **[PARTIAL]**（主体落地，缺核心目标 1 的「Scope 与保护清单无交集自动批准」；**同日步骤 D 收口已升级为 [COMPLETED]**，见下方「步骤 D 收口校正」）。
 > 2. **交叉一致性校正（9 行）**：`TASK-C.1`（`e48f614`）/ `TASK-C.3`（`88aec68`）/ `TASK-C.6`（`43496c0`）总表仍标 `[NEW_TASK]`，实为已合入 main → 改 **[COMPLETED]**；`TASK-W.1` / `TASK-W.2` 的「卡面成果未进 main」注记已被 `2e1290c` 推翻 → 改写为已合入；`TASK-W.5a` 卡片已填 `verified_on` 而总表仍标 `[NEW_TASK]` → 改 **[PASS]**；`TASK-B.1` / `TASK-B.2` / `TASK-C.4` 卡片仍标 `[NEW_TASK]`/`[INCREMENTAL_UPGRADE]` 而总表已按 D4 决议标 `[DEFERRED → v0.2+]` → 卡片统一为 DEFERRED。**合计 14 行（5 主校正 + 9 交叉校正）状态已同步**，核验证据（文件路径、提交、用例数、残余偏差）写入卡内；§1.1 总表与任务卡状态经脚本交叉比对已一致（31 行总表 / 24 张有状态卡片，0 处冲突）。
 > 3. **未变更状态、仅补记证据**：`TASK-S.1` 维持 **[PARTIAL]**，但卡片与总表补记「v1.3.3 增量①独立预算分账已落地（`supervisor/budget.ts`，6 例绿）」，②规则优先 L0/L1 与③节流器增量仍未落地；`TASK-S.2`/`TASK-S.3`/`TASK-C.2`/`TASK-E.1`/`TASK-E.2`/`TASK-W.5b`/`TASK-W.5c` 状态不变。
-> 4. 本次校正暴露的待办（另行排期，不在本次范围）：① D.2 交集自动批准 + `tests/unit/contract-auto-approve.test.ts`（**已于步骤 D 闭环**：`9691b23`，合并 `742d27d`，9 用例绿）；② W.5a `allowBash` 场景的真实 CLI Shell 绕过负例（**已于步骤 D 收口闭环**：2026-10-21 补第 5 条用例，5/5 全绿；同时发现「允许 Bash 时无通用越界检查」潜伏缺口，待决策修复）；③ P.1「静默合同」口径统一（JSONL 备案 vs 正式合同落盘）与【撤销本轮改动】常驻化（**仍待办**）。
+> 4. 本次校正暴露的待办（另行排期，不在本次范围）：① D.2 交集自动批准 + `tests/unit/contract-auto-approve.test.ts`（**已于步骤 D 闭环**：`9691b23`，合并 `742d27d`，9 用例绿）；② W.5a `allowBash` 场景的真实 CLI Shell 绕过负例（**已于步骤 D 收口闭环**：2026-10-21 补第 5 条用例，5/5 全绿；2026-10-22 发现并加固「允许 Bash 时无通用越界检查」缺口，补第 6 条用例，6/6 全绿）；③ P.1「静默合同」口径统一（JSONL 备案 vs 正式合同落盘）与【撤销本轮改动】常驻化（**仍待办**）。
 
 > **步骤 D 收口校正（2026-10-21 晚，真实 CLI 复测与 D.2 升级；仅改「任务状态」与实测记录，不改任务定义、验收判据、依赖边与排期）**：
 > 依据基线：`main`@`742d27d`；`Claude Code 2.1.296` + DeepSeek `deepseek-chat` @ `https://api.deepseek.com/anthropic`（Anthropic 兼容端点）；`npm run typecheck` 退出码 0；全量 `682 用例通过 / 4 跳过`。
 > 1. **`TASK-W.5a` 实测回填**：`verified_on` 更新为 `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`，真实 CLI 负例 **5/5 全绿**（`tests/e2e/claude-code-isolation.real.test.ts`，36.91s；含 `allowBash=true` 的 Shell 字面量拦截补充用例）。此前 `2026-10-20` 为设计期实测；本次为可复现的归档复测，并首次落盘 `PreToolUse hook` 的 `deny` 日志原文。
 > 2. **`TASK-D.2` → `[COMPLETED]`**：核心目标 1「合同 Scope 与保护清单无交集 → 自动批准」已落地（`9691b23`，合并 `742d27d`），缺口 **G-1 闭环**；`tests/unit/contract-auto-approve.test.ts` 9 用例绿，全量测试基线由 672 升至 **682**。残余一项（不阻塞 v0.1）：`resume` 在「触碰保护清单时要求新审批版本」未实现，已记入卡片。
 > 3. **端点踩坑固化**：DeepSeek 接入 Claude Code 必须用 **Anthropic 兼容端点** `https://api.deepseek.com/anthropic`；误用 OpenAI 端点 `/v1` 会因路径拼接成 `/v1/v1/messages` 而报「模型不可用」，该现象易被误判为"门卫失效"。
-> 4. **G-3 闭环**：`allowBash=true` 分支负例已补测通过——Shell 触碰保护清单路径（`rm`/`mv`）被 `shellProtectionVerdict` 按字面量拒绝并投递确认卡，目标文件完好。**同轮发现潜伏缺口**：该分支缺「指向工作目录之外」的通用检查，`../` 越界写与 `rm -rf .stagent` 可绕（`allowBash` 当前无生产路径启用，默认 `false`），已列为待决策修复项。
+> 4. **G-3 闭环 + 加固**：`allowBash=true` 分支负例已补测通过——Shell 触碰保护清单路径（`rm`/`mv`）被 `shellProtectionVerdict` 按字面量拒绝并投递确认卡，目标文件完好。**同轮发现的潜伏缺口已加固**（2026-10-22）：Bash 分支新增 `reservedMetadataHit()`（`.stagent/.git/.claude/.cursor/.env` 按路径段拒绝）与 `shellEscapeVerdict()`（重定向目标与全部词元的越界判定），此前可绕的 `echo pwn > ../outside/probe.txt`、`rm -rf .stagent` 现均被拒；21 条命令矩阵（`npm run`/`git status`/`npx vitest`/`> /dev/null`/`cat .gitignore` 等）零误伤。
 > 5. **证据归档**：`docs/reports/W5a-真实CLI验证报告-2026-10-21.md`（5/5 记录、拦截日志原文、新缺口证据 §4.5、Token 口径、凭据审计、复现步骤）。
 
 > **v1.3.2 历史修订成果（存档）**：
@@ -79,7 +79,7 @@
 | **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[NEW_TASK]** | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（2026-10-21 核验：提交 `08e95da` 已在 main；门卫/一张卡+补充卡/待审批持久化/自锁/失败关闭/快照撤销/规则推荐/Prompt 注入全部落地，13+1+3 用例绿；残余口径差见卡片） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`43496c0` 已在 main；`AgentChatPane` + `use-agent-session`；`agent-chat-pane` 8 用例绿；真实 Claude Code 流式/打断/续接见 W.5a） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume（映射 CLI 原生会话 ID）。 |
-| **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（2026-10-21 步骤 D 实测收口：`verified_on: Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`；真实 CLI 负例 `tests/e2e/claude-code-isolation.real.test.ts` **4/4 全绿**（25.94s，`STAGENT_REAL_CLAUDE=1` + `deepseek-chat` @ `https://api.deepseek.com/anthropic`），hook `deny` 日志已落盘；`allowBash` 分支负例亦已补测（合计 **5/5，36.91s**）；新发现「允许 Bash 时无通用越界检查」潜伏缺口，见报告 §4.5；证据见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
+| **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（2026-10-21 步骤 D 实测收口：`verified_on: Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`；真实 CLI 负例 `tests/e2e/claude-code-isolation.real.test.ts` **4/4 全绿**（25.94s，`STAGENT_REAL_CLAUDE=1` + `deepseek-chat` @ `https://api.deepseek.com/anthropic`），hook `deny` 日志已落盘；`allowBash` 分支负例亦已补测（合计 **6/6，48.58s**），并完成 `allowBash` 的 Shell 加固（元数据保留区 + 越界目标两道门禁，21 条命令矩阵零误伤）；证据见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
 | **TASK-W.5b** | cursor-agent 适配器（cli-host 黑盒实测） | 编码内核 | **[NEW_TASK]** (v1.3.3) | P5.5 受控实测 | 权限 deny 实测；不能完全关闭原生写能力则仅登记 `UNCONTROLLED_EXTERNAL`（仅 Vibe）。 |
 | **TASK-W.5c** | OpenHands 适配器（容器隔离） | 编码内核 | **[NEW_TASK]** (v1.3.3) | P5.5 受控实测 | 容器内仅挂载任务 Worktree；`control_mode = SANDBOX_ENFORCED`。 |
 
@@ -517,7 +517,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task W.5a】Claude Code 适配器与 cli-host 黑盒实测 (v1.3.3 新增)
 * **任务编号**：`TASK-W.5a`
 * **前置依赖**：`TASK-W.2`, `TASK-C.6`（右栏会话通道）
-* **任务状态**：**[PASS · verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`]**（分支 `feat/w5a-claude-code`。cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL）；一律 API Key；隔离启动见核心目标 2；真实 CLI 上流式输出、工具卡片、打断（约 0.5s）、跨 Daemon 重启 `--resume` 续接、4 类绕过负例均实测通过，证据见 `docs/reports/W5a-isolation-design.md`。**2026-10-21 步骤 D 实测收口**：以 `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑真实 CLI 负例 **5/5 全绿**（36.91s），首次落盘 `PreToolUse hook` 的 `deny` 日志原文（含 symlink 逃逸判定）；并补测 `allowBash=true` 分支——Shell 命令触碰保护清单路径时，`shellProtectionVerdict` 按字面量拒绝并投递白话确认卡（`rm`/`mv` 均被拦，目标文件完好），证据归档 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md` §4.4。**后续回归项（不阻塞）**：用官方 Anthropic 原装模型 + 官方 CLI 重跑负例；每次升级 CLI 重跑 `STAGENT_REAL_CLAUDE=1` 真实测试；Gateway MCP 端点依赖 W.4。**同轮发现（潜伏缺口，待决策）**：`allowBash=true` 时 hook 只做保护清单字面量匹配，缺「命令是否指向工作目录之外」的通用检查，`../` 越界写与 `rm -rf .stagent` 可通过（该选项当前无生产路径启用，默认恒为 `false`）；修复建议见报告 §4.5。）
+* **任务状态**：**[PASS · verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`]**（分支 `feat/w5a-claude-code`。cli-host 唯一 spawn（shell:false、进程组、SIGINT→SIGTERM→整树 SIGKILL）；一律 API Key；隔离启动见核心目标 2；真实 CLI 上流式输出、工具卡片、打断（约 0.5s）、跨 Daemon 重启 `--resume` 续接、4 类绕过负例均实测通过，证据见 `docs/reports/W5a-isolation-design.md`。**2026-10-21 步骤 D 实测收口**：以 `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑真实 CLI 负例 **6/6 全绿**（48.58s），首次落盘 `PreToolUse hook` 的 `deny` 日志原文（含 symlink 逃逸判定）；并补测 `allowBash=true` 分支——Shell 命令触碰保护清单路径时，`shellProtectionVerdict` 按字面量拒绝并投递白话确认卡（`rm`/`mv` 均被拦，目标文件完好），证据归档 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md` §4.4。**后续回归项（不阻塞）**：用官方 Anthropic 原装模型 + 官方 CLI 重跑负例；每次升级 CLI 重跑 `STAGENT_REAL_CLAUDE=1` 真实测试；Gateway MCP 端点依赖 W.4。**同轮发现并已加固（2026-10-22）**：`allowBash=true` 原先只做保护清单字面量匹配，缺「命令是否指向工作目录之外」的通用检查，`../` 越界写与 `rm -rf .stagent` 实测可绕；现 Bash 分支已串接 `reservedMetadataHit()`（`.stagent/.git/.claude/.cursor/.env` 按路径段拒绝）与 `shellEscapeVerdict()`（重定向目标与全部词元的越界判定，含 symlink 真实路径），同一攻击复测被拒且 `outside/` 为空；`/dev/null`、通配符前缀等常规用法保留，21 条命令矩阵零误伤；证据见报告 §4.5。）
 * **核心目标**：
   1. 在 `daemon/worker/cli-host/` 专用子进程隔离模块中以 spawn 挂载 Claude Code CLI（结构化 argv、`shell:false`、进程树托管回收）；**全仓其余位置维持零 `child_process` 静态禁令**。
   2. **收敛策略（已实测，verified_on: `Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21`）**：优先保留 Claude Code 原生工具，通过官方 **Pre-tool hook** 配合 Stagent 网关拦截；辅以工具白名单/黑名单收窄内置 Edit/Write/Bash/WebFetch；避免粗暴剥离原生工具导致模型死循环。工作目录锁定 Worktree。**隔离启动（`[用户已确认 · 2026-10-20]`，替代 `--bare`——实测 2.1.296 的 `--bare` 会跳过 `--settings` 中的 hooks）**：
@@ -531,9 +531,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 * **涉及核心文件**：
   - 新增：`daemon/worker/cli-host/claude-code-adapter.ts`
   - 新增：`daemon/worker/cli-host/process-host.ts`（spawn 托管与进程树回收）
+  - 新增：`daemon/worker/cli-host/pretool-hook.mjs`（PreToolUse 门卫：越界/保留区/保护清单判定，含 2026-10-22 Shell 加固）
   - 测试：`tests/unit/cli-host-claude-code.test.ts`（确定性，含 hook 层 4 类绕过负例）；`tests/e2e/claude-code-isolation.real.test.ts`（真实 CLI，`STAGENT_REAL_CLAUDE=1` 时运行：配置注入负例、4 类绕过、专用配置目录续接）
 * **Pass/Fail 验收判定**：
-  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭（2026-10-21 复测 **5/5 全绿**：4 类绕过 + `allowBash` 分支的 Shell 字面量拦截；MCP 工具与 Read 越界读负例仍为空集合下的未测项，见 `docs/reports/W5a-isolation-design.md`）；`verified_on` 非空；流式输出与打断/续接实测达标。
+  - **PASS**：4 类绕过负例在真实 CLI 版本上 100% 失败关闭（2026-10-21/22 复测 **6/6 全绿**：4 类绕过 + `allowBash` 的保护清单字面量拦截 + `allowBash` 的越界/元数据加固；MCP 工具与 Read 越界读负例仍为空集合下的未测项，见 `docs/reports/W5a-isolation-design.md`）；`verified_on` 非空；流式输出与打断/续接实测达标。
   - **FAIL**：任一绕过路径可用；未实测即标记受控。
 
 #### 【Task W.5b】cursor-agent 适配器黑盒实测 (v1.3.3 新增)

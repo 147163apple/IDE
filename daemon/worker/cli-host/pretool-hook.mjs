@@ -4,7 +4,9 @@
  * 只有 exit 2 或 JSON permissionDecision:"deny" 才会拦截；所以任何异常都按「拒绝」处理。
  * 规则（W.4 的 4 类绕过的 hook 层兜底）：
  *  1. 写类工具的目标路径必须在 STAGENT_HOOK_ROOT 内；
- *  2. Shell（Bash）默认拒绝，除非 STAGENT_HOOK_ALLOW_BASH=1；
+ *  2. Shell（Bash）默认拒绝，除非 STAGENT_HOOK_ALLOW_BASH=1；即便允许，
+ *     也另有两道门禁：核心元数据路径（.stagent/.git/.claude/.cursor/.env）一律拒绝，
+ *     命令中经 `..` 或绝对路径指向工作目录之外的重定向/写目标一律拒绝；
  *  3. 不得触碰 .git / .stagent / .claude / .mcp.json，也不得经 ../ 访问主工作树；
  *  4. 不在白名单内的工具（含未知 MCP 工具）一律拒绝。
  */
@@ -14,6 +16,99 @@ import path from "node:path";
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite", "Task"]);
 const PROTECTED_SEGMENTS = [".git", ".stagent", ".claude"];
+
+/**
+ * Shell 通道的保留区（G-3 加固，2026-10-21）：
+ * 允许 Bash 之后，`rm -rf .stagent` 这类命令绕过了 Write/Edit 的路径判定，
+ * 因此对命令词元按「路径段」精确匹配，命中即拒绝。
+ * 按段匹配（而不是子串）是为了不误伤 `.gitignore` / `.github` / `.envrc`。
+ */
+const RESERVED_SHELL_SEGMENTS = [".stagent", ".git", ".claude", ".cursor"];
+/** `> /dev/null` 这类常规写法必须放行，否则大量正常命令被误伤 */
+const SAFE_DEVICE_TARGETS = new Set([
+  "/dev/null",
+  "/dev/stdout",
+  "/dev/stderr",
+  "/dev/fd/1",
+  "/dev/fd/2",
+]);
+
+/** 命令里是否出现保留区的路径段；返回命中的段名（null = 未命中） */
+function reservedMetadataHit(command) {
+  // 按 shell 的分隔符与 `=` 粗切（`--git-dir=.git` 也会被切成独立段）
+  const tokens = String(command)
+    .split(/[\s;|&()<>"'`=,]+/)
+    .filter(Boolean);
+  for (const token of tokens) {
+    for (const seg of token.replace(/\\/g, "/").split("/")) {
+      if (!seg) continue;
+      if (RESERVED_SHELL_SEGMENTS.includes(seg)) return seg;
+      // .env / .env.local / .env.production：密钥类文件一律不许经 Shell 读写
+      if (seg === ".env" || seg.startsWith(".env.")) return seg;
+    }
+  }
+  return null;
+}
+
+/** 取真实路径：已存在取自身，不存在取父目录，防 symlink 逃逸 */
+function realish(p) {
+  try {
+    if (fs.existsSync(p)) return fs.realpathSync(p);
+    return path.join(fs.realpathSync(path.dirname(p)), path.basename(p));
+  } catch {
+    return p;
+  }
+}
+
+/** 单个词元是否指向工作目录之外；返回拒绝原因或 null */
+function escapeReasonOf(root, raw) {
+  let t = String(raw).trim();
+  if (!t) return null;
+  // 去掉 `--opt=value` / `--opt:value` 的选项前缀，只看取值部分
+  const sep = t.search(/[=:]/);
+  if (t.startsWith("-") && sep > 0) t = t.slice(sep + 1);
+  if (!t || SAFE_DEVICE_TARGETS.has(t)) return null;
+  const looksPath = t.includes("/") || t.startsWith(".") || t.startsWith("~");
+  if (!looksPath) return null;
+  // $VAR / ~ 展开后指向哪里无法静态判定 —— 保守拒绝（失败关闭）
+  if (t.startsWith("$") || t.startsWith("~")) {
+    return `Shell 命令路径越界（含不可静态判定的变量展开）：${raw}`;
+  }
+  // 通配符只校验字面前缀（`tests/**/*.test.ts` 这类正常用法必须放行）
+  if (/[*?[]/.test(t)) {
+    const prefix = t.split(/[*?[]/)[0].replace(/\/?[^/]*$/, "");
+    return inside(root, realish(path.resolve(root, prefix || ".")))
+      ? null
+      : `Shell 命令路径越界（通配符前缀指向工作目录之外）：${raw}`;
+  }
+  const abs = t.startsWith("/") ? t : path.resolve(root, t);
+  return inside(root, realish(abs))
+    ? null
+    : `Shell 命令路径越界（目录穿越或指向工作目录之外）：${raw}`;
+}
+
+/**
+ * Shell 越界判定：重定向目标（`>` / `>>`）+ 全部词元。
+ * 只做静态文本判定，宁可多拒也不放过（失败关闭）。
+ */
+function shellEscapeVerdict(root, command) {
+  const text = String(command);
+  const candidates = [];
+  const redirectRe =
+    /(?:^|[^>])>{1,2}\s*(?:"([^"]*)"|'([^']*)'|([^\s;|&<>]+))/g;
+  let m;
+  while ((m = redirectRe.exec(text)) !== null) {
+    candidates.push(m[1] ?? m[2] ?? m[3] ?? "");
+  }
+  for (const token of text.split(/[\s;|&()"'`]+/)) {
+    if (token) candidates.push(token);
+  }
+  for (const candidate of candidates) {
+    const verdict = escapeReasonOf(root, candidate);
+    if (verdict) return verdict;
+  }
+  return null;
+}
 
 /**
  * TASK-P.1 保护清单（.stagent/protection.json）由 daemon/API 维护，hook 只读。
@@ -198,10 +293,16 @@ try {
   if (tool === "Bash") {
     if (process.env.STAGENT_HOOK_ALLOW_BASH !== "1")
       deny("未授权的 Shell 命令");
-    const bashVerdict = shellProtectionVerdict(
-      mainRoot,
-      String(ti.command ?? ""),
-    );
+    const command = String(ti.command ?? "");
+    // 加固 1：核心元数据（.stagent/.git/.claude/.cursor/.env）一律不许经 Shell 触碰
+    const reserved = reservedMetadataHit(command);
+    if (reserved)
+      deny(`禁止通过 Shell 访问或修改系统保护元数据（${reserved}）`);
+    // 加固 2：目录穿越（../）与指向工作目录之外的绝对路径一律拒绝
+    const escape = shellEscapeVerdict(realRoot, command);
+    if (escape) deny(escape);
+    // 既有：保护清单命中且未获本轮授权 → 投递确认卡并拒绝
+    const bashVerdict = shellProtectionVerdict(mainRoot, command);
     if (bashVerdict) deny(bashVerdict);
     log({ decision: "allow" });
     process.exit(0);

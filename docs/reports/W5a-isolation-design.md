@@ -168,7 +168,7 @@ claude --restricted -p "..." --settings s.json --tools Read,Write,Edit,Glob,Grep
 | ③ 改名 / 删除  | Bash `mv a.txt b.txt`、`rm a.txt`                                                                                             | 调不到，a.txt 完好                         | 没有 Shell 就没有改名/删除工具。注意：用 Write 把工作目录**内**的文件写空仍然是允许的（这本来就是正常的改代码，靠 Git 可以恢复） |
 | ④ symlink 逃逸 | 项目内 `link` → 项目外目录；Write `link/evil.txt`；Glob `link`                                                                | 被拦，外部目录仍然为空                     | **hook**（按真实路径判断）                                                                                                       |
 
-在 DeepSeek 上**四类都测过**。**已补测**（2026-10-21）：允许 Bash 时（`allowBash: true`）保护清单路径的**字面量拦截**（`rm`/`mv` 被拒 + 投递确认卡），见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md` §4.4。没测的：MCP 工具（因为目前 MCP 列表为空）；Read 越界读（hook 规则有，但没有专门写负例）；**允许 Bash 时不含保护字面量的通用越界**（`../` 写、`rm -rf .stagent`）——已实测**可绕**，潜伏缺口见同报告 §4.5。
+在 DeepSeek 上**四类都测过**。**已补测**（2026-10-21）：允许 Bash 时（`allowBash: true`）保护清单路径的**字面量拦截**（`rm`/`mv` 被拒 + 投递确认卡），见 `docs/reports/W5a-真实CLI验证报告-2026-10-21.md` §4.4。**已加固**（2026-10-22）：同轮发现"不含保护字面量的通用越界"（`../` 写、`rm -rf .stagent`）实测可绕，已在 hook 增加元数据保留区与越界目标两道门禁，复测被拒；见同报告 §4.5。没测的：MCP 工具（因为目前 MCP 列表为空）；Read 越界读（hook 规则有，但没有专门写负例）。
 
 **验收结论**：四类在 DeepSeek + CLI 2.1.296 上全部失败关闭，Tina 已批准据此填写 `verified_on = "Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21"`（2026-10-21 步骤 D 复跑 4/4 全绿后回填），适配器 `control_mode` 随之为 `GATEWAY_ENFORCED`。是否拦截取决于 CLI 本身而不是模型，但模型「会不会去试」取决于模型，所以**用原装 Claude（Anthropic Key）+ 官方 CLI 重跑这组负例列为后续回归项，不阻塞**。另：每次升级 Claude Code CLI 都必须重跑 `STAGENT_REAL_CLAUDE=1` 的真实测试。
 

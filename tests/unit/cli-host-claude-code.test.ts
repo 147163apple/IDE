@@ -277,6 +277,63 @@ describe("TASK-W.5a PreToolUse hook：4 类绕过在 hook 层失败关闭（确�
         .status,
     ).toBe(0);
   });
+
+  /**
+   * G-3 加固（2026-10-21）：允许 Bash 之后，Shell 是绕过 Write/Edit 路径判定的通道。
+   * 两道门禁必须成立，且不能把日常开发命令一起打掉。
+   */
+  it("allowBash 加固：元数据路径与越界目标一律拒绝，常规开发命令零误伤", () => {
+    const bash = (command: string) =>
+      runHook(
+        { tool_name: "Bash", tool_input: { command } },
+        { STAGENT_HOOK_ALLOW_BASH: "1" },
+      );
+    // 合法开发命令：必须全部放行（否则加固会毁掉正常流程）
+    for (const cmd of [
+      "ls",
+      "git status",
+      "git log --oneline -3",
+      "npm run typecheck",
+      "npm test",
+      "npx vitest run tests/unit/a.test.ts",
+      "npx vitest run tests/**/*.test.ts",
+      "echo ok > note.txt",
+      "npm test > /dev/null",
+      "rm -rf node_modules/.cache",
+      "cat .gitignore",
+      "cat .github/workflows/ci.yml",
+    ]) {
+      expect(bash(cmd).status, `应放行：${cmd}`).toBe(0);
+    }
+    // 保留区元数据：一律拒绝
+    for (const cmd of [
+      "rm -rf .stagent",
+      "cat .stagent/protection.json",
+      "cat .env",
+      "cat .env.local",
+      "git --git-dir=.git log",
+      "rm -rf .claude",
+      "ls .cursor/rules",
+    ]) {
+      expect(bash(cmd).status, `应拒绝：${cmd}`).toBe(2);
+    }
+    // 越界：目录穿越与工作目录外的绝对路径一律拒绝
+    for (const cmd of [
+      "echo pwn > ../outside.txt",
+      "mv a.txt ../outside/a.txt",
+      "cp data /tmp/leak",
+      "cat /etc/passwd",
+      "echo x > $HOME/x",
+      "cd ..",
+    ]) {
+      expect(bash(cmd).status, `应拒绝：${cmd}`).toBe(2);
+    }
+    // 拒绝理由可区分（便于用户看懂是哪条门禁拦的）
+    const metaReason = bash("rm -rf .stagent");
+    expect(metaReason.stdout).toContain("系统保护元数据");
+    const escapeReason = bash("echo pwn > ../outside.txt");
+    expect(escapeReason.stdout).toContain("路径越界");
+  });
 });
 
 describe("TASK-W.5a cli-host 进程托管与打断 ≤2s（假 CLI）", () => {
