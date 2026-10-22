@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   GitCompare,
   Loader2,
   Play,
-  Plus,
-  Radio,
   RefreshCw,
   ShieldCheck,
   XCircle,
@@ -82,6 +79,11 @@ import {
 import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
 import {
+  SupervisorTab,
+  type SupervisorContractView,
+} from "@/components/supervisor/SupervisorTab";
+import { SettingsTab } from "@/components/settings/SettingsTab";
+import {
   shouldConfirmAdmission,
   toStudioDraft,
 } from "@/components/supervisor-view-model";
@@ -93,7 +95,10 @@ import {
   buildFileTree,
   toExecutionStatus,
 } from "@/components/workspace-adapters";
-import type { ActiveContract } from "@/components/workspace-types";
+import {
+  EXECUTION_STATUS_LABEL,
+  type ActiveContract,
+} from "@/components/workspace-types";
 import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
@@ -141,7 +146,6 @@ function Console() {
   const [diffFiles, setDiffFiles] = useState<DiffFilesView | null>(null);
   const [mergeInfo, setMergeInfo] = useState<string | null>(null);
   const [settings, setSettings] = useState<ModelSettings | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [currentBranch, setCurrentBranch] = useState("main");
   const [protection, setProtection] = useState<ProtectionStateView | null>(
     null,
@@ -157,6 +161,20 @@ function Console() {
    * AUTO_APPROVED / SKIPPED 一律置 null → 确认卡结构性不渲染（无交集 0 弹窗）。
    */
   const [admission, setAdmission] = useState<AdmissionView | null>(null);
+  /**
+   * 布局持有 Tab 状态，「打开合同操作台」这类外部跳转用递增信号驱动
+   * （与 openRequest 的 nonce 同一套路，避免把 Tab 状态提到页面上）。
+   */
+  const [studioNonce, setStudioNonce] = useState(0);
+  /**
+   * 打开「新建需求」：带上草稿范围、展开创建表单、并切到合同操作台。
+   * 必须一起做——首屏不再默认打开 Studio，只 setShowForm 会让表单渲染在看不见的标签里。
+   */
+  const openNewRequirement = useCallback((paths: string[]) => {
+    setScopeDraft(paths);
+    setShowForm(true);
+    setStudioNonce((n) => n + 1);
+  }, []);
 
   const fileTree = useMemo(
     () =>
@@ -561,6 +579,28 @@ function Console() {
       }
     : null;
 
+  /**
+   * Supervisor Tab 的视图数据：只做字段搬运，不做推断。
+   * 合同里没有的东西（健康度 / 成熟度 / 风险分 / 用例通过率）这里一律不补。
+   */
+  const supervisorContract: SupervisorContractView | null = selected
+    ? {
+        id: selected.contract_id,
+        title: selected.intent.title,
+        description: selected.intent.description || "（该合同未填写描述）",
+        state: selected.lifecycle_state,
+        approval: selected.approval.status,
+        acceptance: selected.intent.acceptance_criteria,
+        writable: selected.authorization.file_system_scope.writable_paths,
+        forbidden:
+          selected.authorization.file_system_scope.strictly_forbidden_paths,
+        commands: selected.verification_spec.commands.map((c) => ({
+          alias: c.alias,
+          argv: [c.executable, ...c.args].join(" "),
+        })),
+      }
+    : null;
+
   return (
     <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
       <WorkspaceLayout
@@ -570,12 +610,9 @@ function Console() {
         runMode={
           protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
         }
-        workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
-        daemonConnected={connected}
         contract={workspaceContract}
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
-        defaultOpenStudio
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard
@@ -585,12 +622,97 @@ function Console() {
             onDeny={onDenyAdmission}
           />
         }
-        intentPanel={
-          // 布局重构：意图对话移到左栏（右栏改为任务与证据摘要）
+        rightPanel={
+          // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
           <AgentChatPane transport={chatTransport} />
         }
+        supervisorContent={
+          // 左下角 Supervisor 图标 → 中央可关闭 Tab；数据全部来自合同/保护清单
+          <SupervisorTab
+            repoName={repoName}
+            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+            baseBranch={currentBranch}
+            contractCount={contracts.length}
+            contract={supervisorContract}
+            architecture={
+              // 架构总览：原来挤在左栏 260px 里，现在在中央宽屏铺开
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="opacity-60">
+                    {graph
+                      ? `${graph.stats.nodes} 节点 · ${graph.stats.edges} 条依赖 · ${graph.cycles.length} 处环`
+                      : "尚未加载依赖拓扑"}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="load-arch-graph"
+                    onClick={() => void loadArchGraph()}
+                    className="shrink-0 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                  >
+                    {graph ? "刷新依赖拓扑" : "加载架构图"}
+                  </button>
+                </div>
+                {graph ? (
+                  <div className="flex h-[520px] flex-col overflow-hidden rounded border border-border">
+                    <FilterToolbar
+                      query={query}
+                      onQueryChange={setQuery}
+                      showCycles={showCycles}
+                      onToggleCycles={setShowCycles}
+                      nodeCount={graph.stats.nodes}
+                      edgeCount={graph.stats.edges}
+                      selectedCount={selectedPaths.length}
+                      matches={matches}
+                    />
+                    <RadarGraph
+                      nodes={graph.graph.nodes}
+                      edges={graph.graph.edges}
+                      cycles={graph.cycles}
+                      selected={selectedPaths}
+                      onSelectionChange={setSelectedPaths}
+                      focusPath={focusPath}
+                      showCycles={showCycles}
+                      className="min-h-0 flex-1"
+                    />
+                    <ScopeSelector
+                      selected={selectedPaths}
+                      onApply={(paths) => openNewRequirement(paths)}
+                      onClear={() => setSelectedPaths([])}
+                    />
+                  </div>
+                ) : (
+                  <p className="opacity-70">
+                    连接 Daemon
+                    后可加载依赖拓扑；圈选出的文件会直接带进新建需求的范围。
+                  </p>
+                )}
+              </div>
+            }
+            protection={{
+              mode: protection?.mode ?? "VIBE",
+              entries: protection?.entries.length ?? 0,
+              checkpoint: protection?.checkpoint?.at ?? null,
+            }}
+            admission={
+              admission
+                ? {
+                    decision: admission.decision,
+                    reason: admission.reason ?? null,
+                    cardId: admission.cardId ?? null,
+                  }
+                : null
+            }
+            busy={busy === "admit" || busy === "deny-admission"}
+            onApprove={
+              admission ? () => onApproveAdmission(admission) : undefined
+            }
+            onDeny={admission ? () => onDenyAdmission(admission) : undefined}
+            onOpenConsole={() => setStudioNonce((n) => n + 1)}
+          />
+        }
+        openStudioRequest={studioNonce}
         terminalPanel={
-          // 布局重构：底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
+          // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
           <StructuredTerminal
             lines={stream.terminal
               .filter((t) => !selected || t.contractId === selected.contract_id)
@@ -624,69 +746,52 @@ function Console() {
             </div>
           ) : null
         }
-        headerExtra={
-          <>
-            {protection?.checkpoint && (
-              <button
-                type="button"
-                data-testid="undo-round"
-                disabled={protectionBusy}
-                onClick={() => void onUndoRound()}
-                className="ml-2 flex items-center gap-1 rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
-              >
-                ↶ 撤销本轮改动
-              </button>
-            )}
-            <span
-              className={`ml-2 flex items-center gap-1 text-xs ${connected ? "text-emerald-500" : "text-destructive"}`}
-            >
-              <Activity className="h-3 w-3" />
-              {connected ? "Daemon 已连接" : "未连接"}
-            </span>
-            <span
-              data-testid="stream-status"
-              className={`flex items-center gap-1 text-xs ${
-                stream.status === "connected"
-                  ? "text-emerald-500"
-                  : stream.status === "closed"
-                    ? "text-muted-foreground"
-                    : "text-amber-500"
-              }`}
-            >
-              <Radio className="h-3 w-3" />
-              {stream.status === "connected"
-                ? "实时流已通"
-                : stream.status === "connecting"
-                  ? "实时流连接中"
-                  : stream.status === "reconnecting"
-                    ? "实时流重连中"
-                    : "实时流未开"}
-            </span>
-            <button
-              onClick={() => setShowSettings((v) => !v)}
-              className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${settings?.configured ? "bg-emerald-500" : "bg-amber-500"}`}
+        onNewRequirement={() => openNewRequirement(selectedPaths)}
+        settingsContent={
+          /*
+            设置 Tab：连接地址、Session Token、实时流、网关受控、模型 Key、
+            Worktree 绝对路径、撤销本轮——原来全堆在顶栏，现在只在这里。
+          */
+          <SettingsTab
+            conn={conn}
+            onConnChange={(next) => {
+              setConn(next);
+              saveConnection(next);
+            }}
+            connected={connected}
+            daemonPort={daemonPort}
+            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+            baseBranch={currentBranch}
+            runMode={
+              protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+            }
+            protectedCount={protection?.entries.length ?? 0}
+            workerControl={
+              selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"
+            }
+            streamStatus={stream.status}
+            worktreePath={workspaceContract?.worktreePath ?? null}
+            executionStatus={
+              selected
+                ? EXECUTION_STATUS_LABEL[
+                    toExecutionStatus(selected.lifecycle_state)
+                  ]
+                : null
+            }
+            modelKeySlot={
+              <ModelKeyPanel
+                conn={conn}
+                settings={settings}
+                onSaved={(next) => setSettings(next)}
               />
-              模型 Key
-            </button>
-            <button
-              onClick={() => void refresh()}
-              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <RefreshCw className="h-3 w-3" /> 刷新
-            </button>
-            <button
-              onClick={() => {
-                setScopeDraft(selectedPaths);
-                setShowForm((v) => !v);
-              }}
-              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3 w-3" /> 新建合同
-            </button>
-          </>
+            }
+            checkpoint={protection?.checkpoint?.roundId ?? null}
+            onUndoRound={
+              protection?.checkpoint ? () => void onUndoRound() : undefined
+            }
+            undoBusy={protectionBusy}
+            onRefresh={() => void refresh()}
+          />
         }
         banner={
           <>
@@ -728,22 +833,6 @@ function Console() {
                 {undoInfo}
               </div>
             )}
-            <ConnectionBar
-              conn={conn}
-              onChange={(next) => {
-                setConn(next);
-                saveConnection(next);
-              }}
-            />
-
-            {showSettings && (
-              <ModelKeyPanel
-                conn={conn}
-                settings={settings}
-                onSaved={(next) => setSettings(next)}
-              />
-            )}
-
             {error && (
               <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
                 {error}
@@ -778,96 +867,45 @@ function Console() {
           </>
         }
         leftExtra={
-          <>
-            <div className="min-h-[180px] flex-1 overflow-auto">
-              <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
-                Contracts ({contracts.length})
-              </div>
-              {contracts.length === 0 && (
-                <div className="px-3 py-4 text-xs text-muted-foreground">
-                  暂无合同。点击「新建合同」由 Daemon 持久化。
-                </div>
-              )}
-              {contracts.map((contract) => (
-                <button
-                  key={contract.contract_id}
-                  onClick={() => {
-                    setSelectedId(contract.contract_id);
-                    setEvidence(null);
-                    setWorkerResult(null);
-                    setDiff(null);
-                    setDiffFiles(null);
-                    // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
-                    setAdmission(null);
-                  }}
-                  className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
-                    selectedId === contract.contract_id
-                      ? "bg-sidebar-accent"
-                      : ""
-                  }`}
-                >
-                  <div className="truncate text-xs">
-                    {contract.intent.title}
-                  </div>
-                  <div className="mt-1 text-[10px] text-muted-foreground">
-                    {contract.lifecycle_state} ·{" "}
-                    {contract.contract_id.slice(-8)}
-                  </div>
-                </button>
-              ))}
+          /*
+            左栏只做资源管理器：文件树（布局自带）+ 需求/合同列表。
+            架构雷达已挪到 Supervisor 的「项目全景解读 · 架构总览」——260px 的
+            窄栏根本放不下拓扑图，圈选和筛选都被挤变形。
+          */
+          <div className="min-h-[120px]">
+            <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
+              需求（合同 {contracts.length}）
             </div>
-
-            <div className="flex h-[320px] flex-col border-t border-border">
-              <div className="flex items-center justify-between px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                <span>
-                  架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void loadArchGraph()}
-                  className="rounded border border-border px-1.5 py-0.5 text-[9px] normal-case tracking-normal hover:bg-accent"
-                >
-                  {graph ? "刷新依赖拓扑" : "查看架构图"}
-                </button>
+            {contracts.length === 0 && (
+              <div className="px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
               </div>
-              {graph ? (
-                <>
-                  <FilterToolbar
-                    query={query}
-                    onQueryChange={setQuery}
-                    showCycles={showCycles}
-                    onToggleCycles={setShowCycles}
-                    nodeCount={graph.stats.nodes}
-                    edgeCount={graph.stats.edges}
-                    selectedCount={selectedPaths.length}
-                    matches={matches}
-                  />
-                  <RadarGraph
-                    nodes={graph.graph.nodes}
-                    edges={graph.graph.edges}
-                    cycles={graph.cycles}
-                    selected={selectedPaths}
-                    onSelectionChange={setSelectedPaths}
-                    focusPath={focusPath}
-                    showCycles={showCycles}
-                    className="min-h-0 flex-1"
-                  />
-                  <ScopeSelector
-                    selected={selectedPaths}
-                    onApply={(paths) => {
-                      setScopeDraft(paths);
-                      setShowForm(true);
-                    }}
-                    onClear={() => setSelectedPaths([])}
-                  />
-                </>
-              ) : (
-                <div className="px-2 py-4 text-[11px] text-muted-foreground">
-                  连接 Daemon 后加载依赖图
+            )}
+            {contracts.map((contract) => (
+              <button
+                key={contract.contract_id}
+                onClick={() => {
+                  setSelectedId(contract.contract_id);
+                  setEvidence(null);
+                  setWorkerResult(null);
+                  setDiff(null);
+                  setDiffFiles(null);
+                  // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
+                  setAdmission(null);
+                  // 首屏不再默认打开操作台，点需求才把它拉起来（否则点了没反应）
+                  setStudioNonce((n) => n + 1);
+                }}
+                className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
+                  selectedId === contract.contract_id ? "bg-sidebar-accent" : ""
+                }`}
+              >
+                <div className="truncate text-xs">{contract.intent.title}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {contract.lifecycle_state} · {contract.contract_id.slice(-8)}
                 </div>
-              )}
-            </div>
-          </>
+              </button>
+            ))}
+          </div>
         }
         studioContent={
           <div className="flex min-w-0 flex-1 flex-col">
@@ -1253,40 +1291,6 @@ function ModelKeyPanel({
         </span>
       )}
     </section>
-  );
-}
-
-function ConnectionBar({
-  conn,
-  onChange,
-}: {
-  conn: DaemonConnection;
-  onChange: (next: DaemonConnection) => void;
-}) {
-  const [draft, setDraft] = useState(conn);
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[11px]">
-      <span className="text-muted-foreground">Daemon</span>
-      <input
-        value={draft.baseUrl}
-        onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
-        className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <span className="text-muted-foreground">Session Token</span>
-      <input
-        type="password"
-        value={draft.token}
-        onChange={(e) => setDraft({ ...draft, token: e.target.value })}
-        placeholder=".stagent/session-token"
-        className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <button
-        onClick={() => onChange(draft)}
-        className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-      >
-        应用
-      </button>
-    </div>
   );
 }
 

@@ -17,6 +17,7 @@ const base = {
       children: [{ name: "a.ts", path: "src/a.ts" }],
     },
   ],
+  onNewRequirement: () => {},
 };
 const approved: ActiveContract = {
   contractId: "c-42",
@@ -34,7 +35,24 @@ describe("TASK-C.1 三栏工作台", () => {
     expect(screen.getByTestId("repo-name")).toHaveTextContent("1020");
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
     expect(screen.getByTestId("run-mode")).toHaveTextContent("VIBE");
-    expect(screen.getByTestId("open-studio")).toBeInTheDocument();
+    // 顶栏收口后右侧只留一个最小操作点
+    expect(screen.getByTestId("new-requirement")).toBeInTheDocument();
+  });
+
+  it("首屏是空编辑区：不自动打开 Studio，中央是欢迎区", () => {
+    render(<WorkspaceLayout {...base} />);
+    expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
+    expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
+  });
+
+  it("顶栏只留状态胶囊：连接/Token/实时流/受控状态不再占顶栏", () => {
+    render(<WorkspaceLayout {...base} />);
+    const header = screen.getByTestId("workspace-header");
+    expect(header).not.toHaveTextContent("GATEWAY_ENFORCED");
+    expect(header).not.toHaveTextContent("实时流");
+    expect(header).not.toHaveTextContent("Session Token");
+    expect(screen.queryByTestId("worker-control")).toBeNull();
+    expect(screen.queryByTestId("contract-info")).toBeNull();
   });
 
   it("模式指示显示 PROTECTED", () => {
@@ -45,29 +63,16 @@ describe("TASK-C.1 三栏工作台", () => {
     );
   });
 
-  it("受控徽标两种状态", () => {
-    const { rerender } = render(<WorkspaceLayout {...base} />);
-    const b = () => screen.getByTestId("worker-control");
-    expect(b()).toHaveTextContent("GATEWAY_ENFORCED");
-    expect(b().className).toMatch(/green/);
-    rerender(
-      <WorkspaceLayout {...base} workerControl="UNCONTROLLED_EXTERNAL" />,
-    );
-    expect(b()).toHaveTextContent("UNCONTROLLED_EXTERNAL");
-    expect(b().className).toMatch(/yellow/);
-  });
-
-  it("P.1 顺手修：断开后台时受控徽章变暗，不再假装受控", () => {
-    render(<WorkspaceLayout {...base} daemonConnected={false} />);
-    const b = screen.getByTestId("worker-control");
-    expect(b).toHaveTextContent("未连上后台");
-    expect(b).toHaveAttribute("data-control", "OFFLINE");
-    expect(b.className).toMatch(/opacity-60/);
-  });
-
-  it("Supervisor 入口打开系统 Studio 标签", () => {
+  it("受控徽标与断线语义已迁到设置页（布局不再渲染）", () => {
+    // 原「受控徽标两种状态」「断开后台时徽章变暗」两例随组件一起搬到
+    // settings-tab.test.tsx —— 顶栏收口后这里不再有 worker-control。
     render(<WorkspaceLayout {...base} />);
-    fireEvent.click(screen.getByTestId("open-studio"));
+    expect(screen.queryByTestId("worker-control")).toBeNull();
+  });
+
+  it("Supervisor 入口（模式徽标）打开系统 Studio 标签", () => {
+    render(<WorkspaceLayout {...base} />);
+    fireEvent.click(screen.getByTestId("run-mode"));
     const tab = screen.getByRole("tab", { name: "Supervisor Studio" });
     expect(tab).toHaveAttribute("data-system", "true");
     expect(tab).toHaveAttribute("aria-selected", "true");
@@ -89,9 +94,7 @@ describe("TASK-C.1 三栏工作台", () => {
     render(<WorkspaceLayout {...base} contract={approved} />);
     // P.1 顺手修：顶栏显示主工作区真实分支，不再按合同拼 task/xxx
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
-    expect(screen.getByTestId("contract-info")).toHaveTextContent(
-      approved.worktreePath,
-    );
+    // Worktree 绝对路径不再占顶栏（已移入设置页），绑定关系由下面两处体现
     expect(screen.getByTestId("workspace-binding")).toHaveAttribute(
       "data-bound",
       "worktree",
