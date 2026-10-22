@@ -11,7 +11,7 @@
 > 8. **(P2) 版本标注**：任务总表列头改为 v1.3.3；文件名待统一更名为 `*_v1.3.3.md`。
 
 > **文档定位与最高基准**：本规范以《Stagent 系统架构设计规范 (v1.3.3 Vibe 模式、全局保护清单与成熟 Agent 接入校准版)》为唯一法典事实源。
-> **代码基线事实**：以本地仓库当前测试基线为物理起点（测试文件与用例数量**以最新一次 CI 实际运行结果为准并附提交哈希**，本规范不再写死数字；既有底座包含 Git Worktree 物理隔离、Scoped MCP 网关、白名单受限执行、跨平台进程树全回收、Test Integrity Guard、TOCTOU 快照校验与自愈底座，以及 TASK-0.2b Schema v1.2.0 与 TASK-D.1 安全通信桥）。
+> **代码基线事实**：以本地仓库当前测试基线为物理起点（**基线已下沉为可核验数字**：`main`@`9da451c` / `npx vitest run` 785 通过 · 6 跳过，详见 §1.1 表头；此前「以最新一次 CI 结果为准、不写死数字」的口径自 2026-10-22 起作废；既有底座包含 Git Worktree 物理隔离、Scoped MCP 网关、白名单受限执行、跨平台进程树全回收、Test Integrity Guard、TOCTOU 快照校验与自愈底座，以及 TASK-0.2b Schema v1.2.0 与 TASK-D.1 安全通信桥）。
 > **核心修订成果 (v1.3.3，依据《三份规范文档综合审查与修订指令》2026-10-20)**：
 > 1. **双轨 Worker 演进路线**：保留自研 API Worker（`ai-worker.ts`）作为保底基线与测试替身；新增 **TASK-W.5 成熟 Agent 适配器**（W.5a Claude Code / W.5b cursor-agent / W.5c OpenHands），统一经 `daemon/worker/cli-host/` 专用子进程隔离模块挂载（全仓唯一允许 spawn 的位置，强制 `shell:false` + 进程树托管）；Claude Code 优先保留原生工具 + 官方 Pre-tool hook 配合网关拦截。所有成熟 Agent 能力声明统一「待实机验证（verified_on: 空）」，实测通过后方标受控。
 > 2. **Vibe 模式安全网**：新增 **TASK-P.1 全局保护清单与 Vibe 安全网**（`.stagent/protection.json`、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁）。
@@ -40,6 +40,7 @@
 > 2. **Trailer 由 4 条扩至 7 条（含任务卡要求的 4 项）**：新增 `Stagent-Evidence-Hash`（证据文件字节 SHA-256，可用 `shasum -a 256` 独立复算）与 `Stagent-Approval-Status`；§5.2 既有命名（`Stagent-Contract-ID` / `Reviewed-By`）保持不动，任务卡的 `Contract-Id` / `Audited-By` 写法差异在报告 §3.1 明示。
 > 3. **本轮新发现缺陷 7 项（N-1~N-7）**：N-3（陈旧 `dist/`）、N-4（无 `version` 字段、`bin/`+`scripts/` 不过 `tsc`）、N-6（会话 HTTP 用例端口重叠 + 固定 `sleep` 假失败）、N-7（`postbuild` 清理被批量删除保护拦下，改为移入系统临时目录）已修；N-1（`scope_audit.files_changed` 为空）、N-2（`diff_stat` 空 / `patch_fingerprint` 恒为 `sha256("")`）未修并如实标注；N-5 为文档口径差异。明细见报告 §4.3。
 > 4. **不可声称项（发布口径）**：无 `OPENAI_API_KEY`，`modelClient` 为确定性实现，「真实模型生成 → 合并」未验证，Token/费用为 0（`usage.accounting_mode=UNAVAILABLE`）；跨平台、多任务并发、第三方项目试用均未验证。报告 §4~§5 为准。
+> 5. **状态同步 + 基线下沉（同日封版前）**：`TASK-S.2` 总表 `[REWORK]` → **[COMPLETED]**（v0.1 精简版，取卡片口径，旧设计实现仍标注为非 v0.1 验收依据）；`TASK-C.2` 总表 `[NEW_TASK]` → **[PARTIAL]**（精简版 UI 已交付、`supervisor-studio-approval` 16 例绿，残余 3 项以卡片为准）。§1.1 表头原「以最新一次 CI 实际运行结果为准」改为可核验的实测基线：`main`@`9da451c` / 785 通过 · 6 跳过 / typecheck 0 error / `dist/` 33 文件 3.15 MB。**本次不改任务定义、验收判据、依赖边与排期**。
 
 > **v1.3.2 历史修订成果（存档）**：
 > 1. **彻底闭环错误码与预算契约 (闭环 P1-N1 / P1-N2)**：对齐法典 A §6.4(3) 超时分列错误码（`E_COMMAND_TIMEOUT` / `E_TASK_TIMEOUT`）；对齐法典 A §9.1 `budget_limits` 增补的 `max_command_executions?` 与 `max_tool_calls?` 可选预算字段，使 TASK-W.3 与 0.2b 命令/工具调用计数熔断断言完全合法自洽。
@@ -54,7 +55,8 @@
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.3.3：18 项底座 + 5 项新增)
 
-> **测试数量口径（v1.3.3 统一）**：各任务卡「完成记录」中的文件/用例数为其交付当日的历史快照，仅供溯源；**当前有效基线一律以最新一次 CI 实际运行结果为准并附提交哈希**。
+> **测试数量口径（v1.3.3 统一）**：各任务卡「完成记录」中的文件/用例数为其交付当日的历史快照，仅供溯源，**不再作为当前基线**。
+> **当前有效基线（2026-10-22 核定，随 v0.1.0 封版）**：`main`@`9da451c`（v0.1.0 发版提交，测试与构建均在此提交实测；其后仅文档提交，基线不变）—— `npx vitest run` **86 文件通过 / 1 跳过，785 用例通过 / 6 跳过 / 0 失败**；`npm run typecheck` 0 error；`npm run build` 0 error（`dist/` 33 文件 / 3.15 MB，`BUILD-INFO.json` 记 `git.commit=9da451c`、`dirty=false`）；`npx eslint .` 0 error / 6 warning（均为既有 `react-refresh` 告警）。后续增量运行时以新结果整行替换本基线，并同时更新提交哈希。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.3.3) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -68,7 +70,7 @@
 | **TASK-A.5** | 循环重试熔断与费用/Token 硬上限监控 | 执行内核 | **[COMPLETED]** | P2 熔断守护 | 验证重试熔断 (`max_verification_retries: 3`)、超时与费用预检就绪。 |
 | **TASK-A.6** | Daemon 崩溃自愈、Git 锁清理与 TOCTOU 校验 | 执行内核 | **[COMPLETED]** | P1 崩溃自愈 | 孤儿锁安全回收、`resume()` 扫描自愈、快照指纹校验就绪。 |
 | **TASK-S.1** | Supervisor 建议会话与持久化存储管理 | 建议中枢 | **[PARTIAL]**（旧版 S.1 已在 main，提交 `1a75616`；2026-10-21 核验：独立预算分账已落地（`supervisor/budget.ts`，6 例绿），规则优先 L0/L1 与 3s 防抖节流器**仍待完成**） | P4 智能建议 | • Local-First 会话落盘 (`.stagent/sessions/`)、Prompt Pipeline<br>• 依赖层静态 AST 扫描禁令 + **运行时越权调用拦截正例断言 (G-11b)**<br>• **[待完成·v1.3.3]** 独立日预算分账 `.stagent/supervisor-budget.json` (超限拒绝模型调用且不侵占 Worker)<br>• **[待完成·v1.3.3]** 规则优先 L0/L1；唤醒节流器 3s Debounce **默认关闭**（旧版节流器默认开启，专用用例 18 个为历史记录） |
-| **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[REWORK]**（旧设计实现存于未合并分支 `wip/s2-s3-supervisor-old-design`，**非 v0.1 验收依据**） | P4 合同草案 | • **v0.1**：用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• **断言未决问题 100% 保留至草案元数据供用户确认 (G-11)**<br>• 移植保留脱敏模块 `src/lib/ipc/redaction.ts`<br>• **v0.2+**：成熟度评分（原 4 维评估器）推迟 `[D4]` |
+| **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[COMPLETED]**（v0.1 精简版，2026-10-22；与卡片一致——此前表内 `[REWORK]` 系旧设计口径未同步。落地：`daemon/supervisor/rules-l0.ts`（282 行，L0 规则 + 默认命令/预算/禁区）、`daemon/supervisor/draft-generator.ts`（303 行，L1 按需）、`tests/unit/supervisor-contract-generator.test.ts` **17 例**绿；成熟度评分器/徽章/气泡按 v1.3.3 明令未引入。旧设计 4 维评估器与草案编译器仍存于未合并分支 `wip/s2-s3-supervisor-old-design`，**非 v0.1 验收依据**） | P4 合同草案 | • **v0.1**：用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• **断言未决问题 100% 保留至草案元数据供用户确认 (G-11)**<br>• 移植保留脱敏模块 `src/lib/ipc/redaction.ts`<br>• **v0.2+**：成熟度评分（原 4 维评估器）推迟 `[D4]` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** / **[REWORK]**（旧设计实现存于未合并分支 `wip/s2-s3-supervisor-old-design`，**非 v0.1 验收依据**） | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播（`MATURITY_UPDATED` / `DRAFT_PROPOSED` / `STATUS_CHANGED`）、ACCEPT/SNOOZE/DISMISS 上行 action<br>• **v0.1 保留范围**：仅脱敏模块 `redaction.ts`（并入 S.2 精简版移植）；鉴权连接过滤原则不变 |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已将适配器层从 wip 分支挑拣合入 main，`worker-adapter.interface.ts` / `adapter-registry.ts` / `session-task-injector.ts` 均在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• **`AdapterCapabilityDeclaration` 补齐第 9 项 `known_limitations` (G-10)**<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`，默认拒绝未知能力<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已将网关扩展合入 main，`daemon/worker/worker-toolset.ts` 与 5 工具注入在位） | P2 工具管辖 | • 统一为 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• **`stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`**<br>• **强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)**<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
@@ -77,7 +79,7 @@
 | **TASK-B.1** | 本地 AST 增量依赖图分析引擎 | 架构感知 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | A §3 架构引擎 | • **统一路径前缀：`src/**/*.{ts,tsx,js,jsx,mjs,cjs,json}` (G-16)**<br>• 冷启动 ≤1.5s，单文件增量修补 ≤20ms |
 | **TASK-B.2** | 多活跃 Worktree 监听与 Evidence 状态联动 | 架构感知 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P4 状态失效 | • 扩展多活跃 Worktree 监听，排除 `.git`/`.stagent`/`dist` 等<br>• 外部变更在 watcher debounce 窗口内（性能目标 ≤50ms）触发 Evidence `STALE` 并广播 `EVIDENCE_STATUS_CHANGED`；合并前指纹复核兜底 |
 | **TASK-C.1** | Cursor 式三栏 IDE 响应式工作台骨架与 Studio 视口 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`e48f614` 已在 main；`WorkspaceLayout` / `WorkspaceHeader` / `SplitPaneContainer`；`tests/ui/workspace-layout.test.tsx` 8 用例绿） | P3 工作台闭环 | • 左侧文件树/Git 状态、中栏多标签、右栏双 Agent 对话<br>• **Header 补齐：模式（探索/合同执行）、Worker 受控徽标、当前任务分支 (G-06)**<br>• **审批后默认绑定合同 Worktree，主树编辑显式切换提示 (G-18)** |
-| **TASK-C.2** | 中栏 Supervisor Studio 标签页与合同审阅面板（v0.1 精简版） | 前端呈现 | **[NEW_TASK]** | P4 审批界面 | • v0.1：Studio Tab 合同审阅（Scope、预算、验证命令、未决问题）、保护清单命中时白话是/否确认卡、模式指示<br>• 无交集合同由 Daemon 自动批准，前端不弹窗<br>• v0.2+：HUD 成熟度徽章、风险气泡、Snooze |
+| **TASK-C.2** | 中栏 Supervisor Studio 标签页与合同审阅面板（v0.1 精简版） | 前端呈现 | **[PARTIAL]**（2026-10-22 与卡片对齐——此前表内 `[NEW_TASK]` 已过期。v0.1 精简版 UI 实已落地：`src/components/SupervisorStudioPane.tsx`（324 行，白话理由 / 未决问题勾选单 / 可写 Scope·只读路径·禁区·验证命令·Token 预算 / 执行态 + 紧急暂停）+ 提交 `16ecc64`，`tests/ui/supervisor-studio-approval.test.tsx` **16 例**绿。**残余 3 项见卡片**：①执行期实时监控未并入 Studio（复用既有 `BudgetVisualizer`/`DiffViewer`/终端面板）；②Studio 内只读审阅，改 Scope 仍走「新建合同」（即报告 §4.2 的 R-1）；③`ContractEditorForm.tsx` 未创建） | P4 审批界面 | • v0.1：Studio Tab 合同审阅（Scope、预算、验证命令、未决问题）、保护清单命中时白话是/否确认卡、模式指示<br>• 无交集合同由 Daemon 自动批准，前端不弹窗<br>• v0.2+：HUD 成熟度徽章、风险气泡、Snooze |
 | **TASK-C.3** | Monaco 核心编辑器集成与受控 Worktree 读写 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`88aec68` 已在 main；`MonacoEditorPane` + `useWorktreeFile`；越权保存 403 + `GATEWAY_VIOLATION`；`monaco-editor-pane` 4 用例绿） | P3 代码编辑 | • Monaco Editor 嵌入，可写/只读视觉区分，**编辑器内 Evidence STALE 指示 (G-18)**<br>• 服务端保存校验：`POST /api/worktree/files` 越权写入由 Daemon 403 拒绝 |
 | **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** `[用户已确认 D4 · 2026-10-20]` | P3 架构雷达 | • 1000 节点拓扑渲染 (≤16ms patch, ≤30MB 内存)<br>• 交互式 Scope 圈选，已批准合同圈选禁止原地扩权 |
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（2026-10-21 核验：`components/diff/*` + `StructuredTerminal.tsx`；`GET /api/contracts/:id/diff-files` 逐文件真实内容；先脱敏后截断；5 用例绿） | P3 差异终端 | • 双栏/内联 Git Diff 审阅<br>• 结构化终端流式日志展示、ANSI 渲染、先脱敏后截断 |
@@ -175,7 +177,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-D.1 ──► TASK-C.1 (三栏骨架
 #### 【Task 0.2b】Schema v1.2.0 增量演进、双状态机联动与存量迁移
 * **任务编号**：`TASK-0.2b`
 * **前置依赖**：`TASK-0.1` (COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-20 交付，提交 `52c807c` 锁定基线；v1.3.1/v1.3.2 增补第 4 条 PREPARING 回退断言与 G-09 分列记账规范映射——G-15 错误码映射测试为 v1.3.0 已交付内容，非本次新增。**v1.3.3 口径更正**：该卡交付当日的用例数为历史快照，当前有效基线以最新一次 CI 实际运行结果 + 提交哈希为准；增量断言验证记录随下一次回归运行一并存档，不再单列"待补录"状态）
+* **任务状态**：**[COMPLETED]**（2026-10-20 交付，提交 `52c807c` 锁定基线；v1.3.1/v1.3.2 增补第 4 条 PREPARING 回退断言与 G-09 分列记账规范映射——G-15 错误码映射测试为 v1.3.0 已交付内容，非本次新增。**v1.3.3 口径更正**：该卡交付当日的用例数为历史快照，当前有效基线以 §1.1 表头登记值为准（`main`@`9da451c` / 785 通过 · 6 跳过）；增量断言验证记录随下一次回归运行一并存档，不再单列"待补录"状态）
 * **v1.3.3 配套修订**：`budget_limits` 的 `max_command_executions` / `max_tool_calls` 与 `E_CONFLICT → WRITE_CONFLICT` 原因码调整需随架构规范 v1.3.3 同步（本轮仅改文档，代码变更另行排期）。
 * **核心目标**：
   1. 升级 `SoftwareContractV12` 与 `EvidenceBundleV11` 完整定义，逐字段 100% 对齐 A §9.1/§9.2（含 `budget_limits` 可选 `max_command_executions` 与 `max_tool_calls`）。
