@@ -585,7 +585,18 @@ function Console() {
             onDeny={onDenyAdmission}
           />
         }
-        rightPanel={<AgentChatPane transport={chatTransport} />}
+        intentPanel={
+          // 布局重构：意图对话移到左栏（右栏改为任务与证据摘要）
+          <AgentChatPane transport={chatTransport} />
+        }
+        terminalPanel={
+          // 布局重构：底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
+          <StructuredTerminal
+            lines={stream.terminal
+              .filter((t) => !selected || t.contractId === selected.contract_id)
+              .map((t) => ({ stream: t.stream, line: t.line, at: t.at }))}
+          />
+        }
         openRequest={openRequest}
         renderFile={(filePath, bound) => {
           const contractId = bound
