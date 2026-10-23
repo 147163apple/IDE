@@ -11,13 +11,17 @@ import type {
 } from "./supervisor-view-model";
 
 /**
- * TASK-C.2 中栏「Supervisor Studio」审阅面板（v0.1 精简版）。
+ * TASK-C.2 中栏「Supervisor Studio」——视口 4：合同与 Diff 审阅。
+ *
+ * 四视口切换与状态自适应由 `studio/StudioViewportShell` 承担；本组件只负责合同
+ * 结构化审阅，作为外壳的 `contract` 插槽挂载（切换走 hidden，勾选状态不丢）。
  *
  * 设计基线（v1.3.3 §3.5 / D2·D4 减负决议）：
  * - 以**中栏 Tab** 呈现，不再是遮挡代码的阻断式 Modal——用户始终能一边看代码一边审阅；
  * - 呈现 S.2 产出的白话理由（`rationale`）与未决问题（`unresolved_questions`）勾选单；
  * - 结构化合同审阅：可写 Scope / 只读路径 / 禁区 / 验证命令 / Token 预算；
- * - 执行期显示实时状态与**紧急暂停**按钮。
+ * - 执行期显示实时状态与**紧急暂停**按钮；
+ * - Header 模式指示（自由/保护）与保护清单逐条解锁维持零弹窗/单卡标准。
  *
  * 视图类型与"合同 → 视图"适配器在 `supervisor-view-model.ts`（纯函数、可单测）。
  *

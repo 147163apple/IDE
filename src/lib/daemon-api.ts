@@ -794,6 +794,116 @@ export interface SupervisorDraftResponse {
  * `enrich` 只在 Daemon 侧配置了 L1 补全器时可用，否则端点返回 409
  * `ENRICH_NOT_CONFIGURED`——前端默认不传，走纯 L0。
  */
+
+// ---------------------------------------------------------------------------
+// TASK-C.2 / D.3：展示态快照 + 质疑自查
+// ---------------------------------------------------------------------------
+
+export interface PresentationStateRecordView {
+  contract_id: string;
+  presentation_state: string;
+  lifecycle_state: string;
+  approval_status: string;
+  message: string;
+  updated_at: string;
+}
+
+export interface PresentationStateSnapshotView {
+  version: number;
+  updated_at: string | null;
+  contracts: Record<string, PresentationStateRecordView>;
+}
+
+/** 断线重连 / 首屏：读 `.stagent/state.json` 投影快照（GET /api/state） */
+export async function fetchPresentationSnapshot(
+  conn: DaemonConnection,
+): Promise<PresentationStateSnapshotView> {
+  return request<PresentationStateSnapshotView>(conn, "/api/state");
+}
+
+export type DisputeClassificationView =
+  "IMPLEMENTATION_BUG" | "REQUIREMENT_DRIFT" | "UNATTRIBUTED";
+
+/** POST /api/supervisor/dispute 响应里的报告（字段与 daemon 对齐，前端只读展示） */
+export interface DisputeReportApiView {
+  report_id: string;
+  contract_id: string;
+  change_request_id: string;
+  challenge: string;
+  classification: DisputeClassificationView;
+  suggested_classification?: DisputeClassificationView | undefined;
+  confidence: number;
+  degraded: boolean;
+  reason_code?: string | undefined;
+  rationale: string[];
+  plain_summary: string;
+  facts: {
+    challenge: string;
+    keywords: string[];
+    prompt: {
+      session_id: string | null;
+      source: string;
+      original_request: string | null;
+      confirmations: unknown[];
+      matched_messages: unknown[];
+    };
+    spec: {
+      snapshot_id: string;
+      version: number;
+      sha256: string;
+      content: string;
+      matched_entries: string[];
+    } | null;
+    code: {
+      worktree_path: string;
+      available: boolean;
+      changed_files: string[];
+      diff_stat: string;
+      diff_excerpt: string;
+      commit_sha: string | null;
+      terminal_lines: string[];
+      verification_results: Array<{
+        alias: string;
+        exit_code: number;
+        passed: boolean;
+      }>;
+      evidence_id: string | null;
+      tests_modified: boolean;
+    };
+  };
+  next_action: {
+    kind: "REWORK" | "REQUIREMENT_CHANGE" | "MANUAL_ARBITRATION";
+    message?: string | undefined;
+  };
+  generated_at: string;
+}
+
+export interface DisputeSelfCheckResponse {
+  report: DisputeReportApiView;
+  degraded?: boolean | undefined;
+  code?: string | undefined;
+}
+
+export async function submitDisputeSelfCheck(
+  conn: DaemonConnection,
+  input: {
+    contract_id: string;
+    challenge: string;
+    session_id?: string | undefined;
+  },
+): Promise<DisputeSelfCheckResponse> {
+  return request<DisputeSelfCheckResponse>(conn, "/api/supervisor/dispute", {
+    method: "POST",
+    body: JSON.stringify({
+      contract_id: input.contract_id,
+      challenge: input.challenge,
+      ...(input.session_id === undefined
+        ? {}
+        : { session_id: input.session_id }),
+    }),
+  });
+}
+
 export async function generateSupervisorDraft(
   conn: DaemonConnection,
   input: {

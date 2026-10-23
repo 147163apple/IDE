@@ -80,6 +80,11 @@ vi.mock("@/lib/daemon-api", async (orig) => {
     fetchProtectionRecommendations: vi.fn(async () => []),
     // 初始没有任何已落盘合同：界面上的东西必须全部来自这份草案
     listContracts: vi.fn(async () => []),
+    fetchPresentationSnapshot: vi.fn(async () => ({
+      version: 1,
+      updated_at: null,
+      contracts: {},
+    })),
     fetchArchGraph: vi.fn(async () => {
       throw new Error("no graph in test");
     }),
