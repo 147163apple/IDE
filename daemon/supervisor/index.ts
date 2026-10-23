@@ -15,3 +15,4 @@ export * from "./budget";
 export * from "./throttler";
 export * from "./rules-l0";
 export * from "./draft-generator";
+export * from "./enrich-openai";

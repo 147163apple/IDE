@@ -791,8 +791,9 @@ export interface SupervisorDraftResponse {
 
 /**
  * 生成一份未落盘的合同草案。
- * `enrich` 只在 Daemon 侧配置了 L1 补全器时可用，否则端点返回 409
- * `ENRICH_NOT_CONFIGURED`——前端默认不传，走纯 L0。
+ * `enrich: true` 时 Daemon 必须已注入 L1 补全器，否则 409 `ENRICH_NOT_CONFIGURED`。
+ * 省略 `enrich` 时：有注入则走 L1，无则纯 L0。前端「出草案」显式传 true，
+ * 并在 409 时回退 L0。
  */
 
 // ---------------------------------------------------------------------------
