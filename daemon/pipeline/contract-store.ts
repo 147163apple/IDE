@@ -12,6 +12,23 @@ import {
   writeJsonAtomic,
   type ContractStatePair,
 } from "../../src/lib/state-machine";
+import {
+  migrateContractToV13,
+  needsV13Migration,
+  type MigrationResultV13,
+} from "../../src/lib/migration";
+
+/**
+ * 一次合同加载的结果。
+ *
+ * `migration` 非空表示磁盘上是 v1.2.0 存量合同，本次读取时**在内存中**
+ * 迁移到了 v1.3.0（TASK-D.2b）。迁移结果不外写：读取不应产生副作用，
+ * 落盘只发生在显式状态迁移时。
+ */
+export interface ContractLoadResult {
+  contract: SoftwareContract;
+  migration: MigrationResultV13 | null;
+}
 
 /**
  * 合同权威存储（Daemon 侧，规范 §1：Daemon 是合同状态唯一权威）。
@@ -48,14 +65,46 @@ export class ContractStore {
     return validated;
   }
 
-  get(contractId: string): SoftwareContract | null {
+  /**
+   * 读取合同并**按需内存迁移**（TASK-D.2b）。
+   *
+   * 为什么加载期必须迁移：`softwareContractSchema` 只认 v1.3.0，v1.2.0 存量
+   * 合同直接 parse 会失败——旧写法把它当成「合同不存在」返回 null，等于让
+   * 一段历史授权在系统里凭空消失。迁移在这里只做两件事：补齐 `authorization.git`
+   * 与按生命周期回填审批事实；**零静默授权**由 `migrateContractToV13` 的后置
+   * 断言保证（DRAFT / PENDING_APPROVAL 绝不变成 APPROVED）。
+   *
+   * 不写盘：读取必须无副作用；需要固化时由调用方显式 `save()`。
+   */
+  getWithMigration(contractId: string): ContractLoadResult | null {
     const file = this.filePath(contractId);
     if (!fs.existsSync(file)) return null;
+
+    let raw: unknown;
     try {
-      return softwareContractSchema.parse(
-        JSON.parse(fs.readFileSync(file, "utf-8")),
-      );
+      raw = JSON.parse(fs.readFileSync(file, "utf-8"));
     } catch {
+      return null;
+    }
+
+    if (needsV13Migration(raw)) {
+      const migration = migrateContractToV13(raw);
+      return { contract: migration.contract, migration };
+    }
+
+    try {
+      return { contract: softwareContractSchema.parse(raw), migration: null };
+    } catch {
+      return null;
+    }
+  }
+
+  get(contractId: string): SoftwareContract | null {
+    try {
+      return this.getWithMigration(contractId)?.contract ?? null;
+    } catch {
+      // 保持既有契约：任何不可读/不可解析的合同一律按「不存在」处理。
+      // 需要区分「迁移失败」与「文件损坏」的调用方走 `getWithMigration`。
       return null;
     }
   }

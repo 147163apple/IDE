@@ -19,9 +19,19 @@ import {
   MAX_FRAME_BYTES,
   WS_CLOSE_UNAUTHORIZED,
   type AuthPayload,
+  type DemoPreviewStatusPayload,
   type IpcFrame,
   type IpcFrameType,
 } from "../src/lib/ipc/frames";
+import {
+  DEMO_ORIGIN_FORBIDDEN,
+  isDemoPreviewOrigin,
+} from "../src/lib/ipc/demo-origin";
+import {
+  createDemoPreviewServer,
+  type DemoPreviewServer,
+  type DemoPreviewServerOptions,
+} from "./supervisor/demo/preview-server";
 import {
   createSessionToken,
   clearSessionToken,
@@ -43,6 +53,21 @@ import { TaskGraphEngine } from "./graph/graph-engine";
 import { collectWorktreeEvidence } from "./graph/evidence-collector";
 import type { IlluminationInput } from "./graph/illumination-verifier";
 import type { SupervisorProposalV1 } from "../src/lib/graph/task-graph";
+import { RequirementsStore } from "./supervisor/specs/requirements-store";
+import {
+  buildTimeoutFallbackReport,
+  runDisputeSelfCheck,
+} from "./supervisor/dispute";
+import {
+  DisputeTimeoutError,
+  DISPUTE_TIMEOUT_MS,
+  E_DISPUTE_TIMEOUT,
+  type DisputeReport,
+} from "./supervisor/dispute/types";
+import {
+  extractKeywords,
+  SpecFactSourceImpl,
+} from "./supervisor/dispute/evidence-triad";
 import {
   loadEvidenceSnapshot,
   loadLatestEvidenceSnapshot,
@@ -171,6 +196,8 @@ export class StagentDaemon {
   private readonly orchestrator: ContractOrchestrator;
   /** TASK-C.7：Task Graph 权威引擎（Daemon 独占，唯一写手） */
   private readonly graphEngine: TaskGraphEngine;
+  /** TASK-S.5：需求规范快照（懒加载，避免无关启动路径创建 specs 目录） */
+  private requirementsStoreInstance: RequirementsStore | null = null;
   readonly chat: ChatSessionManager;
   private readonly supervisorEnrich:
     | ((prompt: string) => Promise<DraftEnrichment> | DraftEnrichment)
@@ -452,6 +479,36 @@ export class StagentDaemon {
     });
   }
 
+  /**
+   * Demo 预览生命周期广播（TASK-S.4 / §6.1）。
+   * 预览服务只负责报告事件，由这里决定广播给已鉴权客户端。
+   */
+  emitDemoPreviewStatus(payload: DemoPreviewStatusPayload): number {
+    return this.broadcast("DEMO_PREVIEW_STATUS", payload);
+  }
+
+  /**
+   * 创建与 Daemon 广播绑定的 Demo 预览服务。
+   *
+   * 生命周期事件自动转成 `DEMO_PREVIEW_STATUS` 帧，前端不必轮询端口；
+   * 调用方仍可挂自己的回调（例如写日志），不会被覆盖。
+   */
+  createDemoPreview(
+    rootDir: string,
+    options: Omit<DemoPreviewServerOptions, "rootDir" | "onStatusChange"> & {
+      onStatusChange?: (payload: DemoPreviewStatusPayload) => void;
+    } = {},
+  ): DemoPreviewServer {
+    return createDemoPreviewServer({
+      ...options,
+      rootDir,
+      onStatusChange: (payload) => {
+        this.emitDemoPreviewStatus(payload);
+        options.onStatusChange?.(payload);
+      },
+    });
+  }
+
   /** Evidence 生成广播：携带结论，供控制台决定是否点亮「核销」 */
   emitEvidenceReady(contractId: string, evidence: EvidenceBundle): number {
     return this.broadcast("EVIDENCE_READY", {
@@ -487,6 +544,11 @@ export class StagentDaemon {
 
     // Origin 校验仍在 Upgrade 阶段硬阻断（防跨站 WS 劫持）
     const origin = req.headers.origin;
+    // Demo 预览来源额外拦截：sandbox iframe 的 "null" 源与 4100~4110 端口
+    if (isDemoPreviewOrigin(origin)) {
+      this.rejectUpgrade(socket, 403, "Forbidden");
+      return;
+    }
     if (!isLocalOrigin(origin)) {
       this.rejectUpgrade(socket, 403, "Forbidden");
       return;
@@ -1512,8 +1574,179 @@ export class StagentDaemon {
 
       this.sendJson(res, 404, { error: "Not found" });
     } catch (err) {
+
       this.sendActionError(res, err);
     }
+  }
+
+
+  /**
+   * `POST /api/supervisor/dispute` —— 质疑自查（TASK-S.5 / 架构 §5.7）。
+   *
+   * 只读合同与会话、只读 Worktree；产出返工提案或新合同草案（均为未落盘对象），
+   * 不执行任何写操作。60s 看门狗超时时不挂死调用方，按 D-3 降级呈递事实。
+   */
+  private async handleSupervisorDispute(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+  ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      let body: {
+        contract_id?: unknown;
+        challenge?: unknown;
+        session_id?: unknown;
+      };
+      try {
+        body = (await this.readJsonBody(req)) as typeof body;
+      } catch (err) {
+        this.sendJson(res, 400, {
+          error: "invalid_json",
+          message: (err as Error).message,
+        });
+        return;
+      }
+
+      const contractId =
+        typeof body.contract_id === "string" ? body.contract_id.trim() : "";
+      const challenge =
+        typeof body.challenge === "string" ? body.challenge.trim() : "";
+      if (contractId === "") {
+        this.sendJson(res, 400, {
+          error: "contract_id_required",
+          message: "contract_id 不能为空",
+        });
+        return;
+      }
+      if (challenge.length < 4 || challenge.length > 2000) {
+        this.sendJson(res, 400, {
+          error: "challenge_invalid",
+          message: `challenge 长度必须在 4–2000 字符之间（当前 ${challenge.length}）`,
+        });
+        return;
+      }
+
+      const sessionId =
+        typeof body.session_id === "string" ? body.session_id : undefined;
+      if (
+        sessionId !== undefined &&
+        !/^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/.test(sessionId)
+      ) {
+        this.sendJson(res, 400, {
+          error: "invalid_session_id",
+          message: "session_id 含非法字符或长度不合规",
+        });
+        return;
+      }
+
+      const loaded = this.orchestrator.getStore().getWithMigration(contractId);
+      if (!loaded) {
+        this.sendJson(res, 404, {
+          error: "contract_not_found",
+          message: `合同不存在或不可解析: ${contractId}`,
+        });
+        return;
+      }
+      const contract = loaded.contract;
+
+      // 第 0 步：确保需求基准已冻结（不存在则从 contract.intent 初始化）
+      this.requirementsStore.ensureBaseline(contract);
+
+      try {
+        const report = await runDisputeSelfCheck({
+          contract,
+          challenge,
+          repoRoot: this.repoRoot,
+          ...(sessionId === undefined ? {} : { sessionId }),
+        });
+        this.broadcastDisputeReport(report);
+        this.sendJson(res, 200, { report });
+      } catch (err) {
+        if (err instanceof DisputeTimeoutError) {
+          // D-3：超时不空转，降级呈递已抓到的规范事实
+          const spec = new SpecFactSourceImpl(this.repoRoot).collect({
+            contract,
+            keywords: extractKeywords(challenge),
+          });
+          const report = buildTimeoutFallbackReport({
+            contract,
+            challenge,
+            timeoutMs: DISPUTE_TIMEOUT_MS,
+            spec,
+          });
+          this.broadcastDisputeReport(report);
+          this.sendJson(res, 200, {
+            report,
+            degraded: true,
+            code: E_DISPUTE_TIMEOUT,
+          });
+          return;
+        }
+        throw err;
+      }
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (typeof code === "string" && code.startsWith("E_SPEC_SNAPSHOT_")) {
+        this.sendJson(res, 409, {
+          error: (err as Error).message,
+          code,
+        });
+        return;
+      }
+
+      this.sendActionError(res, err);
+    }
+  }
+
+  private broadcastDisputeReport(report: DisputeReport): number {
+    return this.broadcast("DISPUTE_REPORT_READY", {
+      contract_id: report.contract_id,
+      report_id: report.report_id,
+      change_request_id: report.change_request_id,
+      classification: report.classification,
+      confidence: report.confidence,
+      degraded: report.degraded,
+      summary: report.plain_summary,
+      facts: {
+        prompt: {
+          session_id: report.facts.prompt.session_id,
+          original_request: report.facts.prompt.original_request,
+          matched_messages: report.facts.prompt.matched_messages.length,
+          confirmations: report.facts.prompt.confirmations.length,
+        },
+        spec: report.facts.spec
+          ? {
+              snapshot_id: report.facts.spec.snapshot_id,
+              version: report.facts.spec.version,
+              matched_entries: report.facts.spec.matched_entries,
+            }
+          : null,
+        code: {
+          worktree_available: report.facts.code.available,
+          changed_files: [...report.facts.code.changed_files],
+          verification: report.facts.code.verification_results.map(
+            (result) => ({
+              alias: result.alias,
+              exit_code: result.exit_code,
+            }),
+          ),
+          evidence_id: report.facts.code.evidence_id,
+        },
+      },
+      generated_at: report.generated_at,
+    });
+  }
+
+  private get requirementsStore(): RequirementsStore {
+    if (this.requirementsStoreInstance === null) {
+      this.requirementsStoreInstance = new RequirementsStore(this.repoRoot);
+    }
+    return this.requirementsStoreInstance;
   }
 
   private async handleHttpRequest(
@@ -1523,6 +1756,17 @@ export class StagentDaemon {
     // Host 头必须是回环地址（DNS Rebinding 防线，与 WS Upgrade 同理）
     if (!isLocalHostAuthority(req.headers.host)) {
       this.sendJson(res, 403, { error: "Forbidden" });
+      return;
+    }
+
+    // TASK-S.4 / §4.4 P-16：Demo 预览来源一律 403，必须放在 CORS 放行之前。
+    // 原因：isLocalOrigin 只校验主机名，会把 http://127.0.0.1:4100 当成本地合法来源，
+    // 一旦先走 CORS 分支，Demo iframe 就拿到了跨源读响应的通行证。
+    if (isDemoPreviewOrigin(req.headers.origin)) {
+      this.sendJson(res, 403, {
+        error: "Forbidden",
+        code: DEMO_ORIGIN_FORBIDDEN,
+      });
       return;
     }
 
@@ -1629,6 +1873,15 @@ export class StagentDaemon {
         return;
       }
       await this.handleTaskGraph(req, res, method, parsedUrl);
+      return;
+    }
+
+    if (pathname === "/api/supervisor/dispute") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleSupervisorDispute(req, res, method);
       return;
     }
 

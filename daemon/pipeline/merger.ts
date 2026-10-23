@@ -15,6 +15,12 @@ import {
 } from "../git/worktree-manager";
 import { assertEvidenceIntegrity } from "../guard/evidence-integrity";
 import {
+  E_OUT_OF_SCOPE_UNTRACKED,
+  describeUntrackedViolations,
+  enforceUntrackedScope,
+} from "./untracked-scope-guard";
+import type { FileSystemScope } from "../../src/lib/scope";
+import {
   contractLockPath,
   withContractLock,
   InvalidStateTransitionError,
@@ -146,6 +152,109 @@ export function buildMergeCommitMessage(
   ].join("\n");
 }
 
+/**
+ * Git Trailer 尺寸红线（TASK-D.2b）：**单条 ≤512 字节，合计 ≤4KB**。
+ *
+ * 差异说明：架构规范 §5.2 写的是「单条 1024 / 合计 4096」，任务规范
+ * TASK-D.2b 与本次指令要求「单条 512 / 合计 4KB」。两者在单条上限上不一致，
+ * 本实现取**更严格**的 512——Trailer 是审计索引键，超过半 KB 只可能是
+ * 把日志或长文本塞进了提交信息，那本来就不该出现在这里。
+ */
+export const MAX_TRAILER_LINE_BYTES = 512;
+export const MAX_TRAILER_BLOCK_BYTES = 4096;
+
+/** Trailer 行形态：`Key: value`，Key 为字母开头的连字符标识 */
+const TRAILER_LINE_PATTERN = /^[A-Za-z][A-Za-z0-9-]*: /;
+
+export interface TrailerBounds {
+  lines: Array<{ key: string; bytes: number }>;
+  maxLineBytes: number;
+  totalBytes: number;
+}
+
+/**
+ * 度量提交信息末尾的 Trailer 块尺寸。
+ *
+ * 只统计**末尾连续**的 `Key: value` 行：一旦遇到空行、标题或正文即停止，
+ * 避免把正文里的 "Note: ..." 误判成 Trailer 而错误阻断合并。
+ */
+export function measureTrailerBounds(message: string): TrailerBounds {
+  const lines = message.split("\n");
+  const block: string[] = [];
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i] as string;
+    if (!TRAILER_LINE_PATTERN.test(line)) break;
+    block.unshift(line);
+  }
+  const entries = block.map((line) => ({
+    key: line.slice(0, line.indexOf(":")),
+    bytes: Buffer.byteLength(line, "utf-8"),
+  }));
+  return {
+    lines: entries,
+    maxLineBytes: entries.reduce((max, entry) => Math.max(max, entry.bytes), 0),
+    totalBytes: Buffer.byteLength(block.join("\n"), "utf-8"),
+  };
+}
+
+/** 尺寸越界即阻断提交，绝不静默截断审计字段 */
+export function assertTrailerBounds(message: string): TrailerBounds {
+  const bounds = measureTrailerBounds(message);
+  const oversize = bounds.lines.find(
+    (line) => line.bytes > MAX_TRAILER_LINE_BYTES,
+  );
+  if (oversize) {
+    throw new MergeGateError(
+      "E_TRAILER_TOO_LARGE",
+      `Trailer '${oversize.key}' 为 ${oversize.bytes} 字节，超过单条上限 ${MAX_TRAILER_LINE_BYTES} 字节；` +
+        "审计字段不允许塞入长文本或日志",
+    );
+  }
+  if (bounds.totalBytes > MAX_TRAILER_BLOCK_BYTES) {
+    throw new MergeGateError(
+      "E_TRAILER_TOO_LARGE",
+      `Trailer 块合计 ${bounds.totalBytes} 字节，超过上限 ${MAX_TRAILER_BLOCK_BYTES} 字节`,
+    );
+  }
+  return bounds;
+}
+
+/**
+ * 合并前未跟踪文件复核（TASK-D.2b）。
+ *
+ * 与 TASK-W.2b 的执行侧守卫同源（同一个 `enforceUntrackedScope`），但检测点
+ * 更靠后：覆盖「证据生成之后、真正合入之前」这段时间里被绕过网关写入的文件
+ * ——例如用户在 IDE 里新建、或外部脚本落盘。这类文件不在任务分支里，
+ * `git merge --squash` 看不见，却可能在合并后混入主树。
+ *
+ * 与 `assertMainTreeClean` 的分工：后者检查**主工作树**，本函数检查
+ * **任务 Worktree**；两者互补，不重叠。
+ */
+export async function assertWorktreeUntrackedScope(options: {
+  worktreePath: string;
+  scope: FileSystemScope;
+}): Promise<void> {
+  const report = await enforceUntrackedScope({
+    worktreePath: options.worktreePath,
+    scope: options.scope,
+    phase: "PRE_MERGE",
+  });
+  if (report.passed) return;
+
+  const list = report.violations
+    .slice(0, 5)
+    .map((v) => v.path)
+    .join(", ");
+  const more =
+    report.violations.length > 5
+      ? ` 等 ${report.violations.length} 处`
+      : "";
+  throw new MergeGateError(
+    E_OUT_OF_SCOPE_UNTRACKED,
+    `${describeUntrackedViolations(report)}（违规清单：${list}${more}）`,
+  );
+}
+
 export async function squashMerge(options: MergeOptions): Promise<MergeResult> {
   const repoRoot = path.resolve(options.repoRoot);
   // 合同排他锁：并发的两次核销串行执行，第二次在锁内看到 MERGED 立即失败
@@ -159,14 +268,37 @@ async function mergeInternal(
   options: MergeOptions,
 ): Promise<MergeResult> {
   const store = new ContractStore(repoRoot);
-  const contract = store.get(options.contractId);
 
-  if (!contract) {
+  // TASK-D.2b：存量 v1.2.0 合同走内存迁移后再裁决；迁移本身带零静默授权后置断言。
+  let loaded: ReturnType<ContractStore["getWithMigration"]>;
+  try {
+    loaded = store.getWithMigration(options.contractId);
+  } catch (err) {
+    throw new MergeGateError(
+      "E_CONTRACT_MIGRATION_FAILED",
+      `合同迁移失败，已阻断合并：${(err as Error).message}`,
+    );
+  }
+
+  if (!loaded) {
     throw new MergeGateError(
       "E_CONTRACT_NOT_FOUND",
       `Contract ${options.contractId} not found`,
     );
   }
+  const { contract, migration } = loaded;
+
+  // 零静默授权：被迁移拉回草稿/待审的合同，必须由用户重新批准，
+  // 不允许借「合并核销」这条路把它一次性洗成已授权。
+  if (migration?.requiresReapproval) {
+    throw new MergeGateError(
+      "E_CONTRACT_REQUIRES_REAPPROVAL",
+      `存量合同（schema ${migration.from} → ${migration.to}）迁移后处于 ` +
+        `${contract.lifecycle_state} / ${contract.approval.status}，` +
+        "必须由用户重新审批授权范围后才能合并；静默授权一律拒绝",
+    );
+  }
+
   // 1. 状态门禁（已合并 → 并发冲突语义；未审计 → 前置条件不足）
   if (contract.lifecycle_state === "MERGED") {
     throw new InvalidStateTransitionError(
@@ -226,6 +358,14 @@ async function mergeInternal(
     );
   }
   const branch = contract.authorization.git.task_branch;
+
+  // 3.5 TASK-D.2b：合并前复核完整工作树（含未跟踪文件）。
+  // 放在证据完整性之前：越界文件是更具体、更可操作的结论，
+  // 不该被指纹失配（E_EVIDENCE_STALE）抢先掩盖。
+  await assertWorktreeUntrackedScope({
+    worktreePath,
+    scope: contract.authorization.file_system_scope,
+  });
 
   // 3.6 防偷渡门禁：Worktree 指纹必须与 Evidence 记录一致。
   // 用户在验证通过后外部篡改 Worktree（VS Code 直改 / 脚本写入）→ 指纹不符 →
@@ -308,6 +448,8 @@ async function mergeInternal(
     conflictResolution,
     { evidenceHash },
   );
+  // TASK-D.2b：Trailer 尺寸红线，越界即拒绝提交（不静默截断审计字段）
+  assertTrailerBounds(message);
   const commit = await execGit(["commit", "-m", message], repoRoot);
   if (commit.exitCode !== 0) {
     throw new MergeGateError(

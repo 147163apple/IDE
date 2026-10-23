@@ -33,6 +33,8 @@ export const ERROR_CODES = [
   "E_PREPARATION_FAILED",
   "E_WORKTREE_LOST",
   "E_PORT_CONFLICT",
+  "E_DEMO_PAYLOAD_TOO_LARGE",
+  "E_DISPUTE_TIMEOUT",
 ] as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[number];
@@ -207,6 +209,29 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     task: "TASK-W.3",
     condition:
       "验证命令输出出现 EADDRINUSE / address already in use：环境端口冲突，不是断言失败，需清理占用后重试",
+  },
+  E_DEMO_PAYLOAD_TOO_LARGE: {
+    code: "E_DEMO_PAYLOAD_TOO_LARGE",
+    reason_code: "BUDGET_EXHAUSTED",
+    component: "Demo Generator",
+    task: "TASK-S.4",
+    condition:
+      "Demo 原型单个静态资源超过 2MB 硬上限（按 UTF-8 字节计），拒绝落盘",
+    plain_message:
+      "这次生成的原型页面太大了（单个文件超过 2MB），已经停止写入。请缩小需求范围或拆分页面后重试。",
+    http_status: 413,
+  },
+  E_DISPUTE_TIMEOUT: {
+    code: "E_DISPUTE_TIMEOUT",
+    // 时间预算耗尽，与 E_TASK_TIMEOUT 同族
+    reason_code: "BUDGET_EXHAUSTED",
+    component: "Dispute Watchdog",
+    task: "TASK-S.5",
+    condition:
+      "质疑自查（三方事实抓取 + 归因）超过 60 秒硬超时，看门狗主动中止并降级为人工裁决",
+    plain_message:
+      "这次自查超时了（60 秒内没算完），系统已停止自动归因，把已抓到的三方事实交给您判断。",
+    http_status: 504,
   },
 };
 

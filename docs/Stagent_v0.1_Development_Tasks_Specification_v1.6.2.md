@@ -17,9 +17,9 @@
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **TASK-0.1** | 工程锁文件与跨平台 CI 自动化基线 | 基础设施 | **[COMPLETED]** | P0 基础设施 | 依赖锁死、`verify-env.mjs` 门禁脚本、跨平台环境校验已就绪。 |
 | **TASK-0.2b** | Schema v1.2.0 增量演进、双状态机联动与存量迁移 | 数据模型 | **[COMPLETED]**（提交 `52c807c` 锁定基线；当前物理基线已交付） | P0 契约底座 | • 升级 `SoftwareContractV12` 与 `EvidenceBundleV11` 完整字段<br>• 实现 `validateStatePair`、`validateTransition` 与原子落盘<br>• 承接历史合同迁移与备份机制，10 错误码映射通过 |
-| **TASK-0.2c** | Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 | 数据模型与状态机 | **[NEW_TASK]**（当前 Sprint 0 收尾 / 实施第一优先级任务） | P0.2c 契约与状态机演进 (C-01) | • 认领 C-01 整改项，代码落地第一优先级<br>• 升级 `SoftwareContractV13` 与 Zod Schema，增设 `approval` 与 `authorization.git`<br>• 补齐 Fast Path 严格流转边 (`DRAFT -> PREPARING -> EXECUTING`，严禁直跳)<br>• 补齐外部改码级联降级边 (`AUDITED -> VERIFYING`，使 Evidence 失效并回退重验)<br>• 补齐恢复探测自愈边 (`PENDING_RESUME -> PREPARING`，探测 Worktree 丢失自愈重建)<br>• 升级 `migrateContractToV13`，执行态族白名单回填 (`user:legacy`)，草案/待审安全保持，零静默授权<br>• 新增 `tests/unit/contract-schema-v13.test.ts`、9 态 lifecycle 迁移矩阵覆盖及 15 态展示投影测试 |
+| **TASK-0.2c** | Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 | 数据模型与状态机 | **[COMPLETED]**（提交 `fb2cc67`，经 `cd7e7e0` 合入 main；tsc 0 错 / eslint 0 错；新增 48 项单测、迁移矩阵 +7，全量 903 例） | P0.2c 契约与状态机演进 (C-01) | • 认领 C-01 整改项，代码落地第一优先级<br>• 升级 `SoftwareContractV13` 与 Zod Schema，增设 `approval` 与 `authorization.git`<br>• 补齐 Fast Path 严格流转边 (`DRAFT -> PREPARING -> EXECUTING`，严禁直跳)<br>• 补齐外部改码级联降级边 (`AUDITED -> VERIFYING`，使 Evidence 失效并回退重验)<br>• 补齐恢复探测自愈边 (`PENDING_RESUME -> PREPARING`，探测 Worktree 丢失自愈重建)<br>• 升级 `migrateContractToV13`，执行态族白名单回填 (`user:legacy`)，草案/待审安全保持，零静默授权<br>• 新增 `tests/unit/contract-schema-v13.test.ts`、9 态 lifecycle 迁移矩阵覆盖及 15 态展示投影测试 |
 | **TASK-D.1** | CLI 引导入口与安全 WebSocket 通信桥 | 通信核销 | **[COMPLETED]**（2026-10-20；48 文件 / 377 用例全绿，含首帧 50ms 切断、Token 轮换、Origin/Host/2MB/速率/心跳断言） | P1 通信鉴权 | • 提前至 Sprint 1 解除 DAG 死锁<br>• CLI `stagent start`、动态端口 (3001~3010)、PID 锁与 Token 轮换 (G-13)<br>• 检测到存活 PID 锁时抛出 `E_WORKSPACE_LOCKED` 拒绝重复绑定工作区<br>• 首帧 AUTH 握手鉴权、非法以 `4401` 关闭<br>• 规范帧字典（同时保留 `EVIDENCE_READY`、`EVIDENCE_STATUS_CHANGED`、`TERMINAL_STREAM`）<br>• 补齐 Origin 校验、帧大小（≤2MB）与速率限制、失联 3 次心跳遮罩 |
-| **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[NEW_TASK]** | P3.7 状态投影与防死锁 | • 15 展示状态确定性映射引擎，通过 `presentation_state` 持久化落盘与 WebSocket 帧广播<br>• 闭环五类防死锁引擎 (D-1 15s 停止超时看门狗、D-2 90s 心跳租约与 60s 锁防悬挂、D-3 恢复探测与 Worktree 重建自愈、D-4 目标分支前进二选一仲裁、D-5 会话与命令超时分层看门狗)<br>• 新增 `tests/unit/presentation-state-mapping.test.ts` 与 `tests/unit/deadlock-resilience.test.ts` |
+| **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[PARTIAL]**（投影引擎与 `STATE_CHANGED` 帧已交付 `f548aeb`；`.stagent/state.json` 持久化、广播接线与 D-1~D-5 看门狗未实现） | P3.7 状态投影与防死锁 | • 15 展示状态确定性映射引擎，通过 `presentation_state` 持久化落盘与 WebSocket 帧广播<br>• 闭环五类防死锁引擎 (D-1 15s 停止超时看门狗、D-2 90s 心跳租约与 60s 锁防悬挂、D-3 恢复探测与 Worktree 重建自愈、D-4 目标分支前进二选一仲裁、D-5 会话与命令超时分层看门狗)<br>• 新增 `tests/unit/presentation-state-mapping.test.ts` 与 `tests/unit/deadlock-resilience.test.ts` |
 | **TASK-A.1** | Git Worktree 物理隔离与生命周期管理 | 执行内核 | **[COMPLETED]** | P1 本地 Git | Worktree 创建、销毁、分支保护与 `.git/info/exclude` 隔离就绪。 |
 | **TASK-A.2** | Scoped MCP 工具网关与路径沙箱校验 | 执行内核 | **[COMPLETED]** | P2 安全网关 | 路径防逃逸、Scope 读写授权、禁区强拦截与环境脱敏就绪。 |
 | **TASK-A.3** | 依赖分级复用与工作区构建缓存隔离 | 执行内核 | **[COMPLETED]** | P1 依赖隔离 | 只读依赖复用 (ADR-002)、构建缓存目录隔离与符号链接降级就绪。 |
@@ -29,8 +29,8 @@
 | **TASK-S.1** | Supervisor 建议会话与持久化存储管理 | 建议中枢 | **[PARTIAL]**（独立预算分账已落地，规则优先 L0/L1 与 3s 防抖节流器仍待完成） | P4 智能建议 | • Local-First 会话落盘 (`.stagent/sessions/`)、Prompt Pipeline<br>• 依赖层静态 AST 扫描禁令 + 运行时越权调用拦截正例断言<br>• 独立日预算分账 `.stagent/supervisor-budget.json`<br>• 规则优先 L0/L1；唤醒节流器 3s Debounce 默认关闭 |
 | **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[COMPLETED]**（按需触发、L0 规则引擎、L1 强模型补全、G-11 未决问题零丢失、脱敏均已落地） | P4 合同草案 | • 用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• 断言未决问题 100% 保留至草案元数据供用户确认 (G-11)<br>• 保留脱敏模块 `src/lib/ipc/redaction.ts` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
-| **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[NEW_TASK]** | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
-| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[NEW_TASK]** | P5.7 质疑自查 (v1.6.1) | • 自然语言质疑入口与三方事实抓取管道 (Prompt vs Spec vs Diff)<br>• 60s 质询看门狗硬超时兜底；置信度治理 (`confidence < 0.7` 自动降级呈递事实，由用户人工仲裁)<br>• 判定算法分流【实现偏差 Bug（免费返工）】与【需求变更 Drift（增量演进）】<br>• 自动返工严格受限原合同 Scope 子集，严禁越界扩权；统一关联键 `change_request_id` 贯通资产 |
+| **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，**待合入 main**；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
+| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[NEW_TASK]** | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
@@ -50,7 +50,7 @@
 | **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[NEW_TASK]** | P4.5 拓扑点亮 (v1.6.1) | • 渲染业务功能思维导图与任务执行 DAG 流程图<br>• Daemon 独占 Graph 状态持有与持久化；Supervisor 提案在类型层 `Omit` 剥离运行态<br>• 节点七态 (`PENDING` / `RUNNING` / `REPAIRING` / `ILLUMINATED` / `FAILED` / `BLOCKED` / `STALE_REVERIFY`，严格对齐架构 §3.2.1)，物理点亮绑定真实写入、测试退出码为 0 与节点变更指纹<br>• COMMAND 节点禁止空验证集全绿点亮；外部改码联动降级 `STALE_REVERIFY` 变灰<br>• 左侧文件树提供【规范与资产】专区，展示需求文档、合同、Demo 原型；文件树监听真实文件变更并表现生成进度 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
-| **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[NEW_TASK]** | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
+| **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
 | **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[COMPLETED]**（`c82a7bb`；交付测试在位） | P6 集成自举 | 覆盖 Happy Path 全生命周期无人值守自动化回归；覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离）。 |
 | **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[COMPLETED]**（`9b15c20`、`178a8a6`；报告与发版记录在位） | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 
@@ -193,7 +193,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task 0.2c】Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 `[认领架构 P0.2c / C-01]`
 * **任务编号**：`TASK-0.2c`
 * **前置依赖**：`TASK-0.2b` (COMPLETED)
-* **任务状态**：**[NEW_TASK]**（认领架构规范 §10 P0.2c 里程碑与 C-01 整改项，当前代码实施第一优先级）
+* **任务状态**：**[COMPLETED]**（2026-10-23 交付：分支 `feat/task-0.2c-contract-v1.3-statemachine` 提交 `fb2cc67`，经 `cd7e7e0` 合入 main。落地内容：Schema 1.2.0/1.3.0 双版本白名单（新合同签发 1.3.0）、`creator` 增 `system:fast-path`、`authorization.git` 的 `allowed_operations`/`forbidden_flags`/`enforce_clean_base`（禁用参数强制内嵌五项、不可覆盖）、`approval` 增签名/准入决策/决策说明/驳回者并约束 `ADMITTED_AUTOMATIC` 仅限 `system:fast-path`；状态机增三条受控边——Fast Path `DRAFT→PREPARING`（Guard：系统凭证 + LOW 风险，`DRAFT→EXECUTING` 恒非法）、自愈 `PENDING_RESUME→PREPARING`（`WORKTREE_MISSING_HEAL`）、降级 `AUDITED→VERIFYING`（`EXTERNAL_MUTATION`）；`migrateContractToV13` 执行态族白名单回填 `user:legacy`，草案/待审保持原态并清除残留审批戳记，`ABORTED` 保留「批准后中止」历史。门禁：`tsc --noEmit` 0 错、eslint 0 错、全量 903 例（896 通过 / 6 跳过 / 1 例为 daemon 夹具 `git init` 被沙箱拦截的环境性失败，非断言失败）。偏差：审批枚举沿用架构 §9.1 的 `DRAFT/PENDING_REVIEW/APPROVED/REJECTED`（非任务书正文的 `PENDING/SUPERSEDED`）；lifecycle 保持 `VERIFYING`（规范无 `MERGING`）；`approved_at` 保持 ISO 字符串。未纳入本卡：`worker_spec` 的 `SANDBOX_ENFORCED`/`billing_model`/`verified_on`、顶层 `scope`、`EvidenceBundleV12`、未跟踪文件检查（由 TASK-W.2b 承担））
 * **v0.1 范围**：数据模型从 v1.2.0 升级至 v1.3.0，实现审批与 Git 授权完整字段校验，增补 Fast Path、恢复自愈与外部改码降级三条关键状态转移边，升级存量合同无静默授权迁移。
 * **核心目标**：
   1. **数据模型升级与 Zod 校验 (`src/lib/contract.schema.ts`)**：
@@ -273,7 +273,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task D.3】15 状态确定性投影持久化与防死锁自愈引擎 `[认领架构 P3.7]`
 * **任务编号**：`TASK-D.3`
 * **前置依赖**：`TASK-0.2c`, `TASK-D.1`
-* **任务状态**：**[NEW_TASK]**（认领架构规范 §10 P3.7 里程碑）
+* **任务状态**：**[PARTIAL]**（2026-10-23 首次交付：分支 `feat/task-d3-presentation-state` 提交 `f548aeb`，经 `cd7e7e0` 合入 main。已交付：§6.3.1/§9.6 唯一 15 态词汇表（禁止 `INITIAL_EMPTY`/`GRAPH_ORCHESTRATING` 等额外态）、`getPresentationState` 确定性投影（`ABORTED` 最高优先级短路，`APPROVED`/`REJECTED` 均归 `ABORTED`；`(AUDITED,APPROVED)` 四分支按 `CONFLICT > DISPUTED_INSPECTING > REAL_PLAYTEST > READY_TO_MERGE` 顺序短路；非法组合抛 `ILLEGAL_STATE_PAIR`，四支全不成立抛 `UNDEFINED_PROJECTION` 而不猜状态）、`STATE_CHANGED` 帧（必含 `presentation_state` 与白话提示）、§6.3.1 CI 不变式。门禁：tsc 0 错、定向 129 例全绿、新增 31 项单测。**本卡剩余范围（未完成）**：① `presentation_state` 写入 `.stagent/state.json` 的持久化；② Daemon 侧投影计算与 `STATE_CHANGED` 广播接线；③ D-1~D-5 五类防死锁看门狗（`deadlock-resilience.ts`）。实现位置：`src/lib/state/presentation-state.ts`（与卡片原定 `daemon/state/` 的差异经需求方批准，使 daemon 与前端共用同一词汇表））
 * **v0.1 范围**：15 种展示状态确定性映射引擎、`presentation_state` 持久化落盘与 WebSocket 广播、五类死锁自愈机制 (D-1~D-5)。
 * **核心目标**：
   1. **确定性状态投影引擎 (`daemon/state/presentation-state.ts`)**：
@@ -472,7 +472,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task S.4】Demo 静态原型生成器与 Mock 预览服务 `[v1.6.1 升级]`
 * **任务编号**：`TASK-S.4`
 * **前置依赖**：`TASK-S.2`
-* **任务状态**：**[NEW_TASK]** (认领架构规范 §10 P4.5 原型先行)
+* **任务状态**：**[COMPLETED]**（2026-10-23 交付：分支 `feat/task-s4-demo-service`，提交 `95ea2a3`、`07af0f2`，**待合入 main**。落地内容：需求摘要 → 纯静态原型生成（`.stagent/demo/`，产出 `index.html`/`styles.css`/`app.js`）、单文件 2MB UTF-8 字节闸门（`E_DEMO_PAYLOAD_TOO_LARGE`，HTTP 413，先全量校验再统一落盘）、独立 Origin 预览服务（仅绑 127.0.0.1:4100~4110，`findAvailablePort` + `listen` 双重端口回退）、CSP `default-src 'none'; connect-src 'none'` 与路径逃逸/隐藏文件防护、版本快照与按 ID 回退（含残留资源清理）、`DEMO_PREVIEW_STATUS` 生命周期广播（`RUNNING`/`STOPPED`/`ERROR`）、Daemon HTTP 与 WS 入口对 Demo 来源 403（**置于 CORS 放行之前**，并覆盖 sandbox iframe 的 `Origin: null`）。门禁：tsc 0 错、eslint 0 错、19 项定向单测全绿。偏离说明：采用三资源而非单文件——严格 CSP 下 `script-src 'self'` 不允许内联脚本，维持单文件需放开 `'unsafe-inline'`，安全性优先；2MB 仍按单文件独立判定。范围外（经需求方裁决）：`createDemoPreview` 的上层调用归 TASK-C.2/旅程编排层，热重载归右栏会话打补丁时对接）
 * **v0.1 范围**：受控单页静态 HTML/React 原型生成 + 虚拟 Mock 数据构造 + 独立端口与跨源沙箱隔离预览服务。
 * **核心目标**：
   1. **原型受控构建器 (`daemon/supervisor/demo/demo-generator.ts`)**：
@@ -506,7 +506,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task S.5】Supervisor 质疑自查与根因分流归因引擎 `[v1.6.1 升级]`
 * **任务编号**：`TASK-S.5`
 * **前置依赖**：`TASK-S.1`, `TASK-S.2`, `TASK-D.2b`
-* **任务状态**：**[NEW_TASK]** (认领架构规范 §10 P5.7 质疑自查)
+* **任务状态**：**[COMPLETED]**（2026-10-23 交付于 `feat/task-s5-dispute-engine`：`a1469b7` 主体 + `a83f18a` 口径修正，经 `2bb1313`、`5748ad0` 合入 main。门禁：`npm run typecheck` 0 错；`tests/unit/requirements-store.test.ts` 7 通过、`tests/unit/dispute-triad.test.ts` 12 通过；main 上 4 个定向文件 60 例、集成 30 例全绿。落地清单：`daemon/supervisor/specs/requirements-store.ts`（`requirements.md` 读写、合同意图初始化、`specs/revisions/req-v*.md` 版本冻结、执行期锁定与 SHA-256 完整性校验）、`daemon/supervisor/dispute/evidence-triad.ts`（会话/规范/Worktree 三方抓取，终端与退出码取自最新 Evidence）、`classification.ts`（确定性归因 + 置信度 + 返工/变更提案）、`index.ts`（60s 看门狗与报告装配）、`types.ts`、`daemon/server.ts` 的 `POST /api/supervisor/dispute` 与 `DISPUTE_REPORT_READY` 广播。**口径说明**：① 文件命名按实际落地为 `classification.ts` / `index.ts` / `types.ts`（卡内设计期 `root-cause-analyzer.ts` / `rework-dispatcher.ts` / `dispute-types.ts` 未沿用）；② 需求快照按架构 §5.1 落在 `.stagent/specs/revisions/req-v<N>-<sha8>.md`，索引 `.stagent/specs/requirements.snapshots.json`；③ 归因是确定性规则而非模型打分，置信度由证据信号计算，`< 0.7` 强制降级；④ 越界返工以 `rejected_paths` + `requires_scope_expansion` 阻断并提示升版，未新增 `EXPANDED_SCOPE_REQUIRED` 错误码，避免扩充错误码目录。**残余口径差（不阻塞验收，需登记）**：① 路由级 401/404/超时降级未加集成用例（按交付指令仅两个单测文件）；② 终端日志取自最新 Evidence 的 stdout/stderr tail，无 Evidence 时为空且置信度下调；③ 返工提案与变更草案均为未落盘对象，执行/审批沿用既有链路）
 * **v0.1 范围**：自然语言质疑入口 + 三方事实交叉核验管道 + 看门狗超时控制 + 置信度治理 + 严格 Scope 子集自动返工。
 * **质疑入口路由**：右栏会话在真实试玩/验收阶段识别质疑意图时，提供转入 Studio 质疑自查的明确入口；该路由由本卡与 TASK-C.2 集成实现，不属于已完成 TASK-C.6 的交付内容。
 * **核心目标**：
@@ -525,13 +525,15 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
      - 实现偏差派发的 `DefectFixTask`，其可修改文件范围必须严格限制在原已批准合同 `writable_paths` 的**真子集或全集**之内；
      - 若自查修复方案需要新增文件或引入新依赖，必须抛出 `EXPANDED_SCOPE_REQUIRED`，立即阻断自动返工并转入需求变更增量合同审批流程；
      - 资产关联贯通：在会话、草案与 Evidence 中贯穿统一关联键 `change_request_id`，实现全链路可审计溯源。
-* **涉及核心文件**：
+* **涉及核心文件（以实际落地为准）**：
+  - 新增：`daemon/supervisor/specs/requirements-store.ts`
   - 新增：`daemon/supervisor/dispute/evidence-triad.ts`
-  - 新增：`daemon/supervisor/dispute/root-cause-analyzer.ts`
-  - 新增：`daemon/supervisor/dispute/rework-dispatcher.ts`
-  - 新增：`daemon/supervisor/dispute/dispute-types.ts`
-  - 测试：`tests/unit/supervisor-dispute-engine.test.ts`
-  - 测试：`tests/unit/supervisor-rework-scope.test.ts`
+  - 新增：`daemon/supervisor/dispute/classification.ts`
+  - 新增：`daemon/supervisor/dispute/index.ts`
+  - 新增：`daemon/supervisor/dispute/types.ts`
+  - 修改：`daemon/server.ts`（`POST /api/supervisor/dispute` 与 `DISPUTE_REPORT_READY`）、`src/lib/ipc/frames.ts`、`src/lib/error-codes.ts`
+  - 测试：`tests/unit/requirements-store.test.ts`（7 用例）
+  - 测试：`tests/unit/dispute-triad.test.ts`（12 用例）
 * **Pass/Fail 验收判定**：
   - **PASS**：对于需求已写但代码写漏的典型 Case，置信度高且 100% 裁决为实现偏差；低置信度案例自动降级为事实陈述并由用户裁决；自动返工超出原合同 Scope 时被坚决拦截并提示升版审批；60 秒内必出结果或安全超时。
   - **FAIL**：低置信度时向用户强加主观判定；自动返工越界修改了原合同未授权的文件。
@@ -1051,9 +1053,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task D.2b】未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入
 * **任务编号**：`TASK-D.2b`
 * **前置依赖**：`TASK-0.2c`, `TASK-D.2`, `TASK-W.2b`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（2026-10-23，提交 `150dc47`；`npm run typecheck` 0 error，新增 `tests/daemon/merger-d2b-gates.test.ts` 10 例全绿，定向回归 86 例与扩展回归 23 例全绿）
 * **范围**：在合并前复核完整工作树范围，阻断合同外未跟踪文件；接入 `migrateContractToV13`，确保旧合同加载时不发生静默授权。该卡不重开 TASK-D.2 已完成的控制面主体。
 * **Git Trailer 边界**：沿用已完成 D.2 的单条 ≤512B、合计 ≤4KB 限制；若仓库当前实现/测试事实不符，应先作为差异报告，不把既有完成声明当作新增实现。
+* **交付事实与差异报告（2026-10-23）**：
+  1. **D.2 并未实现该限制**：`merger.ts` 中不存在任何 Trailer 尺寸度量、常量或断言，D.2 交付的仅是「写入 4 个 Trailer 字段」。本卡新增 `measureTrailerBounds` / `assertTrailerBounds` 与常量 `MAX_TRAILER_LINE_BYTES = 512`、`MAX_TRAILER_BLOCK_BYTES = 4096`，属**新增实现**。
+  2. **文档口径冲突**：架构规范 §5.2 写「单条 ≤1024B、合计 ≤4096B」，本卡与裁决写「单条 ≤512B、合计 ≤4KB」。经裁决取**更严格**的 512 并已在代码注释留痕；若后续对齐 §5.2，只需改一个常量。
+  3. **旧合同的实际缺口不是「静默授权」而是「读不出来」**：原 `ContractStore.get()` 直接用 v1.3.0 Schema 解析 v1.2.0 文件，失败即返回 `null`，合并时报 `E_CONTRACT_NOT_FOUND`。本卡改为 `getWithMigration` 内存迁移（不写盘），并由 `migration.requiresReapproval` 派生 `E_CONTRACT_REQUIRES_REAPPROVAL` 阻断核销。
 * **涉及核心文件**：修改 `daemon/pipeline/merger.ts`、合同加载/迁移调用点及相关测试；测试路径按仓库实存文件核定，避免引用未创建的文件名。
 * **Pass/Fail**：PASS：已跟踪和未跟踪文件均参与 Scope 检查；超范围即拒绝合并并产生稳定错误码；DRAFT/PENDING_APPROVAL 历史合同绝不被迁移为 APPROVED；执行态历史合同按明确白名单迁移；FAIL：使用旧 Evidence 或未授权合同仍可合入。
 
@@ -1193,5 +1199,6 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-13（本轮修正）**：TASK-D.3 映射表末行更正为 `(REJECTED 或 APPROVED, ABORTED)`；`(APPROVED, AUDITED)` 四分支补显式短路优先级（`CONFLICT` > `DISPUTED_INSPECTING` > `REAL_PLAYTEST` > `READY_TO_MERGE`），与架构 §6.3.1 同步。
 - **P-14（本轮修正）**：TASK-C.7 节点口径由"四态"更正为架构 §3.2.1 的七态（补 `REPAIRING` / `BLOCKED`），并将点亮依据由"Git Commit SHA"更正为架构 §3.2.2/ADR-009 的 `node_patch_fingerprint`。
 - **P-15（本轮增补，2026-10-23）**：TASK-S.5「三方事实核验管道」追加**自查对照源**实现要点，明确质疑分析以不可变需求快照 `.stagent/specs/revisions/req-v*.md` 为对照基准，而非 `requirements.md` 最新态（对齐架构 §5.1 需求快照机制与 RFC-2026-002 §7.3.3）。本条仅追加实现要点，不改动任务范围、前置依赖、验收判定与 Sprint 排期。
+- **P-16（交付回写，2026-10-23）**：TASK-D.2b 状态由 `[NEW_TASK]` 回写为 `[COMPLETED]`，锁定提交 `150dc47`（分支 `feat/task-d2b-untracked-merge-guard`，基线 `05f090f`）。同步在卡内补「交付事实与差异报告」，登记三项与既有声明/文档不一致的事实：D.2 未实现 Trailer 尺寸边界、架构 §5.2 的 1024B 与卡片 512B 冲突（经裁决取 512）、旧合同加载缺口实为「读不出来」而非「静默授权」。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
