@@ -50,7 +50,7 @@
 | **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[NEW_TASK]** | P4.5 拓扑点亮 (v1.6.1) | • 渲染业务功能思维导图与任务执行 DAG 流程图<br>• Daemon 独占 Graph 状态持有与持久化；Supervisor 提案在类型层 `Omit` 剥离运行态<br>• 节点七态 (`PENDING` / `RUNNING` / `REPAIRING` / `ILLUMINATED` / `FAILED` / `BLOCKED` / `STALE_REVERIFY`，严格对齐架构 §3.2.1)，物理点亮绑定真实写入、测试退出码为 0 与节点变更指纹<br>• COMMAND 节点禁止空验证集全绿点亮；外部改码联动降级 `STALE_REVERIFY` 变灰<br>• 左侧文件树提供【规范与资产】专区，展示需求文档、合同、Demo 原型；文件树监听真实文件变更并表现生成进度 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
-| **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[NEW_TASK]** | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
+| **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
 | **TASK-E.1** | 双 Agent 协同与全流程 E2E 自动化测试 | 集成测试 | **[COMPLETED]**（`c82a7bb`；交付测试在位） | P6 集成自举 | 覆盖 Happy Path 全生命周期无人值守自动化回归；覆盖 8 类故障分支（含 4 类授权不变式与非受控隔离）。 |
 | **TASK-E.2** | Stagent 仓库自举 (Dogfooding) 与发版交付 | 交付发版 | **[COMPLETED]**（`9b15c20`、`178a8a6`；报告与发版记录在位） | P6 真实验证 | 真实仓库自举演练、用量与已知限制客观报告、生产打包构建。 |
 
@@ -1051,9 +1051,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task D.2b】未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入
 * **任务编号**：`TASK-D.2b`
 * **前置依赖**：`TASK-0.2c`, `TASK-D.2`, `TASK-W.2b`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（2026-10-23，提交 `150dc47`；`npm run typecheck` 0 error，新增 `tests/daemon/merger-d2b-gates.test.ts` 10 例全绿，定向回归 86 例与扩展回归 23 例全绿）
 * **范围**：在合并前复核完整工作树范围，阻断合同外未跟踪文件；接入 `migrateContractToV13`，确保旧合同加载时不发生静默授权。该卡不重开 TASK-D.2 已完成的控制面主体。
 * **Git Trailer 边界**：沿用已完成 D.2 的单条 ≤512B、合计 ≤4KB 限制；若仓库当前实现/测试事实不符，应先作为差异报告，不把既有完成声明当作新增实现。
+* **交付事实与差异报告（2026-10-23）**：
+  1. **D.2 并未实现该限制**：`merger.ts` 中不存在任何 Trailer 尺寸度量、常量或断言，D.2 交付的仅是「写入 4 个 Trailer 字段」。本卡新增 `measureTrailerBounds` / `assertTrailerBounds` 与常量 `MAX_TRAILER_LINE_BYTES = 512`、`MAX_TRAILER_BLOCK_BYTES = 4096`，属**新增实现**。
+  2. **文档口径冲突**：架构规范 §5.2 写「单条 ≤1024B、合计 ≤4096B」，本卡与裁决写「单条 ≤512B、合计 ≤4KB」。经裁决取**更严格**的 512 并已在代码注释留痕；若后续对齐 §5.2，只需改一个常量。
+  3. **旧合同的实际缺口不是「静默授权」而是「读不出来」**：原 `ContractStore.get()` 直接用 v1.3.0 Schema 解析 v1.2.0 文件，失败即返回 `null`，合并时报 `E_CONTRACT_NOT_FOUND`。本卡改为 `getWithMigration` 内存迁移（不写盘），并由 `migration.requiresReapproval` 派生 `E_CONTRACT_REQUIRES_REAPPROVAL` 阻断核销。
 * **涉及核心文件**：修改 `daemon/pipeline/merger.ts`、合同加载/迁移调用点及相关测试；测试路径按仓库实存文件核定，避免引用未创建的文件名。
 * **Pass/Fail**：PASS：已跟踪和未跟踪文件均参与 Scope 检查；超范围即拒绝合并并产生稳定错误码；DRAFT/PENDING_APPROVAL 历史合同绝不被迁移为 APPROVED；执行态历史合同按明确白名单迁移；FAIL：使用旧 Evidence 或未授权合同仍可合入。
 
@@ -1193,5 +1197,6 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-13（本轮修正）**：TASK-D.3 映射表末行更正为 `(REJECTED 或 APPROVED, ABORTED)`；`(APPROVED, AUDITED)` 四分支补显式短路优先级（`CONFLICT` > `DISPUTED_INSPECTING` > `REAL_PLAYTEST` > `READY_TO_MERGE`），与架构 §6.3.1 同步。
 - **P-14（本轮修正）**：TASK-C.7 节点口径由"四态"更正为架构 §3.2.1 的七态（补 `REPAIRING` / `BLOCKED`），并将点亮依据由"Git Commit SHA"更正为架构 §3.2.2/ADR-009 的 `node_patch_fingerprint`。
 - **P-15（本轮增补，2026-10-23）**：TASK-S.5「三方事实核验管道」追加**自查对照源**实现要点，明确质疑分析以不可变需求快照 `.stagent/specs/revisions/req-v*.md` 为对照基准，而非 `requirements.md` 最新态（对齐架构 §5.1 需求快照机制与 RFC-2026-002 §7.3.3）。本条仅追加实现要点，不改动任务范围、前置依赖、验收判定与 Sprint 排期。
+- **P-16（交付回写，2026-10-23）**：TASK-D.2b 状态由 `[NEW_TASK]` 回写为 `[COMPLETED]`，锁定提交 `150dc47`（分支 `feat/task-d2b-untracked-merge-guard`，基线 `05f090f`）。同步在卡内补「交付事实与差异报告」，登记三项与既有声明/文档不一致的事实：D.2 未实现 Trailer 尺寸边界、架构 §5.2 的 1024B 与卡片 512B 冲突（经裁决取 512）、旧合同加载缺口实为「读不出来」而非「静默授权」。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
