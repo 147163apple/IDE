@@ -180,6 +180,9 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     component: "Daemon Lifecycle",
     task: "TASK-A.1",
     condition: "尝试获取已被其他进程占用的 PID 互斥锁",
+    plain_message:
+      "这个项目已经在跑了。请先关掉原来的窗口，或用 stagent open 直接打开已有工作台，不要重复启动。",
+    http_status: 409,
   },
   E_EVIDENCE_STALE: {
     code: "E_EVIDENCE_STALE",

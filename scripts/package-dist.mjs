@@ -70,6 +70,40 @@ function emptyDir(dir) {
  * 为什么不一上来就删：发版构建不该因为「清理」这一步被宿主的批量删除保护拦下
  * 而整个失败——删 70 个条目会被判定为危险操作，逐条删也只是把 70 次摊开而已。
  */
+
+/** TASK-D.1b：为 Daemon 同源托管写入 index.html 壳（发现 hashed assets） */
+function writeConsoleIndexHtml(publicDir) {
+  const assetsDir = path.join(publicDir, "assets");
+  if (!fs.existsSync(assetsDir)) {
+    console.warn("[package-dist] 无 assets/，跳过 index.html");
+    return;
+  }
+  const files = fs.readdirSync(assetsDir);
+  const js = files.find((f) => /^index-.*\.js$/.test(f));
+  const css = files.find((f) => /^styles-.*\.css$/.test(f));
+  if (!js) {
+    console.warn("[package-dist] 未找到 index-*.js，跳过 index.html");
+    return;
+  }
+  const cssLink = css
+    ? `  <link rel="stylesheet" href="/assets/${css}" />\n`
+    : "";
+  const html = `<!DOCTYPE html>
+<html lang="zh" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Stagent</title>
+${cssLink}</head>
+<body>
+  <script type="module" src="/assets/${js}"></script>
+</body>
+</html>
+`;
+  fs.writeFileSync(path.join(publicDir, "index.html"), html, "utf8");
+  console.log(`[package-dist] 已写入 dist/public/index.html（入口 ${js}）`);
+}
+
 function disposeDir(dir) {
   if (!fs.existsSync(dir)) return;
   const trash = path.join(os.tmpdir(), `stagent-dist-${Date.now()}`);
@@ -108,6 +142,7 @@ fs.mkdirSync(distDir, { recursive: true });
 fs.cpSync(path.join(outputDir, "public"), path.join(distDir, "public"), {
   recursive: true,
 });
+writeConsoleIndexHtml(path.join(distDir, "public"));
 fs.cpSync(path.join(outputDir, "server"), path.join(distDir, "server"), {
   recursive: true,
 });

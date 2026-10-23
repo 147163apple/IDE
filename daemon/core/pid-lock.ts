@@ -10,9 +10,27 @@ export interface PidLockInfo {
 }
 
 export class PidLockError extends Error {
-  constructor(message: string) {
-    super(message);
+  /** 规范错误码：与 ERROR_CODE_CATALOG.E_WORKSPACE_LOCKED 对齐 */
+  readonly code = "E_WORKSPACE_LOCKED" as const;
+  readonly lockPid: number;
+  readonly lockPort: number;
+  readonly lockRepoRoot: string;
+
+  constructor(info: {
+    pid: number;
+    port: number;
+    repoRoot: string;
+    message?: string;
+  }) {
+    const plain =
+      info.message ??
+      `这个项目已经在跑了（进程 ${info.pid}，端口 ${info.port}）。` +
+        `请先关掉那个窗口，或直接执行 stagent open 打开已有工作台，不要重复启动。[E_WORKSPACE_LOCKED]`;
+    super(plain);
     this.name = "PidLockError";
+    this.lockPid = info.pid;
+    this.lockPort = info.port;
+    this.lockRepoRoot = info.repoRoot;
   }
 }
 
@@ -105,9 +123,11 @@ export async function acquirePidLock(
   if (existing) {
     const alive = isProcessRunning(existing.pid);
     if (alive && existing.pid !== process.pid && !options.force) {
-      throw new PidLockError(
-        `Stagent daemon is already running (PID: ${existing.pid}, Port: ${existing.port}, Repo: ${existing.repoRoot}). Stop the existing instance before starting a new one.`,
-      );
+      throw new PidLockError({
+        pid: existing.pid,
+        port: existing.port,
+        repoRoot: existing.repoRoot,
+      });
     }
 
     // If lock is stale (process dead) or force flag set, clean up previous lock file

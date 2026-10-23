@@ -32,6 +32,10 @@ import {
   isRealPreviewOrigin,
   REAL_ORIGIN_FORBIDDEN,
 } from "../src/lib/ipc/real-preview-origin";
+import {
+  resolveConsolePublicDir,
+  tryServeConsoleStatic,
+} from "./console/static-host";
 
 import {
   createDemoPreviewServer,
@@ -183,6 +187,11 @@ export interface DaemonServerOptions extends PortFinderOptions {
   supervisorEnrich?:
     | ((prompt: string) => Promise<DraftEnrichment> | DraftEnrichment)
     | undefined;
+  /**
+   * TASK-D.1b：覆盖控制台静态根目录（默认 resolveConsolePublicDir()）。
+   * 传 `null` 显式关闭同源托管（测试用）。
+   */
+  consolePublicDir?: string | null;
 }
 
 export interface DaemonStatusResponse {
@@ -214,6 +223,9 @@ export class StagentDaemon {
   private wss: WebSocketServer | null = null;
   private clients: Set<WebSocket> = new Set();
   private sessionToken: string | null = null;
+  /** TASK-D.1b：安装包 dist/public（同源控制台）；缺失则为 null，不托管 */
+  private readonly consolePublicDir: string | null;
+
   private heartbeatTimer: NodeJS.Timeout | null = null;
   /** 单 IP 新建连接的时间戳滑窗（速率限制） */
   private connectionWindows: Map<string, number[]> = new Map();
@@ -252,6 +264,10 @@ export class StagentDaemon {
 
   constructor(options: DaemonServerOptions) {
     this.repoRoot = path.resolve(options.repoRoot);
+    this.consolePublicDir =
+      options.consolePublicDir !== undefined
+        ? options.consolePublicDir
+        : resolveConsolePublicDir();
     this.host = options.host ?? "127.0.0.1";
     this.version = options.version ?? "0.1.0";
     // 规范 TASK-D.1：动态端口探测范围 3001~3010
@@ -2926,6 +2942,12 @@ export class StagentDaemon {
           console.error("[Stagent Daemon] Error during shutdown:", err);
         });
       });
+      return;
+    }
+
+    // TASK-D.1b：API 未命中时尝试同源托管控制台静态资源（dist/public）
+    const staticResult = tryServeConsoleStatic(req, res, this.consolePublicDir);
+    if (staticResult.served) {
       return;
     }
 

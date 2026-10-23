@@ -15,15 +15,20 @@ Stagent 不是代码编辑器，也不是通用 Agent 平台。它在本地启�
 ```bash
 git clone <repo> && cd <repo>
 npm ci
+npm run build                      # 产出 dist/public，供一键打开同源托管
 node scripts/verify-env.mjs        # 环境门槛 + typecheck + lint + 单测
 
-# 启动 Daemon（默认 41792 起扫描可用端口）
-npx tsx bin/stagent.ts start --repo /path/to/your-project
-# 输出的 Token 位于 /path/to/your-project/.stagent/session-token（权限 0600）
+# 推荐：一条命令打开项目（TASK-D.1b）
+# - 自动启动/复用 Daemon（仅 127.0.0.1，端口 3001~3010）
+# - 有 dist/public 时同源托管控制台，浏览器单窗口已连上（Token 经 #fragment，不手拷）
+npx tsx bin/stagent.ts open /path/to/your-project
 
-# 另开终端启动控制台
-npm run dev
-# 浏览器打开后，在顶部「Daemon / Session Token」填入上述地址与 Token
+# 等价简写（本仓库已配 bin）：
+#   npm run stagent -- open /path/to/your-project
+
+# 开发态（可选）：无 dist/public 时 open 会回退 Vite；也可手动分两端：
+#   npx tsx bin/stagent.ts start --repo /path/to/your-project
+#   npm run dev
 ```
 
 可选：配置 AI Worker（生成代码改动）
@@ -60,7 +65,7 @@ Stagent 的本地子进程与路径白名单**不是对抗性沙箱**，定位�
 
 | 边界            | 已实现                                                                     | 局限                                                              |
 | --------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 网络            | 仅绑定 `127.0.0.1`；WS 握手需 Bearer Token；Origin 校验                    | Token 以 `?token=` 回退方式传给浏览器（浏览器 WS 无法设置请求头） |
+| 网络            | 仅绑定 `127.0.0.1`；WS 握手需 Bearer Token；Origin 校验                    | Token 仅经 URL `#token=` fragment 注入；WS 首帧 AUTH（浏览器无法设 Authorization 头） |
 | 文件            | Worktree 内 realpath 校验；`strictly_forbidden_paths` 优先；1 MiB 读取上限 | 不防御内核级/提权攻击；不构成恶意代码隔离                         |
 | 命令            | 结构化 argv、`shell:false`、白名单、双超时、SIGTERM→3s→SIGKILL             | 允许的验证命令本身仍以当前用户权限运行                            |
 | 环境            | 敏感变量剥离；`env_file_grants` 受控注入                                   | 不保证覆盖所有第三方工具的隐式读取                                |
@@ -75,7 +80,7 @@ Stagent 的本地子进程与路径白名单**不是对抗性沙箱**，定位�
 ## 仓库结构
 
 ```text
-bin/                  CLI 入口（stagent start / status）
+bin/                  CLI 入口（stagent open / start / status）
 daemon/
   core/               PID 锁、端口扫描、session-token
   git/                Worktree 生命周期、分支保护
