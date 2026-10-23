@@ -1,10 +1,17 @@
-import { Files, Settings, Sparkles, TerminalSquare } from "lucide-react";
+import {
+  Files,
+  Network,
+  Settings,
+  Sparkles,
+  TerminalSquare,
+} from "lucide-react";
 
 /**
  * Activity Bar（Cursor / VS Code 式左窄条）。
  *
  * 只放**真实可用**的入口，不放装饰图标：
  * - 上：文件树开关；
+ * - 上：任务图谱（业务功能导图 / 执行 DAG，TASK-C.7）；
  * - 下：Supervisor（常驻左下角，点开在中央打开可关闭的 Tab）；
  * - 下：设置（紧挨 Supervisor，连接/诊断/开关全在那一页）；
  * - 下：SmartTerminal 抽屉开关。
@@ -14,6 +21,8 @@ import { Files, Settings, Sparkles, TerminalSquare } from "lucide-react";
 export interface ActivityBarProps {
   explorerOpen: boolean;
   onToggleExplorer: () => void;
+  graphOpen: boolean;
+  onOpenGraph: () => void;
   supervisorOpen: boolean;
   onOpenSupervisor: () => void;
   settingsOpen: boolean;
@@ -58,6 +67,8 @@ function BarButton({
 export function ActivityBar({
   explorerOpen,
   onToggleExplorer,
+  graphOpen,
+  onOpenGraph,
   supervisorOpen,
   onOpenSupervisor,
   settingsOpen,
@@ -78,6 +89,14 @@ export function ActivityBar({
         onClick={onToggleExplorer}
       >
         <Files className="h-5 w-5" />
+      </BarButton>
+      <BarButton
+        label="任务图谱（业务功能 / 执行拓扑）"
+        testId="activity-graph"
+        active={graphOpen}
+        onClick={onOpenGraph}
+      >
+        <Network className="h-5 w-5" />
       </BarButton>
       <div className="mt-auto flex flex-col items-center gap-1">
         <BarButton

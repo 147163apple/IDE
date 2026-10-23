@@ -11,6 +11,7 @@ import type {
   WorkerLogPayload,
 } from "@/lib/ipc/frames";
 import type { ChatEvent } from "@/lib/chat-events";
+import type { TaskGraphUpdatedPayload } from "@/lib/ipc/frames";
 
 /**
  * Daemon WebSocket 实时流（Track C）。
@@ -60,6 +61,11 @@ export interface UseDaemonStreamOptions {
   onStreamError?: (message: string) => void;
   onChatEvent?: (event: ChatEvent) => void;
   onEvidenceStatus?: (payload: EvidenceStatusChangedPayload) => void;
+  /**
+   * TASK-C.7 §3.3：Task Graph 全量快照推送。
+   * Daemon 是唯一权威，前端只按帧覆盖本地视图，不自行推导节点状态。
+   */
+  onTaskGraphUpdate?: (payload: TaskGraphUpdatedPayload) => void;
 }
 
 export interface DaemonStreamState {
@@ -171,6 +177,14 @@ export function useDaemonStream(
         case "CHAT_EVENT": {
           const payload = asPayload<ChatEvent>(frame);
           if (payload) handlersRef.current.onChatEvent?.(payload);
+          return;
+        }
+        case "TASK_GRAPH_UPDATED": {
+          const payload = asPayload<TaskGraphUpdatedPayload>(frame);
+          // 乱序保护由消费方按 revision 判断；这里只做形状守卫
+          if (payload?.graph) {
+            handlersRef.current.onTaskGraphUpdate?.(payload);
+          }
           return;
         }
         case "ERROR": {

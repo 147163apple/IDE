@@ -80,6 +80,21 @@ const LINE_ALLOWLIST: Array<{
     pattern: /SGR\.exec\(input\)/,
     reason: "RegExp.prototype.exec，非子进程调用",
   },
+  {
+    file: "daemon/supervisor/demo/demo-generator.ts",
+    pattern: /\/\^#\\s\+\(\.\+\)\$\/\.exec\(line\)/,
+    reason: "RegExp.prototype.exec，Markdown H1 解析（TASK-S.4）",
+  },
+  {
+    file: "daemon/supervisor/demo/demo-generator.ts",
+    pattern: /\/\^##\\s\+\(\.\+\)\$\/\.exec\(line\)/,
+    reason: "RegExp.prototype.exec，Markdown H2 解析（TASK-S.4）",
+  },
+  {
+    file: "daemon/supervisor/demo/demo-generator.ts",
+    pattern: /\/\^\\s\*\[-\*\]\\s\+\(\.\+\)\$\/\.exec\(line\)/,
+    reason: "RegExp.prototype.exec，Markdown 列表解析（TASK-S.4）",
+  },
 ];
 
 /** 明确的进程启动 API（排除 xxx.spawn( 这类同名方法） */

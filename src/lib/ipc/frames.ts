@@ -22,9 +22,21 @@
  * `Authorization: Bearer`），query 参数携带 Token 又会泄漏进 URL 日志，
  * 因此鉴权统一为「连接建立后的第一帧 AUTH 消息」：服务端校验失败立即以
  * WS_CLOSE_UNAUTHORIZED（4401）断开，超时未鉴权同样断开。
+ *
+ * v1.4 变更（TASK-C.7 / 架构 §3.3）：
+ * - 新增 `TASK_GRAPH_UPDATED` 广播帧：载荷为 Daemon 独占维护的
+ *   `TaskGraph` 全量快照 + 变更节点 + 进度百分比。前端不读本地 JSON，
+ *   只按此帧做视图映射与点亮动效。
+ *
+ * v1.5 变更（TASK-S.4 / TASK-S.5 / 架构 §6.1）：
+ * - 新增 `DEMO_PREVIEW_STATUS`：Demo 预览服务生命周期广播；
+ * - 新增 `DISPUTE_REPORT_READY`：质疑自查报告摘要广播。
  */
 
 import type { PresentationState } from "../state/presentation-state";
+import type { TaskGraphUpdatedPayload } from "../graph/task-graph";
+
+export type { TaskGraphUpdatedPayload };
 
 /** 规范 §6.1 帧类型字典（15 类规范帧 + 2 类历史扩展帧） */
 export type IpcFrameType =
@@ -44,6 +56,8 @@ export type IpcFrameType =
   | "TERMINAL_STREAM"
   // ---- v1.6.1 §6.1 / §6.3.1 新增的全量状态快照广播（TASK-D.3） ----
   | "STATE_CHANGED"
+  // ---- v1.6.1 §3.3 Task Graph 全量快照广播（TASK-C.7） ----
+  | "TASK_GRAPH_UPDATED"
   // ---- v1.6.1 §6.1 Demo 预览生命周期广播（TASK-S.4） ----
   | "DEMO_PREVIEW_STATUS"
   // ---- v1.6.1 §6.1 质疑自查报告广播（TASK-S.5） ----
@@ -256,6 +270,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "EVIDENCE_STATUS_CHANGED",
   "TERMINAL_STREAM",
   "STATE_CHANGED",
+  "TASK_GRAPH_UPDATED",
   "DEMO_PREVIEW_STATUS",
   "DISPUTE_REPORT_READY",
   "WORKER_LOG",
@@ -366,6 +381,15 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     spec: "v1.2.1",
     maxPayloadBytes: MAX_FRAME_BYTES,
     description: "会话消息事件（S.x/C.x 任务落地语义）",
+  },
+  {
+    type: "TASK_GRAPH_UPDATED",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.1",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "Task Graph 全量快照广播：七态节点、变更指纹与进度百分比（TASK-C.7 §3.3）",
   },
   {
     type: "SUPERVISOR_SUGGESTION",

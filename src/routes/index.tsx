@@ -40,6 +40,7 @@ import {
   fetchEvidence,
   fetchHealth,
   fetchSettings,
+  fetchTaskGraph,
   generateSupervisorDraft,
   listContracts,
   loadConnection,
@@ -82,6 +83,13 @@ import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
 import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
 import { SettingsTab } from "@/components/settings/SettingsTab";
+import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
+import { applyTaskGraphFrame } from "@/components/graph/graph-view-model";
+import {
+  FileTreeSpecsSection,
+  type SpecAsset,
+} from "@/components/FileTreeSpecsSection";
+import type { TaskGraph } from "@/lib/graph/task-graph";
 import {
   shouldConfirmAdmission,
   seedDraftForm,
@@ -104,6 +112,7 @@ import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
   EvidenceReadyPayload,
+  TaskGraphUpdatedPayload,
 } from "@/lib/ipc/frames";
 
 export const Route = createFileRoute("/")({
@@ -148,6 +157,16 @@ function Console() {
   const [query, setQuery] = useState("");
   const [showCycles, setShowCycles] = useState(false);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
+
+  /**
+   * Task Graph 权威快照（TASK-C.7）。
+   * 首屏 GET 一次，之后全部由 `TASK_GRAPH_UPDATED` 帧覆盖；
+   * 页面不读 `.stagent/specs/task_graph.json`，也不自行推导节点状态。
+   */
+  const [taskGraph, setTaskGraph] = useState<TaskGraph | null>(null);
+  const [taskGraphLoading, setTaskGraphLoading] = useState(false);
+  const [taskGraphError, setTaskGraphError] = useState<string | null>(null);
+  const [specsOpen, setSpecsOpen] = useState(true);
 
   const [diff, setDiff] = useState<{ patch: string; stat: string } | null>(
     null,
@@ -204,6 +223,88 @@ function Console() {
     () => contracts.find((c) => c.contract_id === selectedId) ?? null,
     [contracts, selectedId],
   );
+
+  /** 架构图里的真实文件路径（仓库相对），用于判断 Demo 资产是否已生成 */
+  const repoRelativePaths = useMemo(() => {
+    const paths = new Set<string>();
+    for (const node of graph?.graph.nodes ?? []) {
+      const relative =
+        repoRoot && node.filePath.startsWith(repoRoot + "/")
+          ? node.filePath.slice(repoRoot.length + 1)
+          : node.filePath;
+      paths.add(relative);
+    }
+    return paths;
+  }, [graph, repoRoot]);
+
+  /**
+   * 左栏【规范与资产】的数据。只列真实存在或真实缺失的东西：
+   * 需求标题来自合同、合同路径来自 `.stagent/contracts`，
+   * Demo 只在文件树里真出现时才标「就绪」。
+   */
+  const specAssets = useMemo<SpecAsset[]>(() => {
+    if (!selected) return [];
+    const assets: SpecAsset[] = [
+      {
+        id: "requirement",
+        kind: "requirement",
+        label: selected.intent.title,
+        status: "READY",
+        hint: `${selected.intent.acceptance_criteria.length} 条验收标准 · ${selected.intent.risk_level} 风险`,
+      },
+      {
+        id: "contract",
+        kind: "contract",
+        label: `合同 ${selected.contract_id.slice(-8)}.json`,
+        path: `.stagent/contracts/${selected.contract_id}.json`,
+        status: "READY",
+        hint: `${selected.lifecycle_state} · rev ${selected.contract_revision}`,
+      },
+    ];
+
+    const demoCandidates = [
+      "demo/index.html",
+      "prototype/index.html",
+      ".stagent/demo/index.html",
+    ];
+    const demoPath = demoCandidates.find((path) => repoRelativePaths.has(path));
+    assets.push(
+      demoPath
+        ? {
+            id: "demo",
+            kind: "demo",
+            label: demoPath.split("/").pop() ?? demoPath,
+            path: demoPath,
+            status: "READY" as const,
+            hint: demoPath,
+          }
+        : {
+            id: "demo",
+            kind: "demo",
+            label: "Demo 原型",
+            status: "MISSING" as const,
+            hint: "尚未生成原型；生成后会自动出现在这里",
+          },
+    );
+    return assets;
+  }, [selected, repoRelativePaths]);
+
+  /** 本轮生成进度：只认当前合同自己的图，别把 A 的进度显示在 B 上 */
+  const specsGeneration = useMemo(() => {
+    if (
+      !taskGraph ||
+      !selected ||
+      taskGraph.contract_id !== selected.contract_id
+    ) {
+      return null;
+    }
+    return {
+      percent: taskGraph.progress.percent,
+      illuminated: taskGraph.progress.illuminated,
+      total: taskGraph.progress.total,
+      updatedAt: taskGraph.updated_at.slice(11, 19),
+    };
+  }, [taskGraph, selected]);
 
   const matches = useMemo(() => {
     if (!graph || !query.trim()) return 0;
@@ -443,6 +544,13 @@ function Console() {
           // 证据拉取失败不阻断：用户仍可手动执行验证
         });
     },
+    onTaskGraphUpdate: (p: TaskGraphUpdatedPayload) => {
+      // 帧按合同隔离：正在看 B 时收到 A 的快照，不覆盖当前视图
+      if (selectedId !== null && p.contract_id !== selectedId) return;
+      setTaskGraph((prev) => applyTaskGraphFrame(prev, p));
+      setTaskGraphError(null);
+      setTaskGraphLoading(false);
+    },
   });
 
   const selectedLogs = useMemo(
@@ -528,6 +636,45 @@ function Console() {
       // 架构图失败不阻断主流程
     }
   }, [conn]);
+
+  /**
+   * 拉取 Task Graph 权威快照。切合同立即重拉：图谱属于合同，
+   * 把 A 的图挂在 B 的页面上比空态更危险。
+   */
+  const loadTaskGraph = useCallback(
+    async (contractId?: string) => {
+      setTaskGraphLoading(true);
+      setTaskGraphError(null);
+      try {
+        setTaskGraph(await fetchTaskGraph(conn, contractId));
+      } catch (err) {
+        setTaskGraphError((err as Error).message);
+      } finally {
+        setTaskGraphLoading(false);
+      }
+    },
+    [conn],
+  );
+
+  // 合同切换/首次连上时拉一次图谱；后续靠 TASK_GRAPH_UPDATED 帧
+  useEffect(() => {
+    if (!connected) return;
+    void loadTaskGraph(selectedId ?? undefined);
+  }, [connected, loadTaskGraph, selectedId]);
+
+  /**
+   * 文件树跟随真实变更：Task Graph 每次更新都意味着 Worktree 里发生了
+   * 写入/验证，重新拉一次架构图，左栏文件树与【规范与资产】的 Demo 条目
+   * 就会随真实文件出现。`lastTreeSync` 防止"刷新文件树 → 触发渲染 → 再刷新"
+   * 的循环。
+   */
+  const lastTreeSync = useRef<string | null>(null);
+  useEffect(() => {
+    if (!connected || !taskGraph || !graph) return;
+    if (lastTreeSync.current === taskGraph.updated_at) return;
+    lastTreeSync.current = taskGraph.updated_at;
+    void loadArchGraph();
+  }, [connected, taskGraph, graph, loadArchGraph]);
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -630,6 +777,15 @@ function Console() {
         contract={workspaceContract}
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
+        specsSection={
+          <FileTreeSpecsSection
+            assets={specAssets}
+            open={specsOpen}
+            onToggle={() => setSpecsOpen((v) => !v)}
+            onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
+            generation={specsGeneration}
+          />
+        }
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard
@@ -751,6 +907,18 @@ function Console() {
             />
           );
         }}
+        graphContent={
+          /*
+            Task Graph Tab（TASK-C.7）：业务功能导图与执行 DAG 双视图。
+            数据全部来自 Daemon 快照：首屏 GET + TASK_GRAPH_UPDATED 帧。
+          */
+          <TaskGraphPanel
+            graph={taskGraph}
+            loading={taskGraphLoading}
+            error={taskGraphError}
+            onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
+          />
+        }
         middleBanner={
           selected && staleContracts.has(selected.contract_id) ? (
             <div
