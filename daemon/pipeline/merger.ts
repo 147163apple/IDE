@@ -246,9 +246,7 @@ export async function assertWorktreeUntrackedScope(options: {
     .map((v) => v.path)
     .join(", ");
   const more =
-    report.violations.length > 5
-      ? ` 等 ${report.violations.length} 处`
-      : "";
+    report.violations.length > 5 ? ` 等 ${report.violations.length} 处` : "";
   throw new MergeGateError(
     E_OUT_OF_SCOPE_UNTRACKED,
     `${describeUntrackedViolations(report)}（违规清单：${list}${more}）`,

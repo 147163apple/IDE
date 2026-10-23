@@ -1420,9 +1420,7 @@ export class StagentDaemon {
           });
           return;
         }
-        const contract = this.orchestrator
-          .getStore()
-          .get(snapshot.contract_id);
+        const contract = this.orchestrator.getStore().get(snapshot.contract_id);
         if (!contract) {
           this.sendJson(res, 409, {
             error: "contract_not_found",
@@ -1574,11 +1572,9 @@ export class StagentDaemon {
 
       this.sendJson(res, 404, { error: "Not found" });
     } catch (err) {
-
       this.sendActionError(res, err);
     }
   }
-
 
   /**
    * `POST /api/supervisor/dispute` —— 质疑自查（TASK-S.5 / 架构 §5.7）。

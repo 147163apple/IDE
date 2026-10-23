@@ -35,9 +35,7 @@ export const E_OUT_OF_SCOPE_UNTRACKED =
  * - `PRE_MERGE`：合并核销前（TASK-D.2b，覆盖证据生成后新增的文件）
  */
 export type UntrackedScopePhase =
-  | "PRE_EXECUTION"
-  | "POST_VERIFICATION"
-  | "PRE_MERGE";
+  "PRE_EXECUTION" | "POST_VERIFICATION" | "PRE_MERGE";
 
 export interface UntrackedViolation {
   /** Worktree 相对路径 */
