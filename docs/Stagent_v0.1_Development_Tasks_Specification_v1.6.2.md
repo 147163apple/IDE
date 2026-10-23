@@ -15,12 +15,13 @@
 > 12. **状态回写（2026-10-24 · S.6 合入）**：`TASK-S.6` 由 `[NEW_TASK]` 更新为 `[COMPLETED]`（merge `6415fbd`，功能 `bbab79e`；合后四件套 **1155 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：右侧确定性分流（质疑/Fast Path/大事草案）、`POST /api/supervisor/journey`、确认原型真建全灰 TaskGraph、需求说明可感知刷新、视口建议切换。**降级登记 S.6b**：`REAL_PLAYTEST` 真预览 URL 挂中栏/外链未做，不阻塞 1–4。
 > 13. **状态回写（2026-10-24 · S.6b 合入）**：`TASK-S.6b`（原 S.6 降级项）标 **[COMPLETED]**（merge `024d2b8`，功能 `613ff51`；合后四件套 **1165 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：真机预览 4200–4210 + stub/attach、Studio「真机试玩」视口 iframe/外链、旅程 `REAL_PLAYTEST`→`START_REAL_PLAYTEST`、Origin 防线。不改架构规范；未做 W.5b/c / S.3 HUD。
 > 14. **状态回写（2026-10-24 · D.1b 立卡）**：新增 **`TASK-D.1b` 一键打开项目（Daemon 托管控制台 + open CLI）**（`[NEW_TASK]`）。前置 `TASK-D.1`；目标 `stagent open <路径>` → 单浏览器窗口工作台已连上，无需第二终端/手拷 Token。**不改**架构规范 v1.6.1、不改产品代码；不推翻 D.1 鉴权；不含 Electron/Tauri/系统协议。
+> 15. **状态回写（2026-10-24 · D.1b 合入）**：`TASK-D.1b` 由 `[NEW_TASK]` 更新为 `[COMPLETED]`（merge `d5b35e0`，功能 `946e9fc`；合后四件套 **1188 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：`stagent open <路径>` 复用/启动 Daemon、同源托管 `dist/public`、自动打开 `#token=&base=` 单窗口；无钥匙拒连；`E_WORKSPACE_LOCKED` 白话；Demo 仍独立 Origin。不改架构规范；不含 Electron/Tauri/系统协议。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`a9066dd`。测试基线以合后四件套为准（1122 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`d5b35e0`（含 D.1b merge）。测试基线以合后四件套为准（1188 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -28,7 +29,7 @@
 | **TASK-0.2b** | Schema v1.2.0 增量演进、双状态机联动与存量迁移 | 数据模型 | **[COMPLETED]**（提交 `52c807c` 锁定基线；当前物理基线已交付） | P0 契约底座 | • 升级 `SoftwareContractV12` 与 `EvidenceBundleV11` 完整字段<br>• 实现 `validateStatePair`、`validateTransition` 与原子落盘<br>• 承接历史合同迁移与备份机制，10 错误码映射通过 |
 | **TASK-0.2c** | Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 | 数据模型与状态机 | **[COMPLETED]**（提交 `fb2cc67`，经 `cd7e7e0` 合入 main；tsc 0 错 / eslint 0 错；新增 48 项单测、迁移矩阵 +7，全量 903 例） | P0.2c 契约与状态机演进 (C-01) | • 认领 C-01 整改项，代码落地第一优先级<br>• 升级 `SoftwareContractV13` 与 Zod Schema，增设 `approval` 与 `authorization.git`<br>• 补齐 Fast Path 严格流转边 (`DRAFT -> PREPARING -> EXECUTING`，严禁直跳)<br>• 补齐外部改码级联降级边 (`AUDITED -> VERIFYING`，使 Evidence 失效并回退重验)<br>• 补齐恢复探测自愈边 (`PENDING_RESUME -> PREPARING`，探测 Worktree 丢失自愈重建)<br>• 升级 `migrateContractToV13`，执行态族白名单回填 (`user:legacy`)，草案/待审安全保持，零静默授权<br>• 新增 `tests/unit/contract-schema-v13.test.ts`、9 态 lifecycle 迁移矩阵覆盖及 15 态展示投影测试 |
 | **TASK-D.1** | CLI 引导入口与安全 WebSocket 通信桥 | 通信核销 | **[COMPLETED]**（2026-10-20；48 文件 / 377 用例全绿，含首帧 50ms 切断、Token 轮换、Origin/Host/2MB/速率/心跳断言） | P1 通信鉴权 | • 提前至 Sprint 1 解除 DAG 死锁<br>• CLI `stagent start`、动态端口 (3001~3010)、PID 锁与 Token 轮换 (G-13)<br>• 检测到存活 PID 锁时抛出 `E_WORKSPACE_LOCKED` 拒绝重复绑定工作区<br>• 首帧 AUTH 握手鉴权、非法以 `4401` 关闭<br>• 规范帧字典（同时保留 `EVIDENCE_READY`、`EVIDENCE_STATUS_CHANGED`、`TERMINAL_STREAM`）<br>• 补齐 Origin 校验、帧大小（≤2MB）与速率限制、失联 3 次心跳遮罩 |
-| **TASK-D.1b** | 一键打开项目（Daemon 托管控制台 + open CLI） | 通信核销 / DX | **[NEW_TASK]** | P1 通信鉴权（DX 增量） | • `stagent open <路径>` → 单浏览器窗口工作台已连上，无需第二终端/手拷 Token<br>• Daemon 托管 `dist/public` 同源控制台；自动 open `#token=` fragment；可选最近项目<br>• Demo 仍独立 Origin（4100~4110）；不推翻 D.1 鉴权；不含 Electron/Tauri/系统协议 |
+| **TASK-D.1b** | 一键打开项目（Daemon 托管控制台 + open CLI） | 通信核销 / DX | **[COMPLETED]**（2026-10-24 合入 main，merge `d5b35e0`；功能 `946e9fc`；合后四件套 1188 passed / 6 skipped） | P1 通信鉴权（DX 增量） | • `stagent open <路径>` → 单浏览器窗口工作台已连上，无需第二终端/手拷 Token<br>• Daemon 托管 `dist/public` 同源控制台；自动 open `#token=` fragment；`#base=` 避免死认 3001<br>• Demo 仍独立 Origin（4100~4110）；不推翻 D.1 鉴权；不含 Electron/Tauri/系统协议 |
 | **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[COMPLETED]**（2026-10-23 合入 main，merge `9a19f4d`；含 `c2fcb8a` + `83ec516`；合后四件套 1084 passed / 6 skipped） | P3.7 状态投影与防死锁 | • `presentation_state` 落盘 `.stagent/state.json`（与 contracts 并列，不写回合同）+ Daemon `STATE_CHANGED` 广播与重连回放<br>• D-1~D-5 看门狗引擎（可注入时钟 + `sweep`）及生产接线：D-1 abort 超时、D-2 租约心跳、D-3 `PENDING_RESUME` 自愈、D-4 merge 409 二选一、D-5 Gateway 分层超时<br>• 新增/更新：`presentation-store` / `presentation-projector` / `deadlock-resilience` 与接线、集成测试 |
 | **TASK-A.1** | Git Worktree 物理隔离与生命周期管理 | 执行内核 | **[COMPLETED]** | P1 本地 Git | Worktree 创建、销毁、分支保护与 `.git/info/exclude` 隔离就绪。 |
 | **TASK-A.2** | Scoped MCP 工具网关与路径沙箱校验 | 执行内核 | **[COMPLETED]** | P2 安全网关 | 路径防逃逸、Scope 读写授权、禁区强拦截与环境脱敏就绪。 |
@@ -77,7 +78,7 @@
 ```
 TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ──► TASK-D.1 ──► TASK-D.3 (15状态投影 & 防死锁)
                                                                     │              │
-                                                                    │              ├──► TASK-D.1b (一键打开项目) [NEW]
+                                                                    │              ├──► TASK-D.1b (一键打开项目) [COMPLETED]
                                                                     │              │
                                                                     │              ├──► TASK-C.1 (三栏骨架)
                                                                     │              │      ├──► TASK-C.3 (Monaco 读写)
@@ -293,10 +294,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-#### 【Task D.1b】一键打开项目（Daemon 托管控制台 + open CLI）`[NEW_TASK · 2026-10-24]`
+#### 【Task D.1b】一键打开项目（Daemon 托管控制台 + open CLI）`[COMPLETED · 2026-10-24]`
 * **任务编号**：`TASK-D.1b`
 * **前置依赖**：`TASK-D.1` (COMPLETED)
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，merge `d5b35e0`；分支 `feat/task-d1b-one-click-open` 功能 `946e9fc`。门禁：合后四件套全绿（1188 passed / 6 skipped）；tsc 0 错、eslint 0 errors、build 通过。落地清单：`bin/stagent.ts`（`open` 子命令：复用健康 Daemon / 新启、同源或 Vite+#base=、自动唤起浏览器）、`daemon/console/static-host.ts` + `daemon/server.ts`（同源托管 SPA 仅 `/`/`/index.html`+资产）、`daemon/core/pid-lock.ts` + `src/lib/error-codes.ts`（`E_WORKSPACE_LOCKED` 白话）、`src/lib/daemon-api.ts`（`#token=&base=` 解析与同端口段推断）、`OpenProjectEntry` / README、`scripts/package-dist.mjs` 写入 `dist/public/index.html`。**口径说明**：① 控制台同源托管不改变 D.1 AUTH/fragment/Origin；② Demo 仍 4100~4110 独立 Origin；③ 无 `dist/public` 时回退 Vite 5173 并在 fragment 注入 `base=`。**残余口径差（不阻塞验收）**：最近项目列表未做；不含 Electron/Tauri/系统协议）
 * **对照痛点**：当前启动常需第二终端 + 手拷 Token；目标体验接近 Cursor「打开项目」——一条命令、单浏览器窗口即可聊。
 * **v0.1 范围**：`stagent open <路径>` → Daemon 托管 `dist/public` 同源控制台 + 自动唤起浏览器 `#token=` fragment → 工作台已连上；可选最近项目列表；Demo 仍独立 Origin（4100~4110），不与控制台同源。底座复用 D.1（端口/PID 锁/Token/AUTH/Origin），只补 DX 粘合、不重砌鉴权。
 * **明确不包含**：
