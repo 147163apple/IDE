@@ -28,8 +28,16 @@ import {
 export const E_OUT_OF_SCOPE_UNTRACKED =
   "E_OUT_OF_SCOPE_UNTRACKED" satisfies ErrorCode;
 
-/** 检测点：执行前（提交前捕获）与验收后（验证命令副作用捕获） */
-export type UntrackedScopePhase = "PRE_EXECUTION" | "POST_VERIFICATION";
+/**
+ * 检测点：
+ * - `PRE_EXECUTION`：执行前（提交前捕获，TASK-W.2b）
+ * - `POST_VERIFICATION`：验收后（验证命令副作用，TASK-W.2b）
+ * - `PRE_MERGE`：合并核销前（TASK-D.2b，覆盖证据生成后新增的文件）
+ */
+export type UntrackedScopePhase =
+  | "PRE_EXECUTION"
+  | "POST_VERIFICATION"
+  | "PRE_MERGE";
 
 export interface UntrackedViolation {
   /** Worktree 相对路径 */
@@ -207,11 +215,16 @@ export async function enforceUntrackedScope(options: {
   return auditUntrackedScope(paths, options.scope, options.phase);
 }
 
-/** 面向非技术用户的白话摘要（写入 Evidence.verdict.summary） */
+/** 面向非技术用户的白话摘要（写入 Evidence.verdict.summary / 合并门禁报错） */
 export function describeUntrackedViolations(
   report: UntrackedScopeReport,
 ): string {
-  const head = report.phase === "PRE_EXECUTION" ? "执行前检查" : "验收前检查";
+  const head =
+    report.phase === "PRE_EXECUTION"
+      ? "执行前检查"
+      : report.phase === "PRE_MERGE"
+        ? "合并前检查"
+        : "验收前检查";
   const list = report.violations
     .slice(0, 5)
     .map((v) => v.path)
