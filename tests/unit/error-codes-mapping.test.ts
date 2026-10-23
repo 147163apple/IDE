@@ -16,13 +16,15 @@ import {
 /**
  * TASK-0.2b / ErrorCode Catalog 完备性（G-15）。
  *
- * 判据：A §9.3 的 13 个基础 error_code + W.3 增补 E_PORT_CONFLICT = 14 个 → 9 个 reason_code，正反向均可闭环。
+ * 判据：A §9.3 的 13 个基础 error_code + W.3 增补 E_PORT_CONFLICT
+ * + W.2b 增补 E_OUT_OF_SCOPE_UNTRACKED = 15 个 → 9 个 reason_code，正反向均可闭环。
  */
 
 /** A §9.3 表格的逐行期望值（手工登记，不以实现反推） */
 const EXPECTED_MAPPING: Record<ErrorCode, string> = {
   E_UNSAFE_EXECUTION: "UNSAFE_EXECUTION",
   E_OUT_OF_SCOPE: "SCOPE_VIOLATION",
+  E_OUT_OF_SCOPE_UNTRACKED: "SCOPE_VIOLATION",
   PATH_TRAVERSAL_DETECTED: "SCOPE_VIOLATION",
   E_FORBIDDEN_PATH: "SCOPE_VIOLATION",
   E_BUDGET_EXCEEDED: "BUDGET_EXHAUSTED",
@@ -37,10 +39,10 @@ const EXPECTED_MAPPING: Record<ErrorCode, string> = {
   E_PORT_CONFLICT: "UNSAFE_EXECUTION",
 };
 
-describe("目录基数：14 个 error_code → 9 个 reason_code", () => {
-  it("恰好 14 个错误码且无重复", () => {
-    expect(ERROR_CODES).toHaveLength(14);
-    expect(new Set(ERROR_CODES).size).toBe(14);
+describe("目录基数：15 个 error_code → 9 个 reason_code", () => {
+  it("恰好 15 个错误码且无重复", () => {
+    expect(ERROR_CODES).toHaveLength(15);
+    expect(new Set(ERROR_CODES).size).toBe(15);
   });
 
   it("恰好 9 个原因码，且与 evidence.schema 的 reasonCodeSchema 同集合", () => {
@@ -72,10 +74,11 @@ describe("正向映射：error_code → reason_code", () => {
     expect(mapErrorToReasonCode(code)).toBe(EXPECTED_MAPPING[code]);
   });
 
-  it("多对一归并正确：SCOPE_VIOLATION 由 3 个错误码共同产出", () => {
+  it("多对一归并正确：SCOPE_VIOLATION 由 4 个错误码共同产出", () => {
     expect(errorCodesForReasonCode("SCOPE_VIOLATION").sort()).toEqual([
       "E_FORBIDDEN_PATH",
       "E_OUT_OF_SCOPE",
+      "E_OUT_OF_SCOPE_UNTRACKED",
       "PATH_TRAVERSAL_DETECTED",
     ]);
   });
@@ -106,11 +109,11 @@ describe("反向映射：reason_code → error_code[]（一对多）", () => {
     }
   });
 
-  it("反向映射覆盖全部 14 个错误码，无遗漏", () => {
+  it("反向映射覆盖全部 15 个错误码，无遗漏", () => {
     const covered = new Set(
       REASON_CODES.flatMap((reason) => errorCodesForReasonCode(reason)),
     );
-    expect(covered.size).toBe(14);
+    expect(covered.size).toBe(15);
     for (const code of ERROR_CODES) {
       expect(covered.has(code), `uncovered error_code: ${code}`).toBe(true);
     }

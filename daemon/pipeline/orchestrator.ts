@@ -49,6 +49,14 @@ import {
   type WorktreeInfo,
 } from "../git/worktree-manager";
 import {
+  E_OUT_OF_SCOPE_UNTRACKED,
+  UntrackedScopeViolationError,
+  describeUntrackedViolations,
+  enforceUntrackedScope,
+  type UntrackedScopePhase,
+  type UntrackedScopeReport,
+} from "./untracked-scope-guard";
+import {
   appendSilentContractRecord,
   intersectWithProtection,
   loadRoundState,
@@ -77,6 +85,16 @@ export interface ExecutionOutcome {
   contract: SoftwareContract;
   evidence: EvidenceBundle;
   worktree: WorktreeInfo;
+}
+
+/** 单条验证命令的执行事实（写入 Evidence 前的中间形态，TASK-W.2b 复用） */
+interface VerificationResultInput {
+  alias: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  passed: boolean;
 }
 
 /** TASK-D.2：审批前的准入裁决（合同 Scope × 保护清单） */
@@ -495,17 +513,20 @@ export class ContractOrchestrator {
       worktreePath,
     );
 
+    // TASK-W.2b：执行前未跟踪文件守卫。
+    // 必须早于 commitWorktree——`git add -A` 一旦把越界文件做进提交，
+    // 它们就变成已跟踪文件，`git diff --name-only` 再也区分不出来。
+    await this.assertUntrackedScope({
+      contract: current,
+      worktreePath,
+      phase: "PRE_EXECUTION",
+      costMonitor,
+    });
+
     // 规范 §5.2：Evidence 必须对应真实任务提交；合并前将 Worktree 改动固化到任务分支
     await this.commitWorktree(worktreePath, contractId);
 
-    const verificationResults: Array<{
-      alias: string;
-      exitCode: number;
-      stdout: string;
-      stderr: string;
-      durationMs: number;
-      passed: boolean;
-    }> = [];
+    const verificationResults: VerificationResultInput[] = [];
     const portConflictAliases: string[] = [];
     const threatBlockedAliases: string[] = [];
     // W.4：执行前信任校验；真实 Worktree 带 .git 文件，视为已信任仓库
@@ -578,6 +599,18 @@ export class ContractOrchestrator {
       ["status", "--porcelain", "-uall"],
       worktreePath,
     );
+
+    // TASK-W.2b：验收前再查一次未跟踪文件。
+    // 验证命令（测试脚本、构建脚本）会绕过网关直接落盘，这是网关拦不到的
+    // 第二条通道；命中越界同样阻断，绝不产出 PASSED 证据。
+    const postVerifyScope = await this.assertUntrackedScope({
+      contract: current,
+      worktreePath,
+      phase: "POST_VERIFICATION",
+      costMonitor,
+      verificationResults,
+    });
+
     const worktreeChanged = [
       ...parsePorcelainPaths(preCommitStatus.stdout),
       ...parsePorcelainPaths(postVerifyStatus.stdout),
@@ -649,7 +682,8 @@ export class ContractOrchestrator {
                 ? `All ${verificationResults.length} verification command(s) passed`
                 : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
         verificationResults,
-        scopePassed: true,
+        // 由 TASK-W.2b 的未跟踪文件审计派生，不再写死 true
+        scopePassed: postVerifyScope.passed,
         forbiddenViolations: [],
         modifiedFiles,
         testsModified,
@@ -889,20 +923,65 @@ export class ContractOrchestrator {
     };
   }
 
+  /**
+   * TASK-W.2b：未跟踪文件 Scope 守卫。
+   *
+   * 命中越界时的处置顺序（三者缺一不可）：
+   * 1. 先写 BLOCKED 证据——留下可追溯的 `scope_audit` 与违规清单，
+   *    否则「阻断」只是一次异常，事后无法解释为什么没合入；
+   * 2. 合同回退 `EXECUTING`——保留 Worktree 现场供用户清理或升版重批，
+   *    不把合同钉死在 `VERIFYING`（那是死锁，见 §6.4 自愈目录）；
+   * 3. 抛 `E_OUT_OF_SCOPE_UNTRACKED`——调用方据此终止本轮，不再产出 PASSED。
+   *
+   * 未抛错即代表本轮未跟踪文件全部落在合同授权内。
+   */
+  private async assertUntrackedScope(options: {
+    contract: SoftwareContract;
+    worktreePath: string;
+    phase: UntrackedScopePhase;
+    costMonitor?: CostMonitor | undefined;
+    verificationResults?: VerificationResultInput[] | undefined;
+  }): Promise<UntrackedScopeReport> {
+    const report = await enforceUntrackedScope({
+      worktreePath: options.worktreePath,
+      scope: options.contract.authorization.file_system_scope,
+      phase: options.phase,
+    });
+    if (report.passed) return report;
+
+    // 复用 forbidden_violations 通道承载违规清单：它是证据包里唯一
+    // 既能让 deriveCanMerge 归零、又能逐条追溯的字符串数组。
+    const violations = report.violations.map((v) => `untracked:${v.path}`);
+    await this.writeEvidence(
+      options.contract,
+      {
+        status: "BLOCKED",
+        reasonCode: "SCOPE_VIOLATION",
+        summary: `[${E_OUT_OF_SCOPE_UNTRACKED}] ${describeUntrackedViolations(report)}`,
+        verificationResults: options.verificationResults ?? [],
+        scopePassed: false,
+        forbiddenViolations: violations,
+        modifiedFiles: report.violations.map((v) => v.path),
+      },
+      options.costMonitor,
+      options.worktreePath,
+    );
+
+    this.store.transition({
+      contractId: options.contract.contract_id,
+      lifecycleState: "EXECUTING",
+    });
+
+    throw new UntrackedScopeViolationError(report);
+  }
+
   private async writeEvidence(
     contract: SoftwareContract,
     input: {
       status: EvidenceBundle["verdict"]["status"];
       reasonCode?: EvidenceBundle["verdict"]["reason_code"];
       summary: string;
-      verificationResults: Array<{
-        alias: string;
-        exitCode: number;
-        stdout: string;
-        stderr: string;
-        durationMs: number;
-        passed: boolean;
-      }>;
+      verificationResults: VerificationResultInput[];
       scopePassed: boolean;
       forbiddenViolations: string[];
       modifiedFiles: string[];

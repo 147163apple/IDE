@@ -20,6 +20,7 @@ import type { ReasonCode } from "./evidence.schema";
 export const ERROR_CODES = [
   "E_UNSAFE_EXECUTION",
   "E_OUT_OF_SCOPE",
+  "E_OUT_OF_SCOPE_UNTRACKED",
   "PATH_TRAVERSAL_DETECTED",
   "E_FORBIDDEN_PATH",
   "E_BUDGET_EXCEEDED",
@@ -72,6 +73,18 @@ export interface ErrorCodeSpec {
   readonly task: string;
   /** 触发条件说明 */
   readonly condition: string;
+  /**
+   * 面向非技术用户的白话解释（规范 §9.3 第 3 列）。
+   * 缺省表示尚未登记白话文案，UI 侧回退到 `condition`。
+   */
+  readonly plain_message?: string;
+  /**
+   * 控制面 REST 响应的 HTTP 状态码。
+   * 缺省表示该码当前不出现在 HTTP 面，仅用于内部证据归因与终端提示。
+   * 语义边界：400 = 请求本身不合法（路径逃逸、载荷畸形）；
+   * 403 = 请求合法但调用方无权触及该路径（越权/越界）。
+   */
+  readonly http_status?: number;
 }
 
 export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
@@ -89,6 +102,20 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     component: "Scoped Gateway",
     task: "TASK-W.2",
     condition: "尝试读写未在合同 writable_paths 授权范围内的文件路径",
+    plain_message:
+      "任务试图改动授权范围之外的文件，已被拦截。这类改动不会合入你的项目。",
+    http_status: 403,
+  },
+  E_OUT_OF_SCOPE_UNTRACKED: {
+    code: "E_OUT_OF_SCOPE_UNTRACKED",
+    reason_code: "SCOPE_VIOLATION",
+    component: "Untracked Scope Guard",
+    task: "TASK-W.2b",
+    condition:
+      "执行前 / 验收时以 `git status --porcelain -uall` 发现 Worktree 内存在合同 writable_paths 之外的未跟踪新增文件",
+    plain_message:
+      "任务在授权范围之外新建了文件（例如绕过了受控写入通道），已阻断本次验收，不会生成可合并的结论。请移除这些文件，或走合同升版重新授权。",
+    http_status: 403,
   },
   PATH_TRAVERSAL_DETECTED: {
     code: "PATH_TRAVERSAL_DETECTED",
@@ -96,6 +123,8 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     component: "Path Resolver",
     task: "TASK-W.2",
     condition: "相对路径解析包含 `..`，试图逃逸至 Worktree 物理根目录之外",
+    plain_message: "任务提交了一个指向项目之外的非法文件路径，已被拒绝。",
+    http_status: 400,
   },
   E_FORBIDDEN_PATH: {
     code: "E_FORBIDDEN_PATH",
@@ -103,6 +132,9 @@ export const ERROR_CODE_CATALOG: Readonly<Record<ErrorCode, ErrorCodeSpec>> = {
     component: "Scoped Gateway",
     task: "TASK-W.2",
     condition: "试图触碰 .git、.stagent、生产凭据等强禁区路径",
+    plain_message:
+      "任务试图触碰密钥、Git 内部数据等不可碰的安全禁区，已被拦截。",
+    http_status: 403,
   },
   E_BUDGET_EXCEEDED: {
     code: "E_BUDGET_EXCEEDED",
@@ -187,6 +219,20 @@ export function isKnownErrorCode(value: string): value is ErrorCode {
 /** 单值正向映射：error_code → reason_code */
 export function mapErrorToReasonCode(code: ErrorCode): ReasonCode {
   return ERROR_CODE_CATALOG[code].reason_code;
+}
+
+/**
+ * 控制面 HTTP 状态映射。未登记的码返回 `undefined`——**不臆造默认值**，
+ * 避免把「内部证据归因码」伪装成可直接对外返回的 HTTP 语义。
+ */
+export function httpStatusForErrorCode(code: ErrorCode): number | undefined {
+  return ERROR_CODE_CATALOG[code].http_status;
+}
+
+/** 面向非技术用户的白话解释；未登记白话文案时回退到技术条件说明 */
+export function plainMessageForErrorCode(code: ErrorCode): string {
+  const spec = ERROR_CODE_CATALOG[code];
+  return spec.plain_message ?? spec.condition;
 }
 
 /**
