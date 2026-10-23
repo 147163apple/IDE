@@ -25,6 +25,16 @@ import {
   demoIframeProps,
   type GeneratedDemo,
 } from "../../daemon/supervisor/demo/types";
+import {
+  IPC_FRAME_TYPES,
+  createFrame,
+  getFrameSpec,
+  type DemoPreviewStatusPayload,
+} from "../../src/lib/ipc/frames";
+import {
+  DEMO_ORIGIN_FORBIDDEN,
+  isDemoPreviewOrigin,
+} from "../../src/lib/ipc/demo-origin";
 
 /**
  * TASK-S.4 / 架构 §4.4（P-16）：Demo 生成器与 Mock 预览服务验收。
@@ -340,5 +350,116 @@ describe("前端嵌入约定：iframe sandbox 唯一事实源", () => {
       sandbox: "allow-scripts",
       referrerPolicy: "no-referrer",
     });
+  });
+});
+
+describe("DEMO_PREVIEW_STATUS 帧与生命周期广播", () => {
+  it("帧已在字典与目录登记，必含 url/port/status/updated_at", () => {
+    expect(IPC_FRAME_TYPES).toContain("DEMO_PREVIEW_STATUS");
+    const spec = getFrameSpec("DEMO_PREVIEW_STATUS");
+    expect(spec.direction).toBe("server->client");
+    expect(spec.requiresAuth).toBe(true);
+    expect(spec.spec).toBe("v1.6.1");
+
+    const payload: DemoPreviewStatusPayload = {
+      url: "http://127.0.0.1:4103/",
+      port: 4103,
+      status: "RUNNING",
+      updated_at: "2026-10-23T05:30:00.000Z",
+    };
+    const frame = createFrame("DEMO_PREVIEW_STATUS", payload);
+    expect(frame.payload?.url).toBe("http://127.0.0.1:4103/");
+    expect(frame.payload?.port).toBe(4103);
+    expect(frame.payload?.status).toBe("RUNNING");
+  });
+
+  it("启动与停止分别广播 RUNNING / STOPPED，且携带真实 URL 与端口", async () => {
+    const root = newRoot();
+    const demoDir = writeDemo(
+      root,
+      buildDemoFromRequirements("# 生命周期\n## 功能\n- 占位"),
+    ).root;
+
+    const events: DemoPreviewStatusPayload[] = [];
+    const server = createDemoPreviewServer({
+      rootDir: demoDir,
+      startPort: 4100,
+      endPort: 4110,
+      onStatusChange: (payload) => events.push(payload),
+    });
+    servers.push(server);
+
+    const handle = await server.start();
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({
+      url: handle.url,
+      port: handle.port,
+      status: "RUNNING",
+    });
+    expect(events[0]?.updated_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    await server.stop();
+    expect(events).toHaveLength(2);
+    expect(events[1]).toMatchObject({
+      url: handle.url,
+      port: handle.port,
+      status: "STOPPED",
+    });
+  });
+
+  it("端口区间耗尽时广播 ERROR，且不给出伪可用地址", async () => {
+    const root = newRoot();
+    const demoDir = writeDemo(
+      root,
+      buildDemoFromRequirements("# 失败\n## 功能\n- 占位"),
+    ).root;
+
+    const blocker = await occupyPort(4199);
+    try {
+      const events: DemoPreviewStatusPayload[] = [];
+      const server = createDemoPreviewServer({
+        rootDir: demoDir,
+        startPort: 4199,
+        endPort: 4199,
+        onStatusChange: (payload) => events.push(payload),
+      });
+      servers.push(server);
+
+      await expect(server.start()).rejects.toThrowError(
+        /E_DEMO_PREVIEW_UNAVAILABLE/,
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0]?.status).toBe("ERROR");
+      expect(events[0]?.url).toBe("");
+      expect(events[0]?.port).toBe(0);
+      expect(events[0]?.message).toContain("no available port");
+    } finally {
+      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+    }
+  });
+});
+
+describe("Daemon Origin 防线：Demo 来源一律 403", () => {
+  it("识别 4100~4110 的回环来源", () => {
+    expect(isDemoPreviewOrigin("http://127.0.0.1:4100")).toBe(true);
+    expect(isDemoPreviewOrigin("http://127.0.0.1:4105")).toBe(true);
+    expect(isDemoPreviewOrigin("http://127.0.0.1:4110/")).toBe(true);
+    expect(isDemoPreviewOrigin("http://localhost:4101")).toBe(true);
+    expect(isDemoPreviewOrigin("http://[::1]:4102")).toBe(true);
+  });
+
+  it("不误伤 Daemon 自身端口、相邻端口与无 Origin 的内部调用", () => {
+    expect(isDemoPreviewOrigin("http://127.0.0.1:3001")).toBe(false);
+    expect(isDemoPreviewOrigin("http://127.0.0.1:4099")).toBe(false);
+    expect(isDemoPreviewOrigin("http://127.0.0.1:4111")).toBe(false);
+    expect(isDemoPreviewOrigin("http://192.168.1.5:4100")).toBe(false);
+    expect(isDemoPreviewOrigin(undefined)).toBe(false);
+    expect(isDemoPreviewOrigin("not-an-origin")).toBe(false);
+  });
+
+  it("sandbox iframe 的不透明源（Origin: null）同样被识别", () => {
+    // sandbox="allow-scripts" 且无 allow-same-origin 时，浏览器发出的 Origin 就是 "null"
+    expect(isDemoPreviewOrigin("null")).toBe(true);
+    expect(DEMO_ORIGIN_FORBIDDEN).toBe("E_DEMO_ORIGIN_FORBIDDEN");
   });
 });

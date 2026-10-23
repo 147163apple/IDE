@@ -19,9 +19,19 @@ import {
   MAX_FRAME_BYTES,
   WS_CLOSE_UNAUTHORIZED,
   type AuthPayload,
+  type DemoPreviewStatusPayload,
   type IpcFrame,
   type IpcFrameType,
 } from "../src/lib/ipc/frames";
+import {
+  DEMO_ORIGIN_FORBIDDEN,
+  isDemoPreviewOrigin,
+} from "../src/lib/ipc/demo-origin";
+import {
+  createDemoPreviewServer,
+  type DemoPreviewServer,
+  type DemoPreviewServerOptions,
+} from "./supervisor/demo/preview-server";
 import {
   createSessionToken,
   clearSessionToken,
@@ -439,6 +449,36 @@ export class StagentDaemon {
     });
   }
 
+  /**
+   * Demo 预览生命周期广播（TASK-S.4 / §6.1）。
+   * 预览服务只负责报告事件，由这里决定广播给已鉴权客户端。
+   */
+  emitDemoPreviewStatus(payload: DemoPreviewStatusPayload): number {
+    return this.broadcast("DEMO_PREVIEW_STATUS", payload);
+  }
+
+  /**
+   * 创建与 Daemon 广播绑定的 Demo 预览服务。
+   *
+   * 生命周期事件自动转成 `DEMO_PREVIEW_STATUS` 帧，前端不必轮询端口；
+   * 调用方仍可挂自己的回调（例如写日志），不会被覆盖。
+   */
+  createDemoPreview(
+    rootDir: string,
+    options: Omit<DemoPreviewServerOptions, "rootDir" | "onStatusChange"> & {
+      onStatusChange?: (payload: DemoPreviewStatusPayload) => void;
+    } = {},
+  ): DemoPreviewServer {
+    return createDemoPreviewServer({
+      ...options,
+      rootDir,
+      onStatusChange: (payload) => {
+        this.emitDemoPreviewStatus(payload);
+        options.onStatusChange?.(payload);
+      },
+    });
+  }
+
   /** Evidence 生成广播：携带结论，供控制台决定是否点亮「核销」 */
   emitEvidenceReady(contractId: string, evidence: EvidenceBundle): number {
     return this.broadcast("EVIDENCE_READY", {
@@ -474,6 +514,11 @@ export class StagentDaemon {
 
     // Origin 校验仍在 Upgrade 阶段硬阻断（防跨站 WS 劫持）
     const origin = req.headers.origin;
+    // Demo 预览来源额外拦截：sandbox iframe 的 "null" 源与 4100~4110 端口
+    if (isDemoPreviewOrigin(origin)) {
+      this.rejectUpgrade(socket, 403, "Forbidden");
+      return;
+    }
     if (!isLocalOrigin(origin)) {
       this.rejectUpgrade(socket, 403, "Forbidden");
       return;
@@ -1246,6 +1291,17 @@ export class StagentDaemon {
     // Host 头必须是回环地址（DNS Rebinding 防线，与 WS Upgrade 同理）
     if (!isLocalHostAuthority(req.headers.host)) {
       this.sendJson(res, 403, { error: "Forbidden" });
+      return;
+    }
+
+    // TASK-S.4 / §4.4 P-16：Demo 预览来源一律 403，必须放在 CORS 放行之前。
+    // 原因：isLocalOrigin 只校验主机名，会把 http://127.0.0.1:4100 当成本地合法来源，
+    // 一旦先走 CORS 分支，Demo iframe 就拿到了跨源读响应的通行证。
+    if (isDemoPreviewOrigin(req.headers.origin)) {
+      this.sendJson(res, 403, {
+        error: "Forbidden",
+        code: DEMO_ORIGIN_FORBIDDEN,
+      });
       return;
     }
 

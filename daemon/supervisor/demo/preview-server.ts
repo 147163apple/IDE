@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import type { DemoPreviewStatusPayload } from "../../../src/lib/ipc/frames";
 import { findAvailablePort } from "../../core/port-finder";
 import {
   DEMO_ENTRY,
@@ -58,6 +59,13 @@ export interface DemoPreviewServerOptions {
   readonly host?: string;
   readonly startPort?: number;
   readonly endPort?: number;
+  /**
+   * 生命周期回调：Daemon 在此把它转成 `DEMO_PREVIEW_STATUS` 广播。
+   *
+   * 预览服务本身不持有 WebSocket 引用——它只负责"报告自己发生了什么"，
+   * 由控制面决定发给谁。这样测试可以直接断言事件序列，不需要起一整套 WS。
+   */
+  readonly onStatusChange?: (payload: DemoPreviewStatusPayload) => void;
 }
 
 export interface DemoPreviewServer {
@@ -125,6 +133,15 @@ export function createDemoPreviewServer(
 
   let server: http.Server | null = null;
   let current: DemoPreviewHandle | null = null;
+
+  const emitStatus = (
+    payload: Omit<DemoPreviewStatusPayload, "updated_at">,
+  ): void => {
+    options.onStatusChange?.({
+      ...payload,
+      updated_at: new Date().toISOString(),
+    });
+  };
 
   const handler = (
     req: http.IncomingMessage,
@@ -240,6 +257,11 @@ export function createDemoPreviewServer(
             url: `http://${host}:${chosen}/`,
             origin: `http://${host}:${chosen}`,
           };
+          emitStatus({
+            url: current.url,
+            port: current.port,
+            status: "RUNNING",
+          });
           return current;
         } catch (err) {
           lastError = err;
@@ -248,18 +270,28 @@ export function createDemoPreviewServer(
         }
       }
 
-      throw new Error(
-        `[E_DEMO_PREVIEW_UNAVAILABLE] no available port in ${startPort}-${endPort}: ` +
-          `${lastError instanceof Error ? lastError.message : "range exhausted"}`,
-      );
+      const message = `[E_DEMO_PREVIEW_UNAVAILABLE] no available port in ${startPort}-${endPort}: ${
+        lastError instanceof Error ? lastError.message : "range exhausted"
+      }`;
+      // url/port 置空：启动失败时前端不应拿到一个看似可用的地址
+      emitStatus({ url: "", port: 0, status: "ERROR", message });
+      throw new Error(message);
     },
 
     async stop(): Promise<void> {
       const active = server;
+      const last = current;
       server = null;
       current = null;
       if (!active) return;
       await new Promise<void>((resolve) => active.close(() => resolve()));
+      if (last) {
+        emitStatus({
+          url: last.url,
+          port: last.port,
+          status: "STOPPED",
+        });
+      }
     },
   };
 }
