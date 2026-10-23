@@ -11,6 +11,7 @@
 > 8. **状态回写（2026-10-23 · D.3）**：`TASK-D.3` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `9a19f4d`，含 `c2fcb8a` 持久化/`STATE_CHANGED`/看门狗引擎 + `83ec516` D-2/D-4/D-5 生产接线）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`9a19f4d`，合后四件套 **1084 passed / 6 skipped**。残余口径差已在卡片内登记。
 > 9. **状态回写（2026-10-24 · C.2）**：`TASK-C.2` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `51039aa`，功能提交 `c1ad3be`：Studio 四视口壳 + 展示态智能切换）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`51039aa`，合后四件套 **1099 passed / 6 skipped**。残余口径差已在卡片内登记。
 > 10. **状态回写（2026-10-24 · S.1）**：`TASK-S.1` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `a9066dd`，功能提交 `a7d7292`：`SupervisorWakeupThrottler` 3s 防抖默认关闭）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`a9066dd`，合后四件套 **1122 passed / 6 skipped**。残余口径差已在卡片内登记。
+> 11. **状态回写（2026-10-24 · S.6）**：新增 **`TASK-S.6` 非技术旅程串联**（`[NEW_TASK]`）。吸收 `TASK-C.2` 残余「【修改原型】/【确认原型并实施真实工程】弱接线」；`TASK-S.4` / `TASK-C.7` / `TASK-S.5` / `TASK-C.2` / `TASK-S.1` 已为 `[COMPLETED]`，本轮不再重复回写状态；`TASK-S.3` 仍为 `[DEFERRED → v0.2+]`（HUD 广播），**不承载**本缺口；**不改**《系统架构设计规范》v1.6.1。对照白话验收：`docs/reports/非技术用户旅程验收稿.md`。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
@@ -36,6 +37,7 @@
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
 | **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，经 `d5ee448` 合入 main；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
 | **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
+| **TASK-S.6** | 非技术旅程串联（右侧分流 + 确认原型开工） | 建议中枢 / 编排粘合 | **[NEW_TASK]** | P4.5 / P5.7 串联（八步旅程最后一公里） | • 右侧唯一入口白话分流：质疑 → `POST /api/supervisor/dispute` + 白话卡；大事 → 草案；小事 → Fast Path（免强制 Demo）<br>• 吸收 C.2 残余：【确认原型并实施真实工程】真建全灰 TaskGraph 并进入审批/开工链（禁止只改 nonce）<br>• 聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 verify）<br>• 可选/S.6b：`REAL_PLAYTEST` 真预览 URL 挂中栏或外链（超范围则登记后续）<br>• 底座复用 S.4/C.7/S.5/C.2/S.2/W.5a，不重砌；对照 `docs/reports/非技术用户旅程验收稿.md` |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[COMPLETED]**（提交 `87f909c`，经 `05f090f` 合入 main；`daemon/pipeline/untracked-scope-guard.ts` + `E_OUT_OF_SCOPE_UNTRACKED`） | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
@@ -93,8 +95,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     ▼
                               TASK-C.2 (Studio 多维视口集成)
                                     │
-                                    ▼
-                              TASK-E.1 ──► TASK-E.2
+                    ┌───────────────┼───────────────┐
+                    ▼                               ▼
+              TASK-S.6 (非技术旅程串联)        TASK-E.1 ──► TASK-E.2
+              （右侧分流 + 确认原型开工；       （v0.1 既有基线，已完成）
+               前置 S.4/C.7/S.5/C.2/S.2/W.5a）
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -141,7 +146,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-D.3", "to": "TASK-C.2" },
   { "from": "TASK-C.1", "to": "TASK-C.2" },
   { "from": "TASK-C.2", "to": "TASK-E.1" },
-  { "from": "TASK-E.1", "to": "TASK-E.2" }
+  { "from": "TASK-E.1", "to": "TASK-E.2" },
+  { "from": "TASK-S.4", "to": "TASK-S.6" },
+  { "from": "TASK-C.7", "to": "TASK-S.6" },
+  { "from": "TASK-S.5", "to": "TASK-S.6" },
+  { "from": "TASK-C.2", "to": "TASK-S.6" },
+  { "from": "TASK-S.2", "to": "TASK-S.6" },
+  { "from": "TASK-W.5a", "to": "TASK-S.6" }
 ]
 ```
 
@@ -320,7 +331,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-### 3.2 Supervisor 建议中枢、原型生成与质疑自查实现（v1.5.0 全生命周期升级）
+### 3.2 Supervisor 建议中枢、原型生成、质疑自查与非技术旅程串联（v1.5.0 全生命周期升级；含 S.6）
 
 #### 【Task S.1】Supervisor 建议会话与持久化存储管理
 * **任务编号**：`TASK-S.1`
@@ -543,6 +554,37 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 * **Pass/Fail 验收判定**：
   - **PASS**：对于需求已写但代码写漏的典型 Case，置信度高且 100% 裁决为实现偏差；低置信度案例自动降级为事实陈述并由用户裁决；自动返工超出原合同 Scope 时被坚决拦截并提示升版审批；60 秒内必出结果或安全超时。
   - **FAIL**：低置信度时向用户强加主观判定；自动返工越界修改了原合同未授权的文件。
+
+#### 【Task S.6】非技术旅程串联（右侧唯一入口分流 + 确认原型开工）`[NEW_TASK · 2026-10-24]`
+* **任务编号**：`TASK-S.6`
+* **前置依赖**：`TASK-S.4` (COMPLETED), `TASK-C.7` (COMPLETED), `TASK-S.5` (COMPLETED), `TASK-C.2` (COMPLETED), `TASK-S.2` (COMPLETED), `TASK-W.5a` (PASS)
+* **任务状态**：**[NEW_TASK]**（2026-10-24 立卡。承接《非技术用户旅程验收稿》走查缺口：底座已齐，瓶颈在编排/粘合「最后一公里」。**吸收** `TASK-C.2` 残余口径差①——【修改原型】/【确认原型并实施真实工程】按钮 UI 在位但旅程编排层弱接线。`TASK-S.3` 仍为 HUD 广播推迟项，**不装**本缺口。不改架构规范。）
+* **对照白话验收**：`docs/reports/非技术用户旅程验收稿.md`（八步 + Fast Path + 右侧唯一入口）
+* **v0.1 范围**：右侧唯一入口的白话分流路由器 +「确认原型 → 建全灰 TaskGraph → 进入可审批/开工链」主链粘合；聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 illumination verify）。底座（S.4 Demo、C.7 Graph、S.5 dispute、C.2 四视口、S.2 草案、W.5a Worker）只接线、不重砌。
+* **明确不包含**：
+  - `TASK-W.5b` / `TASK-W.5c`（第二/第三个 Agent）
+  - UI 抛光与视觉重设计
+  - `TASK-S.3` HUD / 成熟度徽章 / Snooze（仍 DEFERRED→v0.2+）
+  - 重做 `TASK-C.2` 四视口壳（只补编排接线）
+  - 修改《系统架构设计规范》或另开 ADR
+* **核心目标**：
+  1. **右侧白话分流（唯一入口）**：用户只跟右侧聊天；系统按意图静默路由——质疑纠错 → 调 `POST /api/supervisor/dispute` 并出白话摘要卡（可切质疑视口）；大事/提需求 → 出或更新草案与左侧需求说明；小事（字号/文案等）→ Fast Path 静默合同，**免强制整套 Demo**。
+  2. **确认原型 → 建图开工主链**：中栏 Demo（S.4 独立端口）可试玩；用户点【确认原型并实施真实工程】后，必须真实创建初始**全灰** TaskGraph（C.7）并进入可审批/开工链；**禁止**只改预览 nonce / 假状态切换冒充开工。
+  3. **Evidence 驱动点亮**：审批/开工后，中栏图随 Worker 真实写入产生的 Evidence，经既有 `illumination-verifier` / `POST /api/graph/verify` 逐节点点亮；不自报假绿。
+  4. **可选 / S.6b（本卡可降级登记）**：当展示态进入代码事实态 `REAL_PLAYTEST`（勿写作 `PREVIEW_READY`）时，将真预览 URL 挂到中栏或外链；若本卡工期超范围，明确登记为后续子卡，不阻塞主链验收。
+* **涉及核心文件（实施时以实际接线为准，本卡仅定范围）**：
+  - 编排/分流：`daemon/supervisor/` 下会话意图路由与 Fast Path / dispute / 草案触发粘合（复用 S.1/S.2/S.5，不另起炉灶重写引擎）
+  - 前端粘合：右侧会话 → 分流结果卡片；`DemoPreviewPane`【确认原型】→ Graph 建图 API；左侧规范资产区需求刷新；质疑卡与视口切换（复用 C.2 `StudioViewportShell`）
+  - 既有复用：S.4 Demo 预览服务、C.7 `graph-engine` / verify、S.5 dispute API、C.2 四视口、W.5a 执行通道
+* **Pass/Fail 验收断言（≤5，可测、白话）**：
+  1. **右侧一句话分流**：质疑 → 调 dispute 并出白话卡（可切质疑视口）；大事 → 出/更新草案；小事 → Fast Path（免强制 Demo）。
+  2. **聊到一段落**：左侧需求说明出现或更新（用户可感知刷新，不必手写技术规格）。
+  3. **确认原型开工**：Demo 可进中栏试玩；点【确认原型并实施真实工程】→ 建全灰 TaskGraph 并进入可审批/开工链（**禁止只改 nonce**）。
+  4. **点亮**：审批/开工后，中栏图可随真实 Evidence 点亮（复用现有 verify；空验证集仍不得假绿）。
+  5. **可选/S.6b**：`REAL_PLAYTEST` 真预览 URL 挂中栏或外链；本卡若超范围则登记为后续，不阻塞 1–4。
+* **Pass/Fail 验收判定**：
+  - **PASS**：上述断言 1–4 均可在本地 main 上手测复现；断言 5 要么交付要么在卡内显式降级登记；无产品代码范围外改动混入本卡。
+  - **FAIL**：确认原型只改 nonce/假态；分流把质疑当闲聊或把小事逼进全套 Demo；点亮不经 Evidence；把缺口塞回已完成的 C.2/S.3/S.5 卡而不立本卡。
 
 ---
 ### 3.3 受控 Coding Worker、安全策略、威胁守卫与成熟 Agent 适配（W.1/W.2 已完成；W.3/W.4 落 Sprint 2；W.5a 落 Sprint 1，绕过负例收尾落 Sprint 3）
@@ -798,7 +840,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.2】中栏 Supervisor Studio 多维视口（Demo / Graph / 质询 / 合同）`[v1.5.0 升级]`
 * **任务编号**：`TASK-C.2`
 * **前置依赖**：`TASK-C.1`, `TASK-S.2`, `TASK-S.4`, `TASK-C.7`, `TASK-S.5`
-* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，merge `51039aa`；分支 `feat/task-c2-four-viewports` 提交 `c1ad3be`。门禁：合后四件套全绿（1099 passed / 6 skipped）；tsc 0 错、eslint 0 错、build 通过（dist 33 文件 / 3.35 MB）。落地清单：`StudioViewportShell`（四视口 `hidden` 保活）、`DemoPreviewPane` / `TaskGraphPane` / `DisputeConsolePane`、`viewport-routing.ts`（展示态→默认视口）、`use-daemon-stream`/`daemon-api` 消费 `presentation_state`、`demo-origin.ts`、`tests/ui/studio-viewport-switching.test.tsx`（15）。**口径说明**：① 默认视口只跟 Daemon 展示态，手动 Tab 覆盖，展示态一变清覆盖；② Demo iframe 沙箱仅 `allow-scripts`，严禁 `allow-same-origin`；③ Graph 复用 C.7 `TaskGraphPanel`，质疑复用 S.5 API。**残余口径差（不阻塞验收，需登记）**：①【修改原型】/【确认原型并实施真实工程】按钮 UI 在位，旅程编排层仍为弱接线；② 矩阵旧注「水表」非本卡 Pass 项，未纳入本次交付）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，merge `51039aa`；分支 `feat/task-c2-four-viewports` 提交 `c1ad3be`。门禁：合后四件套全绿（1099 passed / 6 skipped）；tsc 0 错、eslint 0 错、build 通过（dist 33 文件 / 3.35 MB）。落地清单：`StudioViewportShell`（四视口 `hidden` 保活）、`DemoPreviewPane` / `TaskGraphPane` / `DisputeConsolePane`、`viewport-routing.ts`（展示态→默认视口）、`use-daemon-stream`/`daemon-api` 消费 `presentation_state`、`demo-origin.ts`、`tests/ui/studio-viewport-switching.test.tsx`（15）。**口径说明**：① 默认视口只跟 Daemon 展示态，手动 Tab 覆盖，展示态一变清覆盖；② Demo iframe 沙箱仅 `allow-scripts`，严禁 `allow-same-origin`；③ Graph 复用 C.7 `TaskGraphPanel`，质疑复用 S.5 API。**残余口径差（不阻塞验收，需登记）**：①【修改原型】/【确认原型并实施真实工程】按钮 UI 在位，旅程编排层仍为弱接线——**已转交 `TASK-S.6` 吸收**；② 矩阵旧注「水表」非本卡 Pass 项，未纳入本次交付）
 * **核心目标**：
   1. **Studio 四重视口集成切换**：
      - **视口 1: Demo 原型试玩视口 (`DemoPreviewPane.tsx`)**：以 iframe/Webview 嵌入 TASK-S.4 启动的本地轻量预览服务，顶部配备【修改原型】与【确认原型并实施真实工程】大操作栏；
@@ -1136,17 +1178,17 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **Sprint 1: 最小端到端（Vibe）** | `TASK-C.1`（三栏骨架）➔ `TASK-C.6`（右栏流式会话）➔ `TASK-W.5a`（Claude Code cli-host 挂载）➔ `TASK-C.3`（Monaco 读写） | 三栏布局、右栏流式/打断/续接、Claude Code 子进程挂载与 Headless 输出 | 右栏 Claude Code 改文件，中栏实时可见，可打断（≤2s）、可续接；全量既有测试以最新 CI 结果为准保持绿灯 |
 | **Sprint 2: 保护清单 + 受控执行前置** | `TASK-P.1`（保护清单 + 快照撤销 + 静默合同）➔ `TASK-C.5`（Diff 与终端）➔ `TASK-W.3`（环境/秘密/网络守卫）➔ `TASK-W.4`（威胁守卫与能力复检） | `.stagent/protection.json`、Auto-Checkpoint、【撤销本轮改动】、Header 模式指示、Diff 审阅、环境与网络守卫、`threat-guard.ts` | 保护路径任意模式被拦截；撤销一键恢复；W.4 的 4 类绕过路径负例断言通过；**D.2 的三条前置（C.5、P.1、W.4）全部达成** |
 | **Sprint 3: 受控执行实测 + 一键合并** | `TASK-W.5a` 绕过负例实测收尾 ➔ `TASK-D.2`（已完成基线）➔ `TASK-W.2b` ➔ `TASK-D.2b` | 保护模式合同（自动批准/单问）、Worktree 执行、Evidence 生成、增量 Scope 阻断与 Contract v1.3 合并门禁 | Claude Code 在 `GATEWAY_ENFORCED` 下 4 类绕过负例全部失败关闭；`verified_on` 填写实测版本与日期；未触保护区任务用户交互 = 1 次（合并按钮），触保护区 ≤ 2 次 |
-| **Sprint 4: 原型试玩、Graph 点亮、质疑自查与防死锁闭环 (八步体验闭环)** | **`TASK-D.3`**（15 状态投影与防死锁）➔ `TASK-S.1` ➔ `TASK-S.2` ➔ `TASK-S.4`（Demo 原型与预览）➔ `TASK-C.7`（Task Graph 渐进点亮）➔ `TASK-S.5`（质疑自查引擎）➔ `TASK-C.2`（Studio 多维视口集成） | 本地独立端口 Mock 预览 (≤2MB / 独立 Origin / iframe sandbox 无 `allow-same-origin`)、业务脑图与任务 DAG 双重视图、物理指纹点亮动效、质疑自查三方比对报告与置信度治理、Studio 四视口流畅切换、五类防死锁引擎 (D-1~D-5) | 1. 静态 Demo 单文件受控落盘 ≤2MB，在独立随机端口 (4100~4110) 成功预览，iframe sandbox 与 CSP 阻断连接 Daemon 端口，负例 E2E 测试通过；<br>2. Task Graph 节点状态由 Daemon 权威持有，点亮动效延迟 ≤100ms 且严格绑定退出码 0 与 Commit SHA，空验证集 COMMAND 节点禁止全绿；<br>3. 质疑自查看门狗 60s 超时兜底，`confidence < 0.7` 自动降级呈现事实由用户裁决，自动返工严格受限原 Scope 子集；<br>4. 15 状态映射测试通过，D-1~D-5 故障注入测试 100% 成功解除死锁；<br>5. Studio 在 Demo/Graph/质询/代码四视口间流畅切换无状态丢失。 |
+| **Sprint 4: 原型试玩、Graph 点亮、质疑自查与防死锁闭环 (八步体验闭环)** | **`TASK-D.3`**（15 状态投影与防死锁）➔ `TASK-S.1` ➔ `TASK-S.2` ➔ `TASK-S.4`（Demo 原型与预览）➔ `TASK-C.7`（Task Graph 渐进点亮）➔ `TASK-S.5`（质疑自查引擎）➔ `TASK-C.2`（Studio 多维视口集成）➔ **`TASK-S.6`（非技术旅程串联，NEW）** | 本地独立端口 Mock 预览 (≤2MB / 独立 Origin / iframe sandbox 无 `allow-same-origin`)、业务脑图与任务 DAG 双重视图、物理指纹点亮动效、质疑自查三方比对报告与置信度治理、Studio 四视口流畅切换、五类防死锁引擎 (D-1~D-5) | 1. 静态 Demo 单文件受控落盘 ≤2MB，在独立随机端口 (4100~4110) 成功预览，iframe sandbox 与 CSP 阻断连接 Daemon 端口，负例 E2E 测试通过；<br>2. Task Graph 节点状态由 Daemon 权威持有，点亮动效延迟 ≤100ms 且严格绑定退出码 0 与 Commit SHA，空验证集 COMMAND 节点禁止全绿；<br>3. 质疑自查看门狗 60s 超时兜底，`confidence < 0.7` 自动降级呈现事实由用户裁决，自动返工严格受限原 Scope 子集；<br>4. 15 状态映射测试通过，D-1~D-5 故障注入测试 100% 成功解除死锁；<br>5. Studio 在 Demo/Graph/质询/代码四视口间流畅切换无状态丢失。 |
 | **Sprint 5: 第二/第三个 Agent** | `TASK-W.5b` ➔ `TASK-W.5c` | cursor-agent / OpenHands（`SANDBOX_ENFORCED`）各自 cli-host 实测、计费模型分支 | 每个 Adapter 的 `verified_on` 如实填写；未通过者仅 Vibe 可用且 UI 显示"未受控" |
 | **Sprint 6: E2E 与自举发版** | v0.1 基线 `TASK-E.1` / `TASK-E.2` 已完成；v1.6.2 不重开，新增覆盖另建卡 | 既有 E2E 与自举报告基线；新能力的回归范围须在独立 E.3（或后续任务）定义 | 核对历史报告与测试可复现；新增 E.3 另立验收门禁 |
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`a9066dd`；测试基线以合后四件套为准（1122 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）、TASK-D.3（投影持久化 + D-1~D-5）、TASK-C.2（Studio 四视口）与 TASK-S.1（3s 防抖节流器默认关闭）。本轮为文档状态回写。
-> - **当前首要编码任务**：Sprint 4 主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` 等）已完成；后续按 DAG 推进 Sprint 5（`TASK-W.5b` / `TASK-W.5c`）。
+> - **当前首要编码任务**：Sprint 4 底座主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 等）已完成；**下一张实现卡为 `TASK-S.6`（非技术旅程串联）**；Sprint 5（`TASK-W.5b` / `TASK-W.5c`）仍按 DAG 其后推进。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
-> - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；Sprint 4 体验闭环主链收口完成。
+> - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里**由新增 `TASK-S.6` 承接（吸收 C.2 确认/修改原型弱接线）。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -1211,5 +1253,6 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-17（交付回写，2026-10-23）**：TASK-D.3 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `9a19f4d`（含 `c2fcb8a` / `83ec516`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`9a19f4d`，1084 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 - **P-18（交付回写，2026-10-24）**：TASK-C.2 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `51039aa`（功能 `c1ad3be`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`51039aa`，1099 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 - **P-19（交付回写，2026-10-24）**：TASK-S.1 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `a9066dd`（功能 `a7d7292`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`a9066dd`，1122 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
+- **P-20（立卡，2026-10-24）**：新增 `TASK-S.6` 非技术旅程串联（`[NEW_TASK]`）。同步：版本头第 11 条状态回写、§1.1 矩阵新行、§2.1 ASCII/JSON 依赖边（S.4/C.7/S.5/C.2/S.2/W.5a → S.6）、§3.2 详细卡、Sprint 4 链尾与「当前首要编码任务」指向 S.6；C.2 残余①注明已转交 S.6。S.4/C.7/S.5/C.2/S.1 已 COMPLETED 不重复改状态；S.3 仍 DEFERRED→v0.2+。**不改**架构规范与产品代码；对照 `docs/reports/非技术用户旅程验收稿.md`。
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
