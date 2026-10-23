@@ -21,6 +21,7 @@ import {
   writeJsonAtomic,
   type ContractStatePair,
 } from "../../src/lib/state-machine";
+import { PRESENTATION_STATE_MATRIX } from "../../src/lib/state/presentation-state";
 
 /**
  * TASK-0.2b / §9.1.1 双状态机组合矩阵。
@@ -409,6 +410,18 @@ describe("§9.1.1.1 v1.3.0 受控边（TASK-0.2c）", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe("ILLEGAL_TRANSITION");
+    }
+  });
+});
+
+describe("§6.3.1 展示状态矩阵的 lifecycle 必须存在于状态机枚举", () => {
+  it("15 展示态表格使用的每个 lifecycle 都是合法枚举值", () => {
+    // 规范 §6.3.1「CI 不变式门禁」：防止展示层悄悄引用底层已废弃的状态名
+    for (const row of PRESENTATION_STATE_MATRIX) {
+      expect(
+        ALL_LIFECYCLE_STATES as readonly string[],
+        `${row.presentation_state} -> ${row.lifecycle_state}`,
+      ).toContain(row.lifecycle_state);
     }
   });
 });

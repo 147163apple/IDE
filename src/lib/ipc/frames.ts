@@ -11,6 +11,12 @@
  * - 新增 FRAME_CATALOG：每类帧的方向、鉴权要求、最大尺寸与语义说明
  * - 单帧上限 MAX_FRAME_BYTES = 2MB（TASK-D.1 G-12）
  *
+ * v1.3 变更（TASK-D.3 / 架构 §6.1、§6.3.1 P-20）：
+ * - 新增 `STATE_CHANGED` 广播帧：承载 Daemon 独占计算并持久化的
+ *   `presentation_state`（15 态展示状态）与白话提示文本，前端零逻辑消费；
+ * - `CONTRACT_UPDATE` 增加可选的 `presentation_state`，让尚未迁移到
+ *   `STATE_CHANGED` 的客户端也能平滑读取（协议向后兼容）。
+ *
  * v1.1 变更：新增 AUTH / AUTH_OK。
  * 浏览器原生 WebSocket API 不支持自定义 HTTP 头（无法发送
  * `Authorization: Bearer`），query 参数携带 Token 又会泄漏进 URL 日志，
@@ -18,7 +24,9 @@
  * WS_CLOSE_UNAUTHORIZED（4401）断开，超时未鉴权同样断开。
  */
 
-/** 规范 §6.1 帧类型字典（13 类规范帧 + 2 类历史扩展帧） */
+import type { PresentationState } from "../state/presentation-state";
+
+/** 规范 §6.1 帧类型字典（14 类规范帧 + 2 类历史扩展帧） */
 export type IpcFrameType =
   // ---- 规范 §6.1 定义的 13 类 ----
   | "AUTH"
@@ -34,6 +42,8 @@ export type IpcFrameType =
   | "EVIDENCE_READY"
   | "EVIDENCE_STATUS_CHANGED"
   | "TERMINAL_STREAM"
+  // ---- v1.6.1 §6.1 / §6.3.1 新增的全量状态快照广播（TASK-D.3） ----
+  | "STATE_CHANGED"
   // ---- 历史扩展帧（v1.1 协议遗留，仅保留兼容，禁止再新增） ----
   | "WORKER_LOG"
   | "SCOPE_ALERT";
@@ -72,6 +82,33 @@ export interface ContractUpdatePayload {
   contract_id: string;
   lifecycle_state: string;
   approval_status?: string;
+  /**
+   * TASK-D.3：可选携带投影结果，供尚未消费 `STATE_CHANGED` 的客户端平滑读取。
+   *
+   * 为什么是可选：`CONTRACT_UPDATE` 是 v1.2.1 既有帧，历史 Daemon 不会填这个字段；
+   * 把它设成必填会让旧版本广播直接不合法。真正的"必选"约束放在
+   * `STATE_CHANGED` 上——那个帧的存在意义就是携带该字段。
+   */
+  presentation_state?: PresentationState;
+}
+
+/**
+ * `STATE_CHANGED` 载荷（§6.1 / §6.3.1 P-20）。
+ *
+ * Daemon 状态机独占计算并写入持久化快照，每次流转全量推送；
+ * 前端不解构 lifecycle × approval 自行推导，只消费 `presentation_state`。
+ */
+export interface StateChangedPayload {
+  contract_id: string;
+  /** 15 态展示状态，必填：本帧的核心载荷 */
+  presentation_state: PresentationState;
+  /** 面向非技术用户的白话提示文本（§6.3.1） */
+  message?: string;
+  /** 底层状态，仅用于诊断与日志，前端展示不应依赖 */
+  lifecycle_state?: string;
+  approval_status?: string;
+  /** 该快照的生成时刻，便于断线重连后比对新鲜度 */
+  persisted_at?: string;
 }
 
 export interface ScopeAlertPayload {
@@ -151,6 +188,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "EVIDENCE_READY",
   "EVIDENCE_STATUS_CHANGED",
   "TERMINAL_STREAM",
+  "STATE_CHANGED",
   "WORKER_LOG",
   "SCOPE_ALERT",
 ] as const;
@@ -164,14 +202,15 @@ export type FrameDirection =
  * - direction：合法的发送方；服务端收到方向不符的帧应拒绝（FRAME_DIRECTION_FORBIDDEN）
  * - requiresAuth：未通过首帧 AUTH 的连接是否可收发该帧（仅 AUTH/AUTH_OK/ERROR 豁免）
  * - maxPayloadBytes：默认 2MB 上限（TASK-D.1 G-12）
- * - spec：v1.2.1 = 规范 §6.1 帧；extension = 历史扩展帧（仅兼容保留）
+ * - spec：v1.2.1 = 规范 §6.1 原始帧；v1.6.1 = v1.6.1 §6.1 新增广播帧；
+ *   extension = 历史扩展帧（仅兼容保留）
  */
 export interface FrameCatalogEntry {
   type: IpcFrameType;
   direction: FrameDirection;
   requiresAuth: boolean;
   maxPayloadBytes: number;
-  spec: "v1.2.1" | "extension";
+  spec: "v1.2.1" | "v1.6.1" | "extension";
   description: string;
 }
 
@@ -222,7 +261,16 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     requiresAuth: true,
     spec: "v1.2.1",
     maxPayloadBytes: MAX_FRAME_BYTES,
-    description: "合同状态机变更推送",
+    description: "合同状态机变更推送（可选携带 presentation_state）",
+  },
+  {
+    type: "STATE_CHANGED",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.1",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "全量状态快照广播，必含 15 态 presentation_state 与白话提示（TASK-D.3）",
   },
   {
     type: "CHAT_EVENT",
