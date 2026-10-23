@@ -112,22 +112,60 @@ export function normalizeBaseUrl(raw: string): string {
   return cleaned.length > 0 ? cleaned : DEFAULT_DAEMON_URL;
 }
 
+/**
+ * 解析 URL fragment 引导参数（TASK-D.1 / D.1b）。
+ * 形态：`#token=<hex>` 或 `#token=<hex>&base=<urlencoded daemon origin>`。
+ * 严禁读取 `?token=` query。
+ */
+export function parseFragmentBootstrap(hash: string): {
+  token: string | null;
+  baseUrl: string | null;
+} {
+  const raw = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (!raw) return { token: null, baseUrl: null };
+  // 兼容历史纯 `#token=xxx`（无其它键）与带 base 的形态
+  const params = new URLSearchParams(raw);
+  const tokenRaw = params.get("token");
+  const baseRaw = params.get("base");
+  return {
+    token: tokenRaw ? normalizeSessionToken(tokenRaw) : null,
+    baseUrl: baseRaw ? normalizeBaseUrl(baseRaw) : null,
+  };
+}
+
+/**
+ * 同源托管推断：控制台由 Daemon 直接托管在 3001~3010 时，
+ * 用 window.location.origin 作为 baseUrl，避免死认 3001。
+ * Vite 开发端口（5173）不走此分支。
+ */
+export function inferSameOriginDaemonBase(
+  loc: Pick<Location, "hostname" | "port" | "origin"> = window.location,
+): string | null {
+  const host = loc.hostname.toLowerCase();
+  if (host !== "127.0.0.1" && host !== "localhost") return null;
+  const port = Number(loc.port || (host === "localhost" ? "80" : "80"));
+  if (!Number.isFinite(port)) return null;
+  if (port < 3001 || port > 3010) return null;
+  return loc.origin;
+}
+
 export function loadConnection(): DaemonConnection {
   // SSR 阶段无 window：返回默认连接，避免服务端渲染崩溃
   if (typeof window === "undefined") {
     return { baseUrl: DEFAULT_DAEMON_URL, token: "" };
   }
 
-  // Token 引导仅允许 URL fragment（#token=...）：fragment 不随请求发往服务端、
-  // 不进访问日志；读取后立即从地址栏抹除，避免滞留浏览器历史。
+  // Token / base 引导仅允许 URL fragment：不随请求发往服务端、不进访问日志；
+  // 读取后立即从地址栏抹除，避免滞留浏览器历史。
   // 规范 TASK-D.1 FAIL：严禁 URL query（?token=）传递 Token —— 这里明确不读 query。
-  const hash = window.location.hash;
-  if (hash.startsWith("#token=")) {
-    const fragmentToken = normalizeSessionToken(hash.slice("#token=".length));
-    if (fragmentToken) {
-      sessionStorage.setItem(TOKEN_STORAGE_KEY, fragmentToken);
-    }
-    // 从地址栏移除 Token，只保留路径（不进历史记录）
+  const boot = parseFragmentBootstrap(window.location.hash);
+  if (boot.token) {
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, boot.token);
+  }
+  if (boot.baseUrl) {
+    sessionStorage.setItem("stagent.baseUrl", boot.baseUrl);
+  }
+  if (boot.token || boot.baseUrl) {
     window.history.replaceState(
       null,
       "",
@@ -135,10 +173,19 @@ export function loadConnection(): DaemonConnection {
     );
   }
 
+  const storedBase = sessionStorage.getItem("stagent.baseUrl");
+  const envBase = import.meta.env["VITE_DAEMON_URL"] as string | undefined;
+  const sameOrigin = inferSameOriginDaemonBase();
+  // 同源托管时：若地址栏带来了 token，顺便把 origin 写入，刷新后仍连对本机端口
+  if (!storedBase && sameOrigin && boot.token) {
+    sessionStorage.setItem("stagent.baseUrl", sameOrigin);
+  }
+
   return {
     baseUrl: normalizeBaseUrl(
       sessionStorage.getItem("stagent.baseUrl") ??
-        (import.meta.env["VITE_DAEMON_URL"] as string | undefined) ??
+        envBase ??
+        sameOrigin ??
         DEFAULT_DAEMON_URL,
     ),
     // 历史遗留的脏 Token 在这里就洗一遍，避免带着换行/全角空格一路走到 fetch
