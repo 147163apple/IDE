@@ -60,6 +60,8 @@ export type IpcFrameType =
   | "TASK_GRAPH_UPDATED"
   // ---- v1.6.1 §6.1 Demo 预览生命周期广播（TASK-S.4） ----
   | "DEMO_PREVIEW_STATUS"
+  // ---- TASK-S.6b 真机预览生命周期广播 ----
+  | "REAL_PLAYTEST_STATUS"
   // ---- v1.6.1 §6.1 质疑自查报告广播（TASK-S.5） ----
   | "DISPUTE_REPORT_READY"
   // ---- 历史扩展帧（v1.1 协议遗留，仅保留兼容，禁止再新增） ----
@@ -212,6 +214,24 @@ export interface DemoPreviewStatusPayload {
   message?: string;
 }
 
+/**
+ * 真机预览生命周期（TASK-S.6b / §6.3.1 `REAL_PLAYTEST`）。
+ * 与 Demo 三态对齐；额外携带 contract_id，便于多合同并列。
+ */
+export type RealPlaytestLifecycleStatus = "RUNNING" | "STOPPED" | "ERROR";
+
+export interface RealPlaytestStatusPayload {
+  contract_id: string;
+  /** 中栏 iframe / 外链地址，如 http://127.0.0.1:4201/ */
+  url: string;
+  port: number;
+  status: RealPlaytestLifecycleStatus;
+  updated_at: string;
+  /** true = Daemon 自建静态服务；false = 外链挂载 */
+  owned: boolean;
+  message?: string;
+}
+
 export interface ErrorPayload {
   code: string;
   message: string;
@@ -272,6 +292,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "STATE_CHANGED",
   "TASK_GRAPH_UPDATED",
   "DEMO_PREVIEW_STATUS",
+  "REAL_PLAYTEST_STATUS",
   "DISPUTE_REPORT_READY",
   "WORKER_LOG",
   "SCOPE_ALERT",
@@ -364,6 +385,15 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     maxPayloadBytes: MAX_FRAME_BYTES,
     description:
       "Demo 预览服务生命周期广播，含独立 Origin 的 url / port / status / updated_at（TASK-S.4）",
+  },
+  {
+    type: "REAL_PLAYTEST_STATUS",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.1",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "真机预览生命周期广播，含 contract_id / url / port / status（TASK-S.6b）",
   },
   {
     type: "DISPUTE_REPORT_READY",

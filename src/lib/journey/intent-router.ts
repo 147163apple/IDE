@@ -2,8 +2,9 @@
  * 非技术旅程意图分流（TASK-S.6）。
  *
  * 纯规则、确定性、零模型：同一句话恒得同一结论，便于单测与白话解释。
- * 三类产品路由 + 默认闲聊透传：
+ * 产品路由 + 默认闲聊透传：
  * - DISPUTE：质疑 / 抱怨做错了 → 调质疑自查
+ * - REAL_PLAYTEST：打开真机预览 → 挂中栏/外链（TASK-S.6b）
  * - FAST_PATH：字号/文案/颜色等小事 → 免强制整套 Demo
  * - MAJOR_DRAFT：新功能 / 大改 → 出或更新草案
  * - CHAT：其余 → 交给右侧 Worker 会话
@@ -16,6 +17,7 @@ export const JOURNEY_INTENT_KINDS = [
   "DISPUTE",
   "FAST_PATH",
   "MAJOR_DRAFT",
+  "REAL_PLAYTEST",
   "CHAT",
 ] as const;
 
@@ -50,6 +52,19 @@ const DISPUTE_PATTERNS: RegExp[] = [
   /抱怨/,
   /怎么还/,
   /不是这样/,
+];
+
+const REAL_PLAYTEST_PATTERNS: RegExp[] = [
+  /真机/,
+  /真实页面/,
+  /真实预览/,
+  /真实环境/,
+  /打开真.*预览/,
+  /打开真.*页面/,
+  /启动真机/,
+  /真预览/,
+  /real\s*playtest/i,
+  /playtest/i,
 ];
 
 const FAST_PATH_PATTERNS: RegExp[] = [
@@ -128,7 +143,7 @@ function matched(patterns: RegExp[], text: string): string[] {
 
 /**
  * 对用户右侧输入做白话分流。
- * 优先级：质疑 > 保护域升格 > Fast Path > 大事草案 > 闲聊。
+ * 优先级：质疑 > 真机试玩 > 保护域升格 > Fast Path > 大事草案 > 闲聊。
  */
 export function classifyJourneyIntent(raw: string): JourneyIntentResult {
   const text = raw.trim();
@@ -151,6 +166,19 @@ export function classifyJourneyIntent(raw: string): JourneyIntentResult {
         "走质疑自查：对照需求、规范和代码，用白话告诉你是施工漏了还是新需求。",
       ],
       skip_demo: false,
+    };
+  }
+
+  const playtestHits = matched(REAL_PLAYTEST_PATTERNS, text);
+  if (playtestHits.length > 0) {
+    return {
+      kind: "REAL_PLAYTEST",
+      confidence: Math.min(0.95, 0.7 + playtestHits.length * 0.1),
+      reasons: [
+        `你想打开真实页面试玩（命中：${playtestHits.slice(0, 3).join("、")}）`,
+        "走真机预览：中栏挂真实 URL，也可在浏览器新标签打开。",
+      ],
+      skip_demo: true,
     };
   }
 

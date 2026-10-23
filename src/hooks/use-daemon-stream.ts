@@ -3,6 +3,7 @@ import { StagentIpcClient, type IpcClientStatus } from "@/lib/ipc/client";
 import type {
   ContractUpdatePayload,
   DemoPreviewStatusPayload,
+  RealPlaytestStatusPayload,
   DisputeReportReadyPayload,
   ErrorPayload,
   EvidenceStatusChangedPayload,
@@ -73,6 +74,8 @@ export interface UseDaemonStreamOptions {
   onStateChanged?: (payload: StateChangedPayload) => void;
   /** TASK-S.4 / C.2：Demo 预览生命周期 */
   onDemoPreviewStatus?: (payload: DemoPreviewStatusPayload) => void;
+  /** TASK-S.6b：真机预览生命周期 */
+  onRealPlaytestStatus?: (payload: RealPlaytestStatusPayload) => void;
   /** TASK-S.5 / C.2：质疑报告摘要就绪（完整报告仍走 HTTP 响应） */
   onDisputeReportReady?: (payload: DisputeReportReadyPayload) => void;
 }
@@ -207,6 +210,13 @@ export function useDaemonStream(
           const payload = asPayload<DemoPreviewStatusPayload>(frame);
           if (payload?.status) {
             handlersRef.current.onDemoPreviewStatus?.(payload);
+          }
+          return;
+        }
+        case "REAL_PLAYTEST_STATUS": {
+          const payload = asPayload<RealPlaytestStatusPayload>(frame);
+          if (payload?.status) {
+            handlersRef.current.onRealPlaytestStatus?.(payload);
           }
           return;
         }

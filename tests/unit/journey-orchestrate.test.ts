@@ -148,4 +148,26 @@ describe("TASK-S.6 orchestrateJourney", () => {
     expect(result.suggest_viewport).toBe("demo");
     expect(result.plain_summary).toMatch(/草案/);
   });
+
+  it("REAL_PLAYTEST → START_REAL_PLAYTEST + playtest 视口", async () => {
+    const result = await orchestrateJourney({
+      message: "打开真机预览",
+      repoRoot: repo(),
+      contract: { contract_id: "ctr-play", intent: { title: "试玩" } } as never,
+    });
+    expect(result.route).toBe("REAL_PLAYTEST");
+    expect(result.code).toBe("START_REAL_PLAYTEST");
+    expect(result.suggest_viewport).toBe("playtest");
+    expect(result.skip_demo).toBe(true);
+  });
+
+  it("REAL_PLAYTEST 无合同 → CONTRACT_REQUIRED", async () => {
+    const result = await orchestrateJourney({
+      message: "打开真机预览",
+      repoRoot: repo(),
+    });
+    expect(result.route).toBe("REAL_PLAYTEST");
+    expect(result.code).toBe("CONTRACT_REQUIRED");
+    expect(result.suggest_viewport).toBe("contract");
+  });
 });
