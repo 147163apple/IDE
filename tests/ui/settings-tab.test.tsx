@@ -137,3 +137,38 @@ describe("设置页：连接与工作区", () => {
     expect(onUndoRound).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("设置页：Token 粘贴的脏字符防线", () => {
+  it("粘进来的换行/零宽字符在输入框里就被洗掉，回传的是干净 Token", () => {
+    const { onConnChange } = renderSettings();
+    fireEvent.change(screen.getByTestId("session-token"), {
+      target: { value: "\n deadbeef\u200B\n" },
+    });
+    expect(screen.getByTestId("session-token")).toHaveValue("deadbeef");
+    fireEvent.click(screen.getByTestId("apply-connection"));
+    expect(onConnChange).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:3001",
+      token: "deadbeef",
+    });
+  });
+
+  it("含中文时当场红字告警（而不是等 fetch 抛 non ISO-8859-1）", () => {
+    renderSettings();
+    expect(screen.queryByTestId("token-non-ascii-warning")).toBeNull();
+    fireEvent.change(screen.getByTestId("session-token"), {
+      target: { value: "deadbeef 中文说明" },
+    });
+    expect(screen.getByTestId("token-non-ascii-warning")).toHaveTextContent(
+      "浏览器不允许写进请求头",
+    );
+  });
+
+  it("全角字符按 NFKC 归一半角后不触发告警（粘贴全角字母也能用）", () => {
+    renderSettings();
+    fireEvent.change(screen.getByTestId("session-token"), {
+      target: { value: "ａｂｃ１２３" },
+    });
+    expect(screen.getByTestId("session-token")).toHaveValue("abc123");
+    expect(screen.queryByTestId("token-non-ascii-warning")).toBeNull();
+  });
+});

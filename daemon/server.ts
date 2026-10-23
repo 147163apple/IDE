@@ -1,6 +1,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { randomUUID } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { WebSocketServer, WebSocket } from "ws";
 import { findAvailablePort, PortFinderOptions } from "./core/port-finder";
@@ -89,6 +90,15 @@ import {
   CLAUDE_CODE_VERIFIED_ON,
   ClaudeCodeAdapter,
 } from "./worker/cli-host/claude-code-adapter";
+import {
+  generateContractDraft,
+  type DraftEnrichment,
+} from "./supervisor/draft-generator";
+import {
+  SupervisorBudgetLedger,
+  SUPERVISOR_BUDGET_ERROR_CODE,
+} from "./supervisor/budget";
+import type { SupervisorMessage } from "./supervisor/types";
 
 export interface DaemonServerOptions extends PortFinderOptions {
   repoRoot: string;
@@ -106,6 +116,14 @@ export interface DaemonServerOptions extends PortFinderOptions {
   maxClients?: number;
   /** 右栏会话适配器（TASK-C.6）；缺省为 保底 + 演示 */
   chatAdapters?: ChatAdapter[];
+  /**
+   * 草案的 L1 白话补全器（可选）。
+   * 不注入时 `/api/supervisor/draft` 走**纯 L0**：零模型调用、零费用，
+   * 仍会产出白话理由（规则推导出的范围说明）。
+   */
+  supervisorEnrich?:
+    | ((prompt: string) => Promise<DraftEnrichment> | DraftEnrichment)
+    | undefined;
 }
 
 export interface DaemonStatusResponse {
@@ -148,6 +166,9 @@ export class StagentDaemon {
   private lastRecoveryReport: RecoveryReport | null = null;
   private readonly orchestrator: ContractOrchestrator;
   readonly chat: ChatSessionManager;
+  private readonly supervisorEnrich:
+    | ((prompt: string) => Promise<DraftEnrichment> | DraftEnrichment)
+    | undefined;
   private worktreeWatcher: WorktreeWatcher | null = null;
   private invalidationEngine: EvidenceInvalidationEngine | null = null;
   /** 当前武装监听的合同（用于 abort 时精确解除，避免误停其他任务的监听） */
@@ -188,6 +209,7 @@ export class StagentDaemon {
         this.broadcast("CHAT_EVENT", event);
       },
     });
+    this.supervisorEnrich = options.supervisorEnrich;
   }
 
   /** 最近一次启动时的崩溃自愈报告（便于状态端点与测试观测） */
@@ -721,6 +743,195 @@ export class StagentDaemon {
     return { repoRoot: this.repoRoot, contract, worktreePath };
   }
 
+  /**
+   * Zero-Tool 只读守卫：取一次**已跟踪文件**的工作区状态指纹。
+   *
+   * 只看已跟踪文件（`--untracked-files=no`）是有意为之：
+   * - Supervisor 账本目录 `.stagent/` 是未跟踪的运行时状态，不应因此误判；
+   * - 真正要防的是"草案生成顺手改了业务代码"。
+   * 非 git 目录 / git 不可用时返回 null（诊断失败不阻断主流程）。
+   */
+  private repoStatusFingerprint(): string | null {
+    try {
+      return execFileSync(
+        "git",
+        ["status", "--porcelain", "--untracked-files=no"],
+        {
+          cwd: this.repoRoot,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        },
+      );
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * `POST /api/supervisor/draft` —— 按需生成合同草案（L0 规则 / 可选 L1 补全）。
+   *
+   * 三条硬约束（本函数的存在理由）：
+   * 1. **零落盘**：草案只回给前端，**不写** `.stagent/contracts`、不建 Worktree、
+   *    不碰 git。用 `git status` 的前后指纹做运行时守卫，真被写脏就 500 并拒发草案。
+   * 2. **独立账本**：费用只记 `SupervisorBudgetLedger.independent()`
+   *    （`.stagent/supervisor-budget.json`），绝不碰 Worker 的合同账本；
+   *    账本已熔断时返回 402 `BUDGET_EXHAUSTED`。
+   * 3. **Zero-Tool**：不调用任何特权动作（批准 / 合并 / 执行命令）——
+   *    这里连 orchestrator 都不 import 使用。
+   */
+  private async handleSupervisorDraft(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+  ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    let body: {
+      intent?: unknown;
+      context_paths?: unknown;
+      enrich?: unknown;
+    };
+    try {
+      body = (await this.readJsonBody(req)) as typeof body;
+    } catch (err) {
+      this.sendJson(res, 400, {
+        error: "invalid_json",
+        message: (err as Error).message,
+      });
+      return;
+    }
+
+    const intent = typeof body.intent === "string" ? body.intent.trim() : "";
+    if (intent.length === 0) {
+      this.sendJson(res, 400, {
+        error: "intent_required",
+        message: "intent 不能为空：请用一句自然语言说明要改什么",
+      });
+      return;
+    }
+    if (intent.length > 4000) {
+      this.sendJson(res, 400, {
+        error: "intent_too_long",
+        message: `intent 长度 ${intent.length} 超过 4000 字符上限`,
+      });
+      return;
+    }
+
+    const contextPaths = Array.isArray(body.context_paths)
+      ? body.context_paths
+          .filter((item): item is string => typeof item === "string")
+          .map((item) => item.trim())
+          .filter((item) => item.length > 0)
+          .slice(0, 50)
+      : [];
+
+    // 独立账本：与 Worker/合同账本分文件、分累计值
+    const ledger = SupervisorBudgetLedger.independent({
+      repoRoot: this.repoRoot,
+    });
+    if (ledger.isBlocked()) {
+      this.sendJson(res, 402, {
+        error: "BUDGET_EXHAUSTED",
+        code: SUPERVISOR_BUDGET_ERROR_CODE,
+        message:
+          "Supervisor 独立日预算已用尽；这不会影响 Worker 的合同预算，但也无法继续生成草案。",
+        budget: ledger.snapshot(),
+      });
+      return;
+    }
+
+    const wantEnrich = body.enrich === true;
+    if (wantEnrich && this.supervisorEnrich === undefined) {
+      this.sendJson(res, 409, {
+        error: "ENRICH_NOT_CONFIGURED",
+        message:
+          "L1 白话补全未配置模型；去掉 enrich 可用纯 L0（零模型调用，仍产出规则理由）。",
+      });
+      return;
+    }
+
+    const now = new Date();
+    const message: SupervisorMessage = {
+      message_id: `msg_http_${randomUUID()}`,
+      role: "user",
+      text: intent,
+      created_at: now.toISOString(),
+      source: "ui",
+    };
+
+    const before = this.repoStatusFingerprint();
+    try {
+      const outcome = await generateContractDraft({
+        repoRoot: this.repoRoot,
+        messages: [message],
+        // 圈选路径优先于文本推断：用户在架构图里点过的文件就是意图本身
+        ...(contextPaths.length > 0
+          ? { scope: { writablePaths: contextPaths } }
+          : {}),
+        trigger: "USER_REQUEST",
+        now: () => now,
+        ...(wantEnrich && this.supervisorEnrich !== undefined
+          ? { enrich: this.supervisorEnrich, budgetLedger: ledger }
+          : {}),
+      });
+
+      if (!outcome.generated) {
+        this.sendJson(res, 409, { error: "DRAFT_NOT_GENERATED" });
+        return;
+      }
+
+      const after = this.repoStatusFingerprint();
+      if (before !== null && after !== null && before !== after) {
+        this.sendJson(res, 500, {
+          error: "ZERO_TOOL_VIOLATION",
+          message:
+            "草案生成期间仓库工作区被改动；已拒绝返回草案（Zero-Tool 只读契约被破坏）。",
+        });
+        return;
+      }
+
+      this.sendJson(res, 200, {
+        draft: {
+          // 未落盘的合同草案：lifecycle=DRAFT/DRAFT，可直接由前端继续编辑后提交
+          contract: outcome.contract,
+          plan: {
+            writable_paths: outcome.plan.writable_paths,
+            readonly_paths: outcome.plan.readonly_paths,
+            strictly_forbidden_paths: outcome.plan.strictly_forbidden_paths,
+            commands: outcome.plan.commands,
+            budget: outcome.plan.budget,
+            protected_files: outcome.plan.protected_files,
+            protected_entry_names: outcome.plan.protected_entry_names,
+            needs_protection_approval: outcome.plan.needs_protection_approval,
+          },
+          rationale: outcome.rationale,
+          unresolved_questions: outcome.unresolved_questions,
+          model_calls: outcome.model_calls,
+          usage: outcome.usage ?? null,
+        },
+        budget: ledger.snapshot(),
+      });
+    } catch (err) {
+      const code = (err as { code?: string }).code;
+      if (code === SUPERVISOR_BUDGET_ERROR_CODE) {
+        this.sendJson(res, 402, {
+          error: "BUDGET_EXHAUSTED",
+          code: SUPERVISOR_BUDGET_ERROR_CODE,
+          message: (err as Error).message,
+          budget: ledger.snapshot(),
+        });
+        return;
+      }
+      this.sendJson(res, 400, {
+        error: "draft_generation_failed",
+        message: (err as Error).message,
+      });
+    }
+  }
+
   /** TASK-C.3 编辑器读写：保存必须经此端点，越权 403 + GATEWAY_VIOLATION */
   private async handleWorktreeFiles(
     req: http.IncomingMessage,
@@ -1132,6 +1343,15 @@ export class StagentDaemon {
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }
+      return;
+    }
+
+    if (pathname === "/api/supervisor/draft") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleSupervisorDraft(req, res, method);
       return;
     }
 

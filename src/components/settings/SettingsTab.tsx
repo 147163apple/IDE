@@ -9,6 +9,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { DaemonConnection } from "@/lib/daemon-api";
+import { normalizeSessionToken } from "@/lib/daemon-api";
 import type { RunMode, WorkerControl } from "@/components/workspace-types";
 
 /**
@@ -102,6 +103,14 @@ export function SettingsTab({
 
   const enforced = workerControl === "GATEWAY_ENFORCED";
   const dirty = draft.baseUrl !== conn.baseUrl || draft.token !== conn.token;
+  /**
+   * 粘贴 Token 时混进中文/全角符号，会让 fetch 在入口抛
+   * `String contains non ISO-8859-1 code point`——请求根本发不出去，
+   * 而错误里看不出是 Token 脏了。这里提前在输入框下面把人话讲清楚。
+   */
+  const tokenHasNonAscii = /[^\x20-\x7E]/.test(
+    normalizeSessionToken(draft.token),
+  );
 
   return (
     <div
@@ -133,10 +142,28 @@ export function SettingsTab({
             data-testid="session-token"
             type="password"
             value={draft.token}
-            onChange={(e) => setDraft({ ...draft, token: e.target.value })}
+            // 边输边归一：换行/全角空格/零宽字符/多余的 "Bearer " 前缀立刻消失，
+            // 输入框里显示什么，发出去的就是什么
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                token: normalizeSessionToken(e.target.value),
+              })
+            }
             placeholder=".stagent/session-token"
             className="w-full rounded border border-border bg-background px-2 py-1 outline-none"
           />
+          {tokenHasNonAscii ? (
+            <span
+              data-testid="token-non-ascii-warning"
+              role="alert"
+              className="mt-1 block text-[11px] text-destructive"
+            >
+              这一段里有中文或全角符号，浏览器不允许写进请求头（会直接报 non
+              ISO-8859-1）。请重新复制 .stagent/session-token
+              的内容——只要那一串十六进制，不要带注释、说明或换行。
+            </span>
+          ) : null}
         </Row>
         <div className="flex items-center gap-2">
           <button

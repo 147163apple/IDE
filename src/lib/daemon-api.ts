@@ -33,6 +33,84 @@ export class DaemonApiError extends Error {
   }
 }
 
+/**
+ * Session Token 净化（**只做归一，不猜内容**）。
+ *
+ * 真实故障：用户把 `.stagent/session-token` 的内容粘进设置页时，剪贴板里常常混进
+ * 换行、全角空格、零宽字符（U+200B / BOM）。这些字符一旦进到
+ * `authorization: Bearer <token>` 头里，浏览器会在 fetch 入口就抛
+ * `Failed to read the 'headers' property from 'RequestInit':
+ *  String contains non ISO-8859-1 code point` —— 页面直接白屏报错，
+ * 而且错误信息完全看不出"是 Token 粘贴脏了"。
+ *
+ * 这里做三件事（都是无损的）：
+ * 1. NFKC 归一：全角字母/数字与 U+3000 空格 → 半角；
+ * 2. 剥掉零宽/行分隔符：U+200B–200F、U+2028、U+2029、U+FEFF；
+ * 3. 去掉换行/制表符与两端空白。
+ */
+export function normalizeSessionToken(raw: string): string {
+  return (
+    raw
+      .normalize("NFKC")
+      .replace(/[\u200B-\u200F\u2028\u2029\uFEFF]/g, "")
+      .replace(/[\r\n\t]/g, "")
+      // 有人把 "Bearer xxx" 整段当 Token 粘进来：这里剥掉前缀，
+      // 否则会拼成 "Bearer Bearer xxx" → 401，又变成一次莫名其妙的排查
+      .replace(/^Bearer\s+/i, "")
+      .trim()
+  );
+}
+
+/** 头值只允许 ISO-8859-1 可见字符（0x20–0xFF）；控制字符与中文一律拒绝 */
+const HEADER_VALUE_PATTERN = /^[\x20-\xFF]*$/;
+
+/**
+ * 组装 `Authorization` 头值，并在**发请求之前**拦住非 ASCII。
+ *
+ * 为什么不是"剥掉中文照常发"：剥掉之后 Token 一定变了，服务端只会回 401
+ * Unauthorized，用户会误以为"Token 过期了"，白白排查半天。这里直接抛一句
+ * 能照着操作的白话错误，比一个 401 有用得多。
+ */
+export function authorizationHeaderValue(rawToken: string): string {
+  const normalized = normalizeSessionToken(rawToken);
+  const ascii = normalized.replace(/[^\x20-\x7E]/g, "");
+  if (ascii !== normalized) {
+    const offender = Array.from(normalized).find(
+      (ch) => !/^[\x20-\x7E]$/.test(ch),
+    );
+    throw new Error(
+      `Session Token 里混入了非 ASCII 字符 ${JSON.stringify(offender)}——` +
+        "浏览器不允许把中文/全角符号放进请求头。请到「设置 → Session Token」" +
+        "重新复制 .stagent/session-token 的内容（只复制那一串十六进制，不要带注释或换行）。",
+    );
+  }
+  return `Bearer ${ascii}`;
+}
+
+/** 兜底守卫：任何 header 值越界都在这里报错，报错里带 header 名便于定位 */
+export function assertHeaderValueSafe(name: string, value: string): void {
+  if (!HEADER_VALUE_PATTERN.test(value)) {
+    throw new Error(
+      `请求头 ${name} 的值含非 Latin-1 字符，无法交给 fetch（多为把中文当成了头字段）。` +
+        "请把这段内容放进请求体 JSON，而不是 header。",
+    );
+  }
+}
+
+/**
+ * Daemon 地址归一：去零宽、NFKC、去两端空白、去尾部斜杠。
+ * 尾部斜杠会让 `${baseUrl}/api/contracts` 变成 `//api/contracts`，
+ * Daemon 按 pathname 精确匹配，于是全体接口莫名 404 —— 顺手在这里掐掉。
+ */
+export function normalizeBaseUrl(raw: string): string {
+  const cleaned = raw
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200F\uFEFF]/g, "")
+    .trim()
+    .replace(/\/+$/, "");
+  return cleaned.length > 0 ? cleaned : DEFAULT_DAEMON_URL;
+}
+
 export function loadConnection(): DaemonConnection {
   // SSR 阶段无 window：返回默认连接，避免服务端渲染崩溃
   if (typeof window === "undefined") {
@@ -44,7 +122,7 @@ export function loadConnection(): DaemonConnection {
   // 规范 TASK-D.1 FAIL：严禁 URL query（?token=）传递 Token —— 这里明确不读 query。
   const hash = window.location.hash;
   if (hash.startsWith("#token=")) {
-    const fragmentToken = hash.slice("#token=".length).trim();
+    const fragmentToken = normalizeSessionToken(hash.slice("#token=".length));
     if (fragmentToken) {
       sessionStorage.setItem(TOKEN_STORAGE_KEY, fragmentToken);
     }
@@ -57,17 +135,48 @@ export function loadConnection(): DaemonConnection {
   }
 
   return {
-    baseUrl:
+    baseUrl: normalizeBaseUrl(
       sessionStorage.getItem("stagent.baseUrl") ??
-      (import.meta.env["VITE_DAEMON_URL"] as string | undefined) ??
-      DEFAULT_DAEMON_URL,
-    token: sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? "",
+        (import.meta.env["VITE_DAEMON_URL"] as string | undefined) ??
+        DEFAULT_DAEMON_URL,
+    ),
+    // 历史遗留的脏 Token 在这里就洗一遍，避免带着换行/全角空格一路走到 fetch
+    token: normalizeSessionToken(
+      sessionStorage.getItem(TOKEN_STORAGE_KEY) ?? "",
+    ),
   };
 }
 
 export function saveConnection(conn: DaemonConnection): void {
-  sessionStorage.setItem("stagent.baseUrl", conn.baseUrl);
-  sessionStorage.setItem(TOKEN_STORAGE_KEY, conn.token);
+  sessionStorage.setItem("stagent.baseUrl", normalizeBaseUrl(conn.baseUrl));
+  // 落盘前归一：宁可在输入时悄悄修好全角/换行，也不要让脏 Token 进请求头
+  sessionStorage.setItem(TOKEN_STORAGE_KEY, normalizeSessionToken(conn.token));
+}
+
+/** 组装最终交给 fetch 的 headers：Token 归一 + 逐项 ASCII 守卫 */
+function buildRequestHeaders(
+  conn: DaemonConnection,
+  extra: HeadersInit | undefined,
+): Record<string, string> {
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    authorization: authorizationHeaderValue(conn.token),
+  };
+  if (extra !== undefined) {
+    const entries: Array<[string, string]> =
+      extra instanceof Headers
+        ? Array.from(extra.entries())
+        : Array.isArray(extra)
+          ? extra.map(([name, value]) => [name, value] as [string, string])
+          : Object.entries(extra);
+    for (const [name, value] of entries) {
+      headers[name.toLowerCase()] = value;
+    }
+  }
+  for (const [name, value] of Object.entries(headers)) {
+    assertHeaderValueSafe(name, value);
+  }
+  return headers;
 }
 
 async function request<T>(
@@ -75,13 +184,9 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const res = await fetch(`${conn.baseUrl}${path}`, {
+  const res = await fetch(`${normalizeBaseUrl(conn.baseUrl)}${path}`, {
     ...init,
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${conn.token}`,
-      ...(init.headers ?? {}),
-    },
+    headers: buildRequestHeaders(conn, init.headers),
   });
 
   const text = await res.text();
@@ -99,7 +204,7 @@ async function request<T>(
 export async function fetchHealth(
   conn: DaemonConnection,
 ): Promise<DaemonHealth> {
-  const res = await fetch(`${conn.baseUrl}/health`);
+  const res = await fetch(`${normalizeBaseUrl(conn.baseUrl)}/health`);
   if (!res.ok) throw new DaemonApiError(res.status, `health ${res.status}`);
   return (await res.json()) as DaemonHealth;
 }
@@ -612,6 +717,99 @@ export async function decideProtectionCard(
   await request(conn, "/api/protection/decisions", {
     method: "POST",
     body: JSON.stringify({ cardId, decision }),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Supervisor 草案生成（POST /api/supervisor/draft）
+//
+// 控制面契约（任务卡 2026-10 / S.2）：
+// - 请求只带一句自然语言 + 可选的圈选路径，**不落盘**（Zero-Tool 只读）；
+// - 响应里的 `contract` 是 `lifecycle_state=DRAFT / approval=DRAFT` 的未落盘草案，
+//   带完整 `supervisor_metadata`（白话理由 + 未决问题 + 建议范围）；
+// - 预算走 `.stagent/supervisor-budget.json` **独立账本**，耗尽时端点返回 402，
+//   `DaemonApiError.status === 402` 且 message 为 `BUDGET_EXHAUSTED`。
+// ---------------------------------------------------------------------------
+
+/** 草案里 L0 规则推导出的计划（与合同 Scope 同源，但保留原始形态便于展示） */
+export interface SupervisorDraftPlanView {
+  writable_paths: string[];
+  readonly_paths: string[];
+  strictly_forbidden_paths: string[];
+  commands: Array<{
+    alias?: string | undefined;
+    executable: string;
+    args: string[];
+    expected_exit_code?: number | undefined;
+    timeout_seconds?: number | undefined;
+  }>;
+  budget: Record<string, unknown>;
+  protected_files: string[];
+  protected_entry_names: string[];
+  needs_protection_approval: boolean;
+}
+
+/** Supervisor 独立日预算快照（与 Worker 的 cost.json 无任何共享字段） */
+export interface SupervisorBudgetSnapshotView {
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  cost_minor_units: number;
+  currency: string;
+  tripped: boolean;
+  max_total_tokens?: number | undefined;
+  max_cost_minor_units?: number | undefined;
+  remaining_tokens?: number | undefined;
+}
+
+/** L1 单次模型调用后的真实用量（纯 L0 时为 null） */
+export interface SupervisorDraftUsageView {
+  timestamp: string;
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+}
+
+export interface SupervisorDraftResult {
+  contract: SoftwareContract;
+  plan: SupervisorDraftPlanView;
+  /** L0 规则理由 + 可选 L1 补全理由，按序拼接 */
+  rationale: string[];
+  /** G-11 零丢失：L0 与 L1 未决问题按序拼接，**不去重** */
+  unresolved_questions: string[];
+  /** 纯 L0 恒为 0（零模型调用、零费用） */
+  model_calls: number;
+  usage: SupervisorDraftUsageView | null;
+}
+
+export interface SupervisorDraftResponse {
+  draft: SupervisorDraftResult;
+  budget: SupervisorBudgetSnapshotView;
+}
+
+/**
+ * 生成一份未落盘的合同草案。
+ * `enrich` 只在 Daemon 侧配置了 L1 补全器时可用，否则端点返回 409
+ * `ENRICH_NOT_CONFIGURED`——前端默认不传，走纯 L0。
+ */
+export async function generateSupervisorDraft(
+  conn: DaemonConnection,
+  input: {
+    intent: string;
+    context_paths?: string[] | undefined;
+    enrich?: boolean | undefined;
+  },
+): Promise<SupervisorDraftResponse> {
+  return request<SupervisorDraftResponse>(conn, "/api/supervisor/draft", {
+    method: "POST",
+    body: JSON.stringify({
+      intent: input.intent,
+      ...(input.context_paths && input.context_paths.length > 0
+        ? { context_paths: input.context_paths }
+        : {}),
+      ...(input.enrich === true ? { enrich: true } : {}),
+    }),
   });
 }
 

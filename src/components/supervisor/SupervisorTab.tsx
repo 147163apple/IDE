@@ -26,6 +26,12 @@ export interface SupervisorContractView {
   writable: string[];
   forbidden: string[];
   commands: Array<{ alias: string; argv: string }>;
+  /** 白话理由：来自 `supervisor_metadata.maturity_assessment.rationale`，原样透传 */
+  rationale: string[];
+  /** 未决问题：G-11 零丢失，不去重、不截断 */
+  unresolved: string[];
+  /** 草案尚未提交给 Daemon（只存在于本次会话内存中，未落盘） */
+  isDraft?: boolean;
 }
 
 export interface SupervisorProtectionView {
@@ -171,6 +177,15 @@ export function SupervisorTab({
       >
         {contract ? (
           <>
+            {contract.isDraft ? (
+              <p
+                data-testid="supervisor-draft-badge"
+                className="rounded border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-800"
+              >
+                这是刚生成、<strong>尚未提交</strong>
+                的草案：只存在于本次会话内存里，仓库里还没有这份合同。
+              </p>
+            ) : null}
             <Pairs
               pairs={[
                 ["标题", contract.title],
@@ -180,6 +195,45 @@ export function SupervisorTab({
               ]}
             />
             <p className="whitespace-pre-wrap pt-1">{contract.description}</p>
+            {contract.rationale.length > 0 ? (
+              <div className="pt-1" data-testid="supervisor-rationale">
+                <p className="opacity-60">
+                  为什么这样圈范围（白话理由 · {contract.rationale.length} 条）
+                </p>
+                <ul className="list-disc pl-5">
+                  {contract.rationale.map((line, index) => (
+                    <li
+                      key={`${index}-${line}`}
+                      data-testid="supervisor-rationale-item"
+                    >
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <div className="pt-1" data-testid="supervisor-unresolved">
+              <p className="opacity-60">
+                还没说清的地方（未决问题 · {contract.unresolved.length} 条）
+              </p>
+              {contract.unresolved.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {contract.unresolved.map((question, index) => (
+                    <li
+                      key={`${index}-${question}`}
+                      data-testid="supervisor-unresolved-item"
+                    >
+                      {question}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="opacity-70">
+                  没有未决问题——L0
+                  规则没有发现需要澄清的地方（不代表一定没风险）。
+                </p>
+              )}
+            </div>
             {contract.acceptance.length > 0 ? (
               <div className="pt-1">
                 <p className="opacity-60">验收判据</p>
@@ -193,8 +247,9 @@ export function SupervisorTab({
           </>
         ) : (
           <p className="opacity-70">
-            还没有选中合同。先在右侧 AI 对话里说清目标，或到合同操作台新建一份——
-            Supervisor 不会替你凭空生成方案。
+            还没有选中合同，也还没有本次会话的草案。点右上角「新建需求」，用一句话说清要改什么，
+            Supervisor
+            会先出一份带白话理由与未决问题的草案给你审——它不会替你批准或开工。
           </p>
         )}
       </Section>
