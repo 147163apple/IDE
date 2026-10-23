@@ -6,6 +6,7 @@
 > 3. **底座演进任务认领**：本规范新增 **`TASK-0.2c`**，明确认领架构规范之 P0.2c 里程碑（C-01 整改项），将 Schema v1.3.0（`approval`、`authorization.git`）、Fast Path 确定性流转边 (`DRAFT -> PREPARING -> EXECUTING`)、自愈迁移边 (`PENDING_RESUME -> PREPARING`) 与外部改码级联降级边 (`AUDITED -> VERIFYING`) 列为当前工程第一执行优先级；
 > 4. **通信与防死锁引擎认领**：新增 **`TASK-D.3`**，认领架构规范之 P3.7 里程碑（15 展示状态确定性投影持久化与五类死锁自愈机制 D-1~D-5）；
 > 5. **卡片状态净化**：已完成任务卡仅描述该卡已交付内容；后续增补需求拆为独立待办卡。新增 `TASK-W.2b` 与 `TASK-D.2b` 承接未跟踪文件 Scope 阻断和 v1.3 合同迁移接入，不再混入已完成卡。
+> 6. **状态回写（2026-10-23）**：`TASK-C.7` 已合入 main（merge `5117b27`）。§1.1 矩阵与 §3.5 详细卡状态由 `[NEW_TASK]` 更新为 `[COMPLETED]`，并按实际代码校正卡片文件清单（`TaskGraphPanel` / `FunctionalTree` / `ExecutionDag`，含 `evidence-collector.ts`）。门禁：干净环境四件套全绿（1032 passed / 6 skipped）。残余口径差已在卡片内登记。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
@@ -47,7 +48,7 @@
 | **TASK-C.4** | 架构雷达视图与 Scope 圈选抽屉 | 前端呈现 | **[DEFERRED → v0.2+]** | P3 架构雷达 | 1000 节点拓扑渲染；交互式 Scope 圈选。 |
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（components/diff/* + StructuredTerminal.tsx 在位；5 用例绿） | P3 差异终端 | 双栏/内联 Git Diff 审阅；结构化终端流式日志展示、ANSI 渲染、先脱敏后截断。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（AgentChatPane + use-agent-session 在位；8 用例绿） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume。 |
-| **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[NEW_TASK]** | P4.5 拓扑点亮 (v1.6.1) | • 渲染业务功能思维导图与任务执行 DAG 流程图<br>• Daemon 独占 Graph 状态持有与持久化；Supervisor 提案在类型层 `Omit` 剥离运行态<br>• 节点七态 (`PENDING` / `RUNNING` / `REPAIRING` / `ILLUMINATED` / `FAILED` / `BLOCKED` / `STALE_REVERIFY`，严格对齐架构 §3.2.1)，物理点亮绑定真实写入、测试退出码为 0 与节点变更指纹<br>• COMMAND 节点禁止空验证集全绿点亮；外部改码联动降级 `STALE_REVERIFY` 变灰<br>• 左侧文件树提供【规范与资产】专区，展示需求文档、合同、Demo 原型；文件树监听真实文件变更并表现生成进度 |
+| **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[COMPLETED]**（2026-10-23 合入 main，merge `5117b27`；原交付于 `feat/task-c7-graph-engine`，基线 `main@05f090f`；干净环境四件套全绿：1032 passed / 6 skipped；新增 31 用例：24 单元 + 7 UI） | P4.5 拓扑点亮 (v1.6.1) | • `daemon/graph/graph-engine.ts`：Daemon 独占内存权威 + 原子落盘 `.stagent/specs/task_graph.json`，`revision` 单调递增、对外只给快照<br>• `SupervisorProposalV1` 以 `Omit<TaskNode, "state" \| "executed_at" \| "commit_sha">` 类型层剥离运行态；运行期夹带运行态字段直接 `E_PROPOSAL_INVALID`<br>• 七态严格对齐 §3.2.1；`illumination-verifier.ts` 要求「受控写入 + 退出码 0 + Commit SHA + 文件指纹」，空命令集/空结果集 `E_EMPTY_VERIFICATION_BLOCKED` 拒绝点亮（UI 警告灰，不假绿）<br>• `evidence-collector.ts`：文件 SHA-256、Scope、HEAD 由 Daemon 现算，HTTP 调用方不得自报证据<br>• 外部改码 `STALE_REVERIFY` 变灰并撤销指纹；AUDITED 合同同周期退回 VERIFYING<br>• `TASK_GRAPH_UPDATED` 帧 + `revision` 乱序保护；业务功能树 / 执行 DAG 双视图，100ms 翠绿过渡<br>• 左栏【规范与资产】专区展示需求 / 合同 / Demo 与真实点亮进度；文件树随图谱更新刷新 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -943,7 +944,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.7】业务功能树与 Task Graph 渐进点亮视口 `[v1.6.1 升级]`
 * **任务编号**：`TASK-C.7`
 * **前置依赖**：`TASK-D.1`, `TASK-S.2`, `TASK-C.1`, `TASK-D.3`
-* **任务状态**：**[NEW_TASK]** (认领架构规范 §10 P4.5 拓扑点亮)
+* **任务状态**：**[COMPLETED]**（2026-10-23 合入 main，merge `5117b27`；原交付于 `feat/task-c7-graph-engine`，基线 `main@05f090f`。门禁：干净环境四件套全绿（1032 passed / 6 skipped）；`tests/unit/graph-engine-invariants.test.ts` 24 通过；`tests/ui/task-graph-illumination.test.tsx` 7 通过；`tests/ui/ide-shell.test.tsx` 12 通过（新增 Activity Bar 图谱入口后同步顺序断言）。落地清单：`daemon/graph/graph-engine.ts`（Daemon 独占内存权威 + 原子落盘 `.stagent/specs/task_graph.json`，`revision` 单调递增、对外只给快照）、`daemon/graph/illumination-verifier.ts`（三证充要条件 + C-04 空集拦截）、`daemon/graph/evidence-collector.ts`（目标文件 SHA-256 / 合同 Scope / `git rev-parse HEAD` 全部由 Daemon 现算）、`src/lib/graph/task-graph.ts`（七态、提案类型与 `TASK_GRAPH_UPDATED` 载荷）、`daemon/server.ts` 5 个 `/api/graph*` 端点与全量快照广播、`src/components/graph/{TaskGraphPanel,FunctionalTree,ExecutionDag}.tsx` + `graph-view-model.ts`、`src/components/FileTreeSpecsSection.tsx`、`src/routes/index.tsx` 接线。**口径说明**：① 视图文件名按实际实现落为 `TaskGraphPanel` / `FunctionalTree` / `ExecutionDag`（本卡设计期的 `TaskGraphViewer` / `FunctionalMindmap` / `GraphNodeCard` 命名未沿用）；② 空验证集按架构 §3.2.2 置 `FAILED` + `E_EMPTY_VERIFICATION_BLOCKED`，UI 以「警告灰」（`data-tone="warning"`）呈现，不新增第八个节点状态；③ 点亮同时绑定 Worktree HEAD 的 Commit SHA 与目标文件 SHA-256 指纹，兼容 ADR-009 的 `node_patch_fingerprint` 口径；④ 需求条目以合同 `intent` 呈现（仓库暂无 `.stagent/specs/requirements.md` 实体），Demo 仅在真实文件存在时标「就绪」，进度由 `TASK_GRAPH_UPDATED` 驱动（源头为真实写入与验证，不由模型自报）。**残余口径差（不阻塞验收，需登记）**：① 节点详情暂只展示目标文件/验证命令/Commit SHA/问题码，卡片要求的 Git Diff 摘要与测试报告抽屉未接入；② `POST /api/graph/verify` 的验证命令结果仍由执行器提交（文件写入、Scope、SHA 已不可自报）；③ 建图入口仅控制面 API，不提供「从合同自动拆节点」的伪造拓扑）
 * **v0.1 范围**：在中栏呈现业务思维导图与任务执行 DAG 流程图；实现由灰变绿的渐进点亮动效与持久化状态渲染；Daemon 独占权威状态；提案类型剥离运行态；空验证集强拦截。
 * **核心目标**：
   1. **Daemon 独占权威状态与提案类型安全 (`daemon/graph/graph-engine.ts`)**：
@@ -960,16 +961,19 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
      - 监听 WebSocket 的 `TASK_GRAPH_UPDATED` 帧，当后台验证通过事件到达时，触发平滑翠绿过渡点亮动效（延迟 ≤ 100ms）；
      - 点击任何已点亮节点，可在抽屉中展开查看关联的 Git Diff 摘要与测试报告。
 * **文件树规范资产专区**：左侧固定展示 `.stagent/specs/requirements.md`、`contract.json` 与 `.stagent/demo/` 原型入口；文件生成动效必须由真实文件系统变更事件驱动，不得由模型自报进度触发。
-* **涉及核心文件**：
+* **涉及核心文件（以实际落地为准）**：
   - 新增：`daemon/graph/graph-engine.ts`
   - 新增：`daemon/graph/illumination-verifier.ts`
-  - 新增：`src/components/graph/TaskGraphViewer.tsx`
-  - 新增：`src/components/graph/FunctionalMindmap.tsx`
-  - 新增：`src/components/graph/GraphNodeCard.tsx`
+  - 新增：`daemon/graph/evidence-collector.ts`（文件 / Scope / HEAD 现算，不接受调用方自报）
+  - 新增：`src/lib/graph/task-graph.ts`（七态、提案类型、帧载荷与持久化守卫）
+  - 新增：`src/components/graph/TaskGraphPanel.tsx`（双视图容器与 100ms 点亮动效）
+  - 新增：`src/components/graph/FunctionalTree.tsx`
+  - 新增：`src/components/graph/ExecutionDag.tsx`
   - 新增：`src/components/graph/graph-view-model.ts`
   - 新增：`src/components/FileTreeSpecsSection.tsx`（按 §5 路径映射约定落在 `src/components/`）
-  - 测试：`tests/unit/graph-engine-invariants.test.ts`
-  - 测试：`tests/ui/task-graph-illumination.test.tsx`
+  - 修改：`daemon/server.ts`（`/api/graph*` 与 `TASK_GRAPH_UPDATED`）、`src/lib/ipc/frames.ts`、`src/lib/daemon-api.ts`、`src/hooks/use-daemon-stream.ts`、`src/routes/index.tsx`、`src/components/WorkspaceLayout.tsx`、`src/components/layout/ActivityBar.tsx`
+  - 测试：`tests/unit/graph-engine-invariants.test.ts`（24 用例）
+  - 测试：`tests/ui/task-graph-illumination.test.tsx`（7 用例）
 * **Pass/Fail 验收判定**：
   - **PASS**：Supervisor 提案在 Schema 校验层成功剥离运行态；节点点亮严格绑定物理退出码 0 与 Commit SHA；空验证集的 COMMAND 节点无法被点亮；外部改码能触发节点变灰 STALE；页面刷新无损恢复点亮状态。
   - **FAIL**：前端通过 Mock 数据自行点亮节点；空验证集节点被显示为绿色已完成。

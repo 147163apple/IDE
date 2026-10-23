@@ -4,6 +4,7 @@
 - 基线：`main@05f090f`（已包含 TASK-0.2c、TASK-D.3、TASK-W.2b）
 - 规范依据：《Stagent 系统架构设计规范 v1.6.1》§3.1 – §3.4；《研发任务拆解规范 v1.6.2》TASK-C.7
 - 门禁结果：`npm run typecheck` 零错误；新增 31 个用例全绿（24 单元 + 7 UI）
+- 合入主线：`main` merge `5117b27`（2026-10-23）
 
 ## 1. 交付清单
 
@@ -21,6 +22,7 @@
 | 接线 | `WorkspaceLayout.tsx`、`ActivityBar.tsx`、`routes/index.tsx` | 图谱 Tab、左栏专区、真实数据注入与文件树跟随刷新 |
 | 样式 | `src/styles.css` | `dag-illuminate` 100ms 关键帧（尊重 `prefers-reduced-motion`） |
 | 测试 | `tests/unit/graph-engine-invariants.test.ts`（24）、`tests/ui/task-graph-illumination.test.tsx`（7） | 不变式与视口门禁 |
+| 规范回写 | `docs/Stagent_v0.1_Development_Tasks_Specification_v1.6.2.md` | §1.1 矩阵与 §3.5 详细卡状态 `[NEW_TASK]` → `[COMPLETED]`，按实际落地校正文件清单，并在版本声明追加状态回写记录（合入 merge `5117b27`） |
 
 ## 2. 关键设计决策
 
