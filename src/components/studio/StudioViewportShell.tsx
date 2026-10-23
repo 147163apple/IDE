@@ -59,13 +59,13 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
       data-testid="studio-viewport-shell"
       data-active-viewport={active}
       data-presentation-state={presentationState ?? ""}
-      className="flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-1 flex-col"
     >
       <div
         data-testid="studio-viewport-tabs"
         role="tablist"
         aria-label="Studio 视口"
-        className="flex flex-wrap items-center gap-1 border-b border-border px-2 py-1"
+        className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1"
       >
         {STUDIO_VIEWPORT_IDS.map((id) => {
           const selected = id === active;
@@ -100,7 +100,10 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
         ) : null}
       </div>
 
-      <div className="relative min-h-0 flex-1">
+      <div
+        data-testid="studio-viewport-content"
+        className="relative min-h-0 flex-1 overflow-hidden"
+      >
         {STUDIO_VIEWPORT_IDS.map((id) => {
           const selected = id === active;
           return (

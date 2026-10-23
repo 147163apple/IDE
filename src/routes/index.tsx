@@ -1265,7 +1265,10 @@ function Console() {
               />
             }
             contract={
-              <div className="flex min-w-0 flex-1 flex-col">
+              <div
+                data-testid="studio-contract-slot"
+                className="flex h-full min-h-0 min-w-0 flex-col overflow-auto"
+              >
                 <SupervisorStudioPane
                   runMode={
                     protection && protection.mode !== "VIBE"

@@ -221,7 +221,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   };
 
   const studio = (
-    <div data-testid="studio-pane" className="min-h-0 text-sm">
+    <div
+      data-testid="studio-pane"
+      className="flex h-full min-h-0 flex-1 flex-col overflow-hidden text-sm"
+    >
       {props.studioContent ?? (
         <div className="p-3">
           Supervisor Studio（合同审阅区，TASK-C.2 实装）
@@ -230,7 +233,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     </div>
   );
   const supervisor = (
-    <div data-testid="supervisor-pane" className="min-h-0 overflow-auto">
+    <div
+      data-testid="supervisor-pane"
+      className="h-full min-h-0 flex-1 overflow-auto"
+    >
       {props.supervisorContent ?? (
         <div className="p-3 text-sm opacity-60">
           Supervisor 需要主页面注入合同与保护清单数据。
@@ -239,7 +245,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     </div>
   );
   const settings = (
-    <div data-testid="settings-pane" className="min-h-0 overflow-auto">
+    <div
+      data-testid="settings-pane"
+      className="h-full min-h-0 flex-1 overflow-auto"
+    >
       {props.settingsContent ?? (
         <div className="p-3 text-sm opacity-60">
           设置页需要主页面注入连接与模型 Key 面板。
@@ -248,7 +257,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     </div>
   );
   const graphPane = (
-    <div data-testid="graph-pane" className="flex min-h-0 flex-col">
+    <div
+      data-testid="graph-pane"
+      className="flex h-full min-h-0 flex-1 flex-col"
+    >
       {props.graphContent ?? (
         <div className="p-3 text-sm opacity-60">
           任务图谱需要主页面注入权威快照（TASK-C.7）。
@@ -385,7 +397,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
 
         <main
           data-testid="middle-column"
-          className="flex min-w-0 flex-1 flex-col"
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
         >
           {props.middleBanner}
           {props.confirmSlot}
@@ -428,7 +440,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
               {split ? "取消分屏" : "分屏对照"}
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div
+            data-testid="middle-content"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
             {showWelcome ? (
               welcome
             ) : split ? (
@@ -442,7 +457,9 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             ) : isGraph ? (
               graphPane
             ) : (
-              editorFor(activeTab)
+              <div className="min-h-0 flex-1 overflow-auto">
+                {editorFor(activeTab)}
+              </div>
             )}
           </div>
         </main>
