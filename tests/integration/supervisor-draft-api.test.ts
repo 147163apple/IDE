@@ -313,6 +313,44 @@ describe("POST /api/supervisor/draft（Supervisor 草案控制面）", () => {
     expect(await res.json()).toMatchObject({ error: "ENRICH_NOT_CONFIGURED" });
   });
 
+  it("省略 enrich 且已注入补全器 → 默认走 L1", async () => {
+    let calls = 0;
+    await startDaemon(async () => {
+      calls += 1;
+      return {
+        rationale: ["自动 L1"],
+        unresolved_questions: [],
+        model_id: "gpt-test",
+        input_tokens: 3,
+        output_tokens: 4,
+      };
+    });
+    const res = await post({ intent: "改登录按钮样式" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { draft: { model_calls: number } };
+    expect(body.draft.model_calls).toBe(1);
+    expect(calls).toBe(1);
+  });
+
+  it("enrich:false 即使已注入也强制纯 L0", async () => {
+    let calls = 0;
+    await startDaemon(async () => {
+      calls += 1;
+      return {
+        rationale: ["不应出现"],
+        unresolved_questions: [],
+        model_id: "gpt-test",
+        input_tokens: 1,
+        output_tokens: 1,
+      };
+    });
+    const res = await post({ intent: "改登录按钮样式", enrich: false });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { draft: { model_calls: number } };
+    expect(body.draft.model_calls).toBe(0);
+    expect(calls).toBe(0);
+  });
+
   it("非 POST 返回 405", async () => {
     await startDaemon();
     const res = await fetch(`${base}/api/supervisor/draft`, {

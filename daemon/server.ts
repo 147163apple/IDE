@@ -144,6 +144,7 @@ import {
   SupervisorBudgetLedger,
   SUPERVISOR_BUDGET_ERROR_CODE,
 } from "./supervisor/budget";
+import { EnrichError } from "./supervisor/enrich-openai";
 import type { SupervisorMessage } from "./supervisor/types";
 
 export interface DaemonServerOptions extends PortFinderOptions {
@@ -1074,8 +1075,17 @@ export class StagentDaemon {
       return;
     }
 
-    const wantEnrich = body.enrich === true;
-    if (wantEnrich && this.supervisorEnrich === undefined) {
+    // enrich 语义：
+    // - true  → 必须 L1；未配置则 409（不静默降级）
+    // - false → 强制纯 L0
+    // - 省略 → 有注入则 L1，否则 L0（「有配置则 enrich，无则 L0」）
+    const wantEnrich =
+      body.enrich === true
+        ? true
+        : body.enrich === false
+          ? false
+          : this.supervisorEnrich !== undefined;
+    if (body.enrich === true && this.supervisorEnrich === undefined) {
       this.sendJson(res, 409, {
         error: "ENRICH_NOT_CONFIGURED",
         message:
@@ -1152,6 +1162,15 @@ export class StagentDaemon {
           error: "BUDGET_EXHAUSTED",
           code: SUPERVISOR_BUDGET_ERROR_CODE,
           message: (err as Error).message,
+          budget: ledger.snapshot(),
+        });
+        return;
+      }
+      if (err instanceof EnrichError) {
+        // 502：上游模型/网络问题，便于前端区分「没配」与「配了但挂了」
+        this.sendJson(res, 502, {
+          error: err.enrichCode,
+          message: err.message,
           budget: ledger.snapshot(),
         });
         return;

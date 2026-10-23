@@ -21,6 +21,11 @@ import process from "node:process";
 import { execFile } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { createDaemon } from "../daemon/server";
+import { injectLocalModelEnv } from "../daemon/core/local-env";
+import {
+  createSupervisorEnrich,
+  isSupervisorEnrichConfigured,
+} from "../daemon/supervisor/enrich-openai";
 import { readPidLock } from "../daemon/core/pid-lock";
 import { sessionTokenPath } from "../daemon/core/session-token";
 
@@ -199,12 +204,38 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // 本机密钥：从 .tmp/deepseek.env 注入进程环境（不写仓库、不打印值），
+  // 并映射成 OpenAI 兼容变量供 Supervisor L1 / 保底 Agent 使用。
+  const envInject = injectLocalModelEnv(options.repo);
+  if (envInject.envFile.loaded) {
+    console.log(
+      `  环境: 已加载 ${envInject.envFile.injectedKeys.length} 项本机变量` +
+        (envInject.mappedKeys.length > 0
+          ? `（并映射 ${envInject.mappedKeys.length} 项 OpenAI 兼容键）`
+          : ""),
+    );
+  } else {
+    console.log(
+      `  环境: 未找到 ${envInject.envFile.path}（L1 补全将不可用，草案仍可走纯 L0）`,
+    );
+  }
+
+  const supervisorEnrich = isSupervisorEnrichConfigured()
+    ? createSupervisorEnrich()
+    : undefined;
+  if (supervisorEnrich) {
+    console.log(`  L1 补全: 已启用（DeepSeek / OpenAI 兼容口）`);
+  } else {
+    console.log(`  L1 补全: 未配置密钥（出草案默认纯 L0）`);
+  }
+
   const daemon = createDaemon({
     repoRoot: options.repo,
     ...(options.port === undefined
       ? {}
       : { startPort: options.port, endPort: options.port }),
     autoShutdownSignals: true,
+    ...(supervisorEnrich === undefined ? {} : { supervisorEnrich }),
   });
 
   const info = await daemon.start();

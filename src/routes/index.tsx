@@ -61,7 +61,9 @@ import {
   type ProtectionRecommendationView,
   type ProtectionStateView,
   type SupervisorDraftResult,
+  type SupervisorDraftResponse,
   type WorkerRunResult,
+  DaemonApiError,
 } from "@/lib/daemon-api";
 import { ContractCard } from "@/components/contract/ContractCard";
 import { ScopeList } from "@/components/contract/ScopeList";
@@ -808,15 +810,34 @@ function Console() {
 
   /**
    * 提意图 → 草案：只调 `POST /api/supervisor/draft`（Zero-Tool 只读），
-   * 不创建合同、不写入 `.stagent/contracts`。失败（402 预算耗尽 / 409 未配模型）
-   * 由 `runAction` 统一落到页面 error 条，不做静默降级。
+   * 不创建合同、不写入 `.stagent/contracts`。显式 `enrich:true`；若 Daemon
+   * 未配置 L1 则回退纯 L0。其它失败（402 预算耗尽 / 502 上游错误）由
+   * `runAction` 落到页面 error 条。
    */
   const requestDraft = (intent: string) => {
     void runAction("draft", async () => {
-      const outcome = await generateSupervisorDraft(conn, {
-        intent,
-        context_paths: scopeDraft,
-      });
+      // 显式要 L1；若 Daemon 未注入补全器（409），回退纯 L0，不静默吞错以外的失败。
+      let outcome: SupervisorDraftResponse;
+      try {
+        outcome = await generateSupervisorDraft(conn, {
+          intent,
+          context_paths: scopeDraft,
+          enrich: true,
+        });
+      } catch (err) {
+        if (
+          err instanceof DaemonApiError &&
+          err.status === 409 &&
+          err.message === "ENRICH_NOT_CONFIGURED"
+        ) {
+          outcome = await generateSupervisorDraft(conn, {
+            intent,
+            context_paths: scopeDraft,
+          });
+        } else {
+          throw err;
+        }
+      }
       setDraft(outcome.draft);
     });
   };
@@ -1873,7 +1894,8 @@ function ContractForm({
             </span>
           ) : (
             <span className="text-[10px] text-muted-foreground">
-              纯规则推导（零模型调用、零费用），不会写任何文件
+              有模型配置时会做 L1 白话补全（记入 Supervisor 独立账本）；否则纯
+              L0，不会写任何文件
             </span>
           )}
         </div>
