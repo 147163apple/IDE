@@ -2,17 +2,18 @@
 
 > **版本定义与基线声明 (v1.6.2 · 2026-10-23)**：
 > 1. **架构规范深度对齐**：本工程规范依据《Stagent 系统架构设计规范 (v1.6.1 代码对齐与规范定稿版)》全面修订签发，严格对齐其 §10 演进路线图（包含 P0.2c、P3.7、P4.5、P5.7 等关键里程碑）；
-> 2. **代码物理基线明确**：本轮本地代码事实核验基线为仓库 `main`@`6d7fa59`；全量测试实测 **86 个测试文件 / 785 通过 / 6 跳过，全绿**。本轮未重新验证 TypeScript 与 Lint，故不将其列为实测结论。代码当前已交付数据模型为 Contract Schema v1.2.0；
+> 2. **代码物理基线明确**：当前本地物理 HEAD 为仓库 `main`@`9f3b303`。测试基线以最近干净环境四件套为准（C.7 复验 **1032 passed / 6 skipped**）；本轮为文档状态校正，未重跑 TypeScript 与 Lint，故不将其列为新实测结论。代码当前已交付数据模型为 Contract Schema v1.3.0（经 TASK-0.2c）；
 > 3. **底座演进任务认领**：本规范新增 **`TASK-0.2c`**，明确认领架构规范之 P0.2c 里程碑（C-01 整改项），将 Schema v1.3.0（`approval`、`authorization.git`）、Fast Path 确定性流转边 (`DRAFT -> PREPARING -> EXECUTING`)、自愈迁移边 (`PENDING_RESUME -> PREPARING`) 与外部改码级联降级边 (`AUDITED -> VERIFYING`) 列为当前工程第一执行优先级；
 > 4. **通信与防死锁引擎认领**：新增 **`TASK-D.3`**，认领架构规范之 P3.7 里程碑（15 展示状态确定性投影持久化与五类死锁自愈机制 D-1~D-5）；
 > 5. **卡片状态净化**：已完成任务卡仅描述该卡已交付内容；后续增补需求拆为独立待办卡。新增 `TASK-W.2b` 与 `TASK-D.2b` 承接未跟踪文件 Scope 阻断和 v1.3 合同迁移接入，不再混入已完成卡。
 > 6. **状态回写（2026-10-23）**：`TASK-C.7` 已合入 main（merge `5117b27`）。§1.1 矩阵与 §3.5 详细卡状态由 `[NEW_TASK]` 更新为 `[COMPLETED]`，并按实际代码校正卡片文件清单（`TaskGraphPanel` / `FunctionalTree` / `ExecutionDag`，含 `evidence-collector.ts`）。门禁：干净环境四件套全绿（1032 passed / 6 skipped）。残余口径差已在卡片内登记。
+> 7. **状态回写（2026-10-23 · 文档校正）**：`TASK-W.2b` 由 `[NEW_TASK]` 更正为 `[COMPLETED]`（证据 `87f909c` / merge `05f090f`，`untracked-scope-guard` + `E_OUT_OF_SCOPE_UNTRACKED`）；`TASK-S.4` 去掉「待合入 main」并注明经 `d5ee448` 合入；`TASK-S.1` PARTIAL 备注校正为「L0/L1 已在 S.2，仅剩 3s 防抖节流器（main 无 `throttler.ts`）」；测试基线改写为 `main`@`9f3b303`，并以 C.7 干净环境复验（1032 passed / 6 skipped）为准。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前评审实测基线为 `main`@`6d7fa59`、86 个测试文件 / 785 通过 / 6 跳过。后续实施前应在实际工作树重跑并归档结果。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`9f3b303`。测试基线以最近干净环境四件套为准（C.7 复验 1032 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -27,14 +28,14 @@
 | **TASK-A.4** | 受限进程执行器与跨平台进程树全回收 | 执行内核 | **[COMPLETED]** | P2 进程执行 | 白名单命令执行、POSIX 进程组 / Windows taskkill 回收就绪。 |
 | **TASK-A.5** | 循环重试熔断与费用/Token 硬上限监控 | 执行内核 | **[COMPLETED]** | P2 熔断守护 | 验证重试熔断 (`max_verification_retries: 3`)、超时与费用预检就绪。 |
 | **TASK-A.6** | Daemon 崩溃自愈、Git 锁清理与 TOCTOU 校验 | 执行内核 | **[COMPLETED]** | P1 崩溃自愈 | 孤儿锁安全回收、`resume()` 扫描自愈、快照指纹校验就绪。 |
-| **TASK-S.1** | Supervisor 建议会话与持久化存储管理 | 建议中枢 | **[PARTIAL]**（独立预算分账已落地，规则优先 L0/L1 与 3s 防抖节流器仍待完成） | P4 智能建议 | • Local-First 会话落盘 (`.stagent/sessions/`)、Prompt Pipeline<br>• 依赖层静态 AST 扫描禁令 + 运行时越权调用拦截正例断言<br>• 独立日预算分账 `.stagent/supervisor-budget.json`<br>• 规则优先 L0/L1；唤醒节流器 3s Debounce 默认关闭 |
+| **TASK-S.1** | Supervisor 建议会话与持久化存储管理 | 建议中枢 | **[PARTIAL]**（独立预算分账已落地；规则优先 L0/L1 已在 TASK-S.2 交付；仅剩 3s 防抖节流器——`daemon/supervisor/throttler.ts` 仍未进入 main） | P4 智能建议 | • Local-First 会话落盘 (`.stagent/sessions/`)、Prompt Pipeline<br>• 依赖层静态 AST 扫描禁令 + 运行时越权调用拦截正例断言<br>• 独立日预算分账 `.stagent/supervisor-budget.json`<br>• 规则优先 L0/L1；唤醒节流器 3s Debounce 默认关闭 |
 | **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[COMPLETED]**（按需触发、L0 规则引擎、L1 强模型补全、G-11 未决问题零丢失、脱敏均已落地） | P4 合同草案 | • 用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• 断言未决问题 100% 保留至草案元数据供用户确认 (G-11)<br>• 保留脱敏模块 `src/lib/ipc/redaction.ts` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
-| **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，**待合入 main**；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
+| **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，经 `d5ee448` 合入 main；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
 | **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
-| **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[NEW_TASK]** | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
+| **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[COMPLETED]**（提交 `87f909c`，经 `05f090f` 合入 main；`daemon/pipeline/untracked-scope-guard.ts` + `E_OUT_OF_SCOPE_UNTRACKED`） | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
 | **TASK-W.3** | 测试环境、秘密脱敏与网络/端口策略守卫 | 编码内核 | **[COMPLETED]**（policy-guard.ts 已接入 Gateway 与 Runner；14 用例绿） | P2 环境网络 | • 环境变量白名单过滤、`CI=true` 注入、`env_file_grants` 按命令授权<br>• 秘密遮蔽严密发生在日志截断之前<br>• 网络策略拦截 (`DENY` / `EXPLICIT_TARGETS` / `USER_APPROVED`)、动态端口 |
 | **TASK-W.4** | 高风险执行威胁守卫与运行时能力复检 | 编码内核 | **[COMPLETED]**（threat-guard.ts + runtime-interceptor.ts 已接入；26 用例绿） | P2 安全威胁 | • 闭环 G-01 & G-20：落地 `daemon/worker/threat-guard.ts`<br>• 命令 argv 与仓库信任检查，高风险特权命令抛 `E_UNSAFE_EXECUTION` 并阻断<br>• 会话期周期性复检，检测到绕过立即降级为 `UNCONTROLLED_EXTERNAL` 并阻断 Evidence<br>• 落实 4 类绕过路径不可用负例断言 |
 | **TASK-W.5a** | Claude Code 适配器（cli-host 黑盒实测） | 编码内核 | **[PASS]**（真实 CLI 负例 6/6 全绿，已完成 Shell 加固） | P5.5 受控实测 | cli-host spawn 挂载、Pre-tool hook 拦截、Headless 结构化输出、会话续接；4 类绕过负例实测。 |
@@ -320,7 +321,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task S.1】Supervisor 建议会话与持久化存储管理
 * **任务编号**：`TASK-S.1`
 * **前置依赖**：`TASK-D.1`
-* **任务状态**：**[PARTIAL]**（v1.3.3 第二轮修订如实化：**旧版 S.1 已完成并在 main，提交 `1a75616`**（4 文件 / 38 用例）。**2026-10-22 Sprint 4 核验更新**：①独立预算分账——**此前"已落地"的结论口径有误，已纠正并真正落地**：`1a75616` 的 `budget.ts` 实为"复用合同同一 `CostMonitor` 账本"，与本卡核心目标 4 的分账要求相反；现改为 `SupervisorBudgetLedger.independent()` 独立落盘 `.stagent/supervisor-budget.json`（默认日预算 `DEFAULT_SUPERVISOR_DAILY_BUDGET` = 200k tokens / 50.00 CNY，与合同 `cost_limits` 解耦），`tests/unit/supervisor-budget.test.ts` 重写为 **7 例**并以「Worker 账本零污染」为断言口径；②规则优先 L0/L1 **已落地**（`daemon/supervisor/rules-l0.ts` + `draft-generator.ts`，17 例，交付明细见 `TASK-S.2` 完成记录）；③唤醒节流器（`throttler.ts`，3s 防抖默认关闭）**仍缺失**——该文件从未进入 main，仅存于未合并分支 `wip/s2-s3-supervisor-old-design`（`2319459`）。故本卡维持 **[PARTIAL]**。旧版收尾记录见本卡「完成记录」，为历史记录）
+* **任务状态**：**[PARTIAL]**（v1.3.3 第二轮修订如实化：**旧版 S.1 已完成并在 main，提交 `1a75616`**（4 文件 / 38 用例）。**2026-10-23 状态校正**：①独立预算分账已落地——`SupervisorBudgetLedger.independent()` 独立落盘 `.stagent/supervisor-budget.json`（默认日预算 `DEFAULT_SUPERVISOR_DAILY_BUDGET` = 200k tokens / 50.00 CNY，与合同 `cost_limits` 解耦），`tests/unit/supervisor-budget.test.ts` **7 例**并以「Worker 账本零污染」为断言口径；②规则优先 L0/L1 **已在 TASK-S.2 交付**（`daemon/supervisor/rules-l0.ts` + `draft-generator.ts`，17 例，详见 S.2 完成记录），不再记为本卡待办；③本卡剩余缺口仅为唤醒节流器（`daemon/supervisor/throttler.ts`，3s 防抖默认关闭）——该文件从未进入 main，仅存于未合并分支 `wip/s2-s3-supervisor-old-design`（`2319459`）。故本卡维持 **[PARTIAL]**。旧版收尾记录见本卡「完成记录」，为历史记录）
 * **核心目标**：
   1. Local-First 会话管理，落盘至 `.stagent/sessions/{session_id}.json`，文件模式 `0600`。
   2. 依赖层 AST 扫描禁令：禁止引入 Gateway/Merger/Verifier/ProcessRunner/child_process。
@@ -473,7 +474,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task S.4】Demo 静态原型生成器与 Mock 预览服务 `[v1.6.1 升级]`
 * **任务编号**：`TASK-S.4`
 * **前置依赖**：`TASK-S.2`
-* **任务状态**：**[COMPLETED]**（2026-10-23 交付：分支 `feat/task-s4-demo-service`，提交 `95ea2a3`、`07af0f2`，**待合入 main**。落地内容：需求摘要 → 纯静态原型生成（`.stagent/demo/`，产出 `index.html`/`styles.css`/`app.js`）、单文件 2MB UTF-8 字节闸门（`E_DEMO_PAYLOAD_TOO_LARGE`，HTTP 413，先全量校验再统一落盘）、独立 Origin 预览服务（仅绑 127.0.0.1:4100~4110，`findAvailablePort` + `listen` 双重端口回退）、CSP `default-src 'none'; connect-src 'none'` 与路径逃逸/隐藏文件防护、版本快照与按 ID 回退（含残留资源清理）、`DEMO_PREVIEW_STATUS` 生命周期广播（`RUNNING`/`STOPPED`/`ERROR`）、Daemon HTTP 与 WS 入口对 Demo 来源 403（**置于 CORS 放行之前**，并覆盖 sandbox iframe 的 `Origin: null`）。门禁：tsc 0 错、eslint 0 错、19 项定向单测全绿。偏离说明：采用三资源而非单文件——严格 CSP 下 `script-src 'self'` 不允许内联脚本，维持单文件需放开 `'unsafe-inline'`，安全性优先；2MB 仍按单文件独立判定。范围外（经需求方裁决）：`createDemoPreview` 的上层调用归 TASK-C.2/旅程编排层，热重载归右栏会话打补丁时对接）
+* **任务状态**：**[COMPLETED]**（2026-10-23 交付：分支 `feat/task-s4-demo-service`，提交 `95ea2a3`、`07af0f2`，经 `d5ee448` 合入 main。落地内容：需求摘要 → 纯静态原型生成（`.stagent/demo/`，产出 `index.html`/`styles.css`/`app.js`）、单文件 2MB UTF-8 字节闸门（`E_DEMO_PAYLOAD_TOO_LARGE`，HTTP 413，先全量校验再统一落盘）、独立 Origin 预览服务（仅绑 127.0.0.1:4100~4110，`findAvailablePort` + `listen` 双重端口回退）、CSP `default-src 'none'; connect-src 'none'` 与路径逃逸/隐藏文件防护、版本快照与按 ID 回退（含残留资源清理）、`DEMO_PREVIEW_STATUS` 生命周期广播（`RUNNING`/`STOPPED`/`ERROR`）、Daemon HTTP 与 WS 入口对 Demo 来源 403（**置于 CORS 放行之前**，并覆盖 sandbox iframe 的 `Origin: null`）。门禁：tsc 0 错、eslint 0 错、19 项定向单测全绿。偏离说明：采用三资源而非单文件——严格 CSP 下 `script-src 'self'` 不允许内联脚本，维持单文件需放开 `'unsafe-inline'`，安全性优先；2MB 仍按单文件独立判定。范围外（经需求方裁决）：`createDemoPreview` 的上层调用归 TASK-C.2/旅程编排层，热重载归右栏会话打补丁时对接）
 * **v0.1 范围**：受控单页静态 HTML/React 原型生成 + 虚拟 Mock 数据构造 + 独立端口与跨源沙箱隔离预览服务。
 * **核心目标**：
   1. **原型受控构建器 (`daemon/supervisor/demo/demo-generator.ts`)**：
@@ -644,9 +645,9 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task W.2b】未跟踪文件 Scope 联合检查与越界阻断
 * **任务编号**：`TASK-W.2b`
 * **前置依赖**：`TASK-0.2c`, `TASK-W.2`
-* **任务状态**：**[NEW_TASK]**
+* **任务状态**：**[COMPLETED]**（2026-10-23 核验回写：提交 `87f909c`，经 `05f090f` 合入 main。落地 `daemon/pipeline/untracked-scope-guard.ts`，错误码 `E_OUT_OF_SCOPE_UNTRACKED` 已登记于 `src/lib/error-codes.ts`；执行后联合检查 tracked Diff 与 untracked，合同外未跟踪文件阻断并留 BLOCKED 证据。合并门禁由 TASK-D.2b 承接，不在本卡范围）
 * **范围**：在执行后 Scope 校验中联合检查已跟踪 Diff 与未跟踪文件，新增统一错误码 `E_OUT_OF_SCOPE_UNTRACKED`；本卡只负责执行侧检测与阻断，不负责合并门禁。
-* **涉及核心文件**：修改 `daemon/pipeline/orchestrator.ts`、`daemon/mcp/gateway.ts`、`src/lib/error-codes.ts`（错误码目录实际位于共享层，`daemon/pipeline/error-codes.ts` 不存在）；新增/更新执行侧越界测试。
+* **涉及核心文件**：新增 `daemon/pipeline/untracked-scope-guard.ts`；修改 `daemon/pipeline/orchestrator.ts`、`src/lib/error-codes.ts`；配套执行侧越界测试。
 * **Pass/Fail**：PASS：`git status --porcelain -uall` 覆盖未跟踪文件；合同内新文件可继续，合同外文件在执行后检查被阻断并留下可追溯 BLOCKED 证据；FAIL：仅检查 `git diff --name-only` 或错误码不一致。
 
 #### 【Task W.3】测试环境、秘密脱敏与网络/端口策略守卫
@@ -1138,7 +1139,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
-> - **当前工程物理起点**：本地代码仓库 `main`@`6d7fa59`，本轮实测 86 个测试文件 / 785 通过 / 6 跳过，实现至 Contract Schema v1.2.0；TypeScript 与 Lint 未在本轮复核。
+> - **当前工程物理起点**：本地代码仓库 `main`@`9f3b303`；测试基线以最近干净环境四件套为准（C.7 复验 1032 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）。本轮文档校正未重跑 TypeScript 与 Lint。
 > - **当前首要编码任务**：**`TASK-0.2c`**。必须先在代码中完成 Schema v1.3.0 (`approval` / `authorization.git`) 与 Fast Path / 恢复自愈迁移边，方可进入 Sprint 4 的状态投影（`TASK-D.3`）与高阶视口开发。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
