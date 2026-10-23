@@ -52,6 +52,11 @@ export interface CommandRunnerOptions {
   signal?: AbortSignal | undefined;
   /** 逐行实时回调（TASK-C.5 结构化终端回放）。 */
   onLine?: (stream: "stdout" | "stderr", line: string) => void;
+  /**
+   * 子进程 spawn 后回调 pid（TASK-D.3 / D-5）。
+   * 看门狗需要精确回收这棵进程树，而 pid 只有 spawn 之后才存在。
+   */
+  onSpawn?: (pid: number) => void;
   /** W.3：由 policy-guard 组装好的最终环境（提供后跳过内部白名单/网络注入） */
   resolvedEnv?: Record<string, string>;
 }
@@ -453,6 +458,9 @@ export async function runCommand(
     } catch (err) {
       return reject(err);
     }
+
+    // TASK-D.3 / D-5：把 pid 交给看门狗，超时兜底时才能精确回收这棵进程树
+    if (child.pid !== undefined) options.onSpawn?.(child.pid);
 
     let settled = false;
     let killReport: ProcessTreeKillResult | undefined;

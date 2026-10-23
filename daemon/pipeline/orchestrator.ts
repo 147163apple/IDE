@@ -23,6 +23,7 @@ import {
   InvalidStateTransitionError,
 } from "../core/contract-mutex";
 import { killProcessTree } from "../runner/process-tree";
+import type { DeadlockResilience } from "../state/deadlock-resilience";
 import { writeStateFile } from "../guard/state-store";
 import {
   loadCurrentGatewayViolation,
@@ -87,6 +88,23 @@ export interface ExecutionOutcome {
   worktree: WorktreeInfo;
 }
 
+/**
+ * TASK-D.3 / D-4：重演时与最新基线冲突。
+ *
+ * 用独立错误类而不是裸 `Error`，是为了让 HTTP 层能透出机器可读的 `code`：
+ * 前端据此仍可给用户"放弃候选成果"这条路，而不是只看到一段中文。
+ */
+export class ReplayConflictError extends Error {
+  readonly code = "E_REPLAY_CONFLICT";
+  constructor(detail: string) {
+    super(
+      `[E_REPLAY_CONFLICT] 目标分支与任务分支存在冲突，无法自动重演：${detail}。` +
+        `请选择放弃候选成果，或人工解决冲突后重新验证`,
+    );
+    this.name = "ReplayConflictError";
+  }
+}
+
 /** 单条验证命令的执行事实（写入 Evidence 前的中间形态，TASK-W.2b 复用） */
 interface VerificationResultInput {
   alias: string;
@@ -126,6 +144,11 @@ export class ContractOrchestrator {
   private readonly abortControllers = new Map<string, AbortController>();
   /** 已请求中止但执行尚未开始的合同：注册控制器时立即进入已中止态 */
   private readonly abortRequested = new Set<string>();
+  /**
+   * TASK-D.3 / D-5：命令超时看门狗。
+   * 由 Daemon 注入（单一租约/看门狗表），orchestrator 不自建第二套。
+   */
+  private deadlock: DeadlockResilience | null = null;
 
   constructor(options: OrchestratorOptions) {
     this.repoRoot = path.resolve(options.repoRoot);
@@ -133,6 +156,11 @@ export class ContractOrchestrator {
     this.acknowledgeDirty = options.acknowledgeDirty ?? false;
     this.onTerminalLine = options.onTerminalLine;
     this.onGatewayViolation = options.onGatewayViolation;
+  }
+
+  /** TASK-D.3：由 Daemon 注入看门狗实例（同一张表，避免各层各自判死） */
+  setDeadlock(resilience: DeadlockResilience | null): void {
+    this.deadlock = resilience;
   }
 
   getStore(): ContractStore {
@@ -898,6 +926,7 @@ export class ContractOrchestrator {
       loopGuard,
       runtimeInterceptor: interceptor,
       requireRepoTrust: true,
+      ...(this.deadlock === null ? {} : { deadlock: this.deadlock }),
       ...(signal === undefined ? {} : { signal }),
       ...(this.onTerminalLine === undefined
         ? {}
@@ -973,6 +1002,114 @@ export class ContractOrchestrator {
     });
 
     throw new UntrackedScopeViolationError(report);
+  }
+
+  /**
+   * TASK-D.3 / D-3：恢复期发现工作树物理丢失后的自愈重建。
+   *
+   * `PENDING_RESUME → PREPARING` 是一条带 Guard 的受控边，必须显式携带
+   * `WORKTREE_MISSING_HEAL`；否则状态机会按 Fail-Closed 拒绝——这正是设计意图，
+   * 避免普通续跑悄悄走成"重建"。
+   */
+  async healResume(contractId: string): Promise<SoftwareContract> {
+    const current = this.store.get(contractId);
+    if (!current) throw new Error(`Contract not found: ${contractId}`);
+    if (current.lifecycle_state !== "PENDING_RESUME") return current;
+
+    const preparing = this.store.transition({
+      contractId,
+      lifecycleState: "PREPARING",
+      transitionContext: { reason: "WORKTREE_MISSING_HEAL" },
+    });
+
+    await createTaskWorktree({
+      repoRoot: this.repoRoot,
+      contractId,
+      baseBranch: current.authorization.git.base_branch,
+      force: true,
+      acknowledgeDirty: true,
+    });
+
+    return preparing;
+  }
+
+  /**
+   * TASK-D.3 / D-4：以当前分支为基线重演。
+   *
+   * 做两件事，缺一不可：
+   * 1. 把最新目标分支合进任务分支——**用 merge 而不是硬重置**，否则 Worker
+   *    的改动会被直接抹掉，用户点"重演"反而丢代码；
+   * 2. 推回 EXECUTING 走既有 execute 管道重跑验证。不复用旧证据：旧证据
+   *    对应的是旧基线，指纹与合并基线都已失效。
+   *
+   * 冲突时不做任何自动取舍（既不 ours 也不 theirs），直接 abort merge 并抛错，
+   * 把决策权交还用户——这正是 D-4"禁止前端死锁"的另一面：给得出选项，也停得住。
+   */
+  async replayOnCurrentBaseline(contractId: string): Promise<ExecutionOutcome> {
+    const current = this.store.get(contractId);
+    if (!current) throw new Error(`Contract not found: ${contractId}`);
+    if (current.lifecycle_state !== "AUDITED") {
+      throw new InvalidStateTransitionError(
+        current.lifecycle_state,
+        ["AUDITED"],
+        "replay",
+      );
+    }
+
+    const worktreePath = getWorktreePath(this.repoRoot, contractId);
+    if (!fs.existsSync(worktreePath)) {
+      throw new Error(`[E_WORKTREE_LOST] Worktree missing: ${worktreePath}`);
+    }
+
+    const baseBranch = current.authorization.git.base_branch;
+    const merge = await execGit(
+      ["merge", "--no-edit", baseBranch],
+      worktreePath,
+    );
+    if (merge.exitCode !== 0) {
+      await execGit(["merge", "--abort"], worktreePath);
+      throw new ReplayConflictError(
+        (merge.stderr || merge.stdout).trim().slice(0, 400) || "git merge 失败",
+      );
+    }
+
+    this.store.transition({ contractId, lifecycleState: "EXECUTING" });
+    return this.execute(contractId);
+  }
+
+  /**
+   * TASK-D.3 / D-5：命令超时后写入一条证据。
+   *
+   * 说明：Evidence 的 verdict 枚举只有 PASSED / FAILED / BLOCKED / STALE，
+   * 没有 `TIMEOUT`。因此这里用 `BLOCKED + BUDGET_EXHAUSTED` 表达"资源上限导致的
+   * 强制回收"，并在 summary 打上 `TIMEOUT:` 前缀——不为一张任务卡去改合同级 Schema。
+   */
+  async recordCommandTimeout(
+    contractId: string,
+    info: { command: string; tier: string; timeout_ms: number },
+  ): Promise<EvidenceBundle> {
+    const contract = this.store.get(contractId);
+    if (!contract) throw new Error(`Contract not found: ${contractId}`);
+
+    const worktreePath = getWorktreePath(this.repoRoot, contractId);
+    const hasWorktree = fs.existsSync(worktreePath);
+
+    return this.writeEvidence(
+      contract,
+      {
+        status: "BLOCKED",
+        reasonCode: "BUDGET_EXHAUSTED",
+        summary:
+          `TIMEOUT: 命令「${info.command}」超过 ${info.tier} 层 ` +
+          `${info.timeout_ms}ms 上限，已由看门狗强制回收（TASK-D.3 / D-5）`,
+        verificationResults: [],
+        scopePassed: false,
+        forbiddenViolations: [],
+        modifiedFiles: [],
+      },
+      undefined,
+      hasWorktree ? worktreePath : undefined,
+    );
   }
 
   private async writeEvidence(

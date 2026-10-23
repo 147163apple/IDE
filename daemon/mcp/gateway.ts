@@ -51,6 +51,57 @@ import {
 import { guardAgentFileOperation } from "../protection/protection-list";
 
 /**
+ * TASK-D.3 / D-5：命令超时分层。
+ *
+ * 60s / 300s / 600s 三档来自架构 §6.4；档位只决定"看门狗何时兜底"，
+ * 不改变命令本身的白名单与授权判定。
+ */
+export type CommandTimeoutTier = "SHORT" | "MEDIUM" | "LONG";
+
+export function resolveCommandTimeoutTier(
+  timeoutSeconds: number,
+): CommandTimeoutTier {
+  if (timeoutSeconds <= 60) return "SHORT";
+  if (timeoutSeconds <= 300) return "MEDIUM";
+  return "LONG";
+}
+
+/**
+ * 取该命令在合同 `verification_spec` 中声明的 timeout_seconds。
+ * 先精确匹配 executable+args，再退化为按 executable 匹配；都匹配不到按 60s。
+ */
+export function resolveCommandTimeoutSeconds(
+  command: string,
+  commands: readonly {
+    executable: string;
+    args: string[];
+    timeout_seconds: number;
+  }[],
+): number {
+  const exact = commands.find(
+    (item) => [item.executable, ...item.args].join(" ") === command,
+  );
+  if (exact) return exact.timeout_seconds;
+
+  const executable = command.trim().split(/\s+/)[0] ?? "";
+  const byExecutable = commands.find((item) => item.executable === executable);
+  return byExecutable?.timeout_seconds ?? 60;
+}
+
+/** 看门狗只需这三个能力；用窄接口避免 gateway 依赖整个引擎实现 */
+export interface CommandTimeoutTracker {
+  trackCommand(input: {
+    contractId: string;
+    command: string;
+    tier: CommandTimeoutTier;
+    pid?: number | null;
+    timeoutMs?: number;
+  }): { id: string };
+  updateCommandPid(id: string, pid: number): void;
+  settleCommand(id: string): void;
+}
+
+/**
  * 端口冲突判定（W.4 收紧）：
  * 1. 同一行必须同时出现「EADDRINUSE / address already in use」与 listen/bind 语义；
  * 2. 输出里不能出现断言失败标记（AssertionError / Tests failed / FAIL 等）；
@@ -131,6 +182,8 @@ export interface ScopedGatewayOptions {
   runtimeInterceptor?: RuntimeInterceptor | undefined;
   /** TASK-W.4：是否强制仓库信任标记（orchestrator 置 true；单测默认关闭） */
   requireRepoTrust?: boolean | undefined;
+  /** TASK-D.3 / D-5：命令超时看门狗（缺省时不登记，行为退化为仅靠 runner 超时） */
+  deadlock?: CommandTimeoutTracker | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -158,6 +211,7 @@ export class ScopedWorktreeGateway {
     ((stream: "stdout" | "stderr", line: string) => void) | undefined;
   private readonly runtimeInterceptor?: RuntimeInterceptor | undefined;
   private readonly requireRepoTrust: boolean;
+  private readonly deadlock?: CommandTimeoutTracker | undefined;
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -186,6 +240,7 @@ export class ScopedWorktreeGateway {
     this.onTerminalLine = options.onTerminalLine;
     this.runtimeInterceptor = options.runtimeInterceptor;
     this.requireRepoTrust = options.requireRepoTrust ?? false;
+    this.deadlock = options.deadlock;
   }
 
   public getWorktreeRoot(): string {
@@ -1351,23 +1406,51 @@ export class ScopedWorktreeGateway {
     const commandEnv = this.buildCommandEnv(parsed.data.command_alias);
 
     try {
-      const result = await runCommand(command, {
-        cwd: this.worktreeRoot,
-        allowedCommands,
-        timeoutMs: Math.max(1, taskBudgetMs - this.cumulativeDurationMs),
-        networkPolicy:
-          this.contract.authorization.execution_permissions.network_policy,
-        envOptions: commandEnv.envOptions,
-        resolvedEnv: commandEnv.env,
-        ...(commandEnv.secretValues.length === 0
-          ? {}
-          : { secretValues: commandEnv.secretValues }),
-        ...(structured === undefined ? {} : { argv: structured }),
-        ...(this.signal === undefined ? {} : { signal: this.signal }),
-        ...(this.onTerminalLine === undefined
-          ? {}
-          : { onLine: this.onTerminalLine }),
+      // TASK-D.3 / D-5：按该命令在合同里声明的 timeout_seconds 分层登记看门狗。
+      // 正常结束（含抛错）都要撤销，否则会被误判为超时并写假证据。
+      const commandTimeoutSeconds = resolveCommandTimeoutSeconds(
+        command,
+        vSpec.commands,
+      );
+      const trackedCommand = this.deadlock?.trackCommand({
+        contractId: this.contract.contract_id,
+        command,
+        tier: resolveCommandTimeoutTier(commandTimeoutSeconds),
+        timeoutMs: commandTimeoutSeconds * 1000,
       });
+
+      let result: Awaited<ReturnType<typeof runCommand>>;
+      try {
+        result = await runCommand(command, {
+          cwd: this.worktreeRoot,
+          allowedCommands,
+          // 取"任务剩余预算"与"命令自身上限"的更严者：两者都不许突破
+          timeoutMs: Math.min(
+            Math.max(1, taskBudgetMs - this.cumulativeDurationMs),
+            commandTimeoutSeconds * 1000,
+          ),
+          networkPolicy:
+            this.contract.authorization.execution_permissions.network_policy,
+          envOptions: commandEnv.envOptions,
+          resolvedEnv: commandEnv.env,
+          ...(commandEnv.secretValues.length === 0
+            ? {}
+            : { secretValues: commandEnv.secretValues }),
+          ...(structured === undefined ? {} : { argv: structured }),
+          ...(this.signal === undefined ? {} : { signal: this.signal }),
+          ...(this.onTerminalLine === undefined
+            ? {}
+            : { onLine: this.onTerminalLine }),
+          ...(trackedCommand === undefined
+            ? {}
+            : {
+                onSpawn: (pid: number) =>
+                  this.deadlock?.updateCommandPid(trackedCommand.id, pid),
+              }),
+        });
+      } finally {
+        if (trackedCommand) this.deadlock?.settleCommand(trackedCommand.id);
+      }
 
       // 端口冲突诊断：验证脚本启动服务时常见，属于环境问题而非断言失败。
       // 识别后返回 E_PORT_CONFLICT + 白话说明，且不计入连续失败熔断。
