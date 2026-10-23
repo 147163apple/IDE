@@ -11,6 +11,7 @@ import {
   validateTransition,
   writeJsonAtomic,
   type ContractStatePair,
+  type TransitionContext,
 } from "../../src/lib/state-machine";
 import {
   migrateContractToV13,
@@ -135,6 +136,12 @@ export class ContractStore {
     approvedAt?: string;
     approvedRevision?: number;
     rejectionReason?: string;
+    /**
+     * TASK-D.3：受控跃迁的上下文（如 D-3 自愈边的 `WORKTREE_MISSING_HEAL`）。
+     * 缺省时不传，受控边会按 Fail-Closed 拒绝——这正是我们要的行为，
+     * 不能因为"调用方忘了传"就默默放行一条本应带理由的边。
+     */
+    transitionContext?: TransitionContext;
   }): SoftwareContract {
     const current = this.get(params.contractId);
     if (!current) {
@@ -152,7 +159,7 @@ export class ContractStore {
       approval_status: nextApprovalStatus,
     };
 
-    const verdict = validateTransition(from, to);
+    const verdict = validateTransition(from, to, params.transitionContext);
     if (!verdict.ok) {
       throw new IllegalContractTransitionError(
         current.lifecycle_state,

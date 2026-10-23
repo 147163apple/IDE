@@ -975,6 +975,70 @@ export class ContractOrchestrator {
     throw new UntrackedScopeViolationError(report);
   }
 
+  /**
+   * TASK-D.3 / D-3：恢复期发现工作树物理丢失后的自愈重建。
+   *
+   * `PENDING_RESUME → PREPARING` 是一条带 Guard 的受控边，必须显式携带
+   * `WORKTREE_MISSING_HEAL`；否则状态机会按 Fail-Closed 拒绝——这正是设计意图，
+   * 避免普通续跑悄悄走成"重建"。
+   */
+  async healResume(contractId: string): Promise<SoftwareContract> {
+    const current = this.store.get(contractId);
+    if (!current) throw new Error(`Contract not found: ${contractId}`);
+    if (current.lifecycle_state !== "PENDING_RESUME") return current;
+
+    const preparing = this.store.transition({
+      contractId,
+      lifecycleState: "PREPARING",
+      transitionContext: { reason: "WORKTREE_MISSING_HEAL" },
+    });
+
+    await createTaskWorktree({
+      repoRoot: this.repoRoot,
+      contractId,
+      baseBranch: current.authorization.git.base_branch,
+      force: true,
+      acknowledgeDirty: true,
+    });
+
+    return preparing;
+  }
+
+  /**
+   * TASK-D.3 / D-5：命令超时后写入一条证据。
+   *
+   * 说明：Evidence 的 verdict 枚举只有 PASSED / FAILED / BLOCKED / STALE，
+   * 没有 `TIMEOUT`。因此这里用 `BLOCKED + BUDGET_EXHAUSTED` 表达"资源上限导致的
+   * 强制回收"，并在 summary 打上 `TIMEOUT:` 前缀——不为一张任务卡去改合同级 Schema。
+   */
+  async recordCommandTimeout(
+    contractId: string,
+    info: { command: string; tier: string; timeout_ms: number },
+  ): Promise<EvidenceBundle> {
+    const contract = this.store.get(contractId);
+    if (!contract) throw new Error(`Contract not found: ${contractId}`);
+
+    const worktreePath = getWorktreePath(this.repoRoot, contractId);
+    const hasWorktree = fs.existsSync(worktreePath);
+
+    return this.writeEvidence(
+      contract,
+      {
+        status: "BLOCKED",
+        reasonCode: "BUDGET_EXHAUSTED",
+        summary:
+          `TIMEOUT: 命令「${info.command}」超过 ${info.tier} 层 ` +
+          `${info.timeout_ms}ms 上限，已由看门狗强制回收（TASK-D.3 / D-5）`,
+        verificationResults: [],
+        scopePassed: false,
+        forbiddenViolations: [],
+        modifiedFiles: [],
+      },
+      undefined,
+      hasWorktree ? worktreePath : undefined,
+    );
+  }
+
   private async writeEvidence(
     contract: SoftwareContract,
     input: {

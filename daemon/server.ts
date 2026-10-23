@@ -92,6 +92,17 @@ import {
   undoLatestCheckpoint,
 } from "./protection/auto-checkpoint";
 import { softwareContractSchema } from "../src/lib/contract.schema";
+import { DeadlockResilience } from "./state/deadlock-resilience";
+import {
+  loadPresentationSnapshot,
+  persistPresentation,
+} from "./state/presentation-store";
+import {
+  projectContract,
+  readLatestEvidenceSignal,
+  toStateChangedPayload,
+  type DaemonRuntimeSignals,
+} from "./state/presentation-projector";
 import type { SoftwareContract } from "../src/lib/contract.schema";
 import type { EvidenceBundle } from "../src/lib/evidence.schema";
 import { WorktreeWatcher } from "./watcher/fs-watcher";
@@ -206,6 +217,11 @@ export class StagentDaemon {
   private invalidationEngine: EvidenceInvalidationEngine | null = null;
   /** 当前武装监听的合同（用于 abort 时精确解除，避免误停其他任务的监听） */
   private armedContractId: string | null = null;
+  /** TASK-D.3：五类死锁自愈看门狗（D-1~D-5） */
+  private readonly deadlock: DeadlockResilience;
+  /** 已发起停止、尚在回收中的合同（投影层据此呈现 STOPPING） */
+  private readonly stoppingContracts: Set<string> = new Set();
+  private stopSweepFn: (() => void) | null = null;
 
   constructor(options: DaemonServerOptions) {
     this.repoRoot = path.resolve(options.repoRoot);
@@ -250,6 +266,38 @@ export class StagentDaemon {
       },
     });
     this.supervisorEnrich = options.supervisorEnrich;
+
+    // TASK-D.3：看门狗只做"判定 + 调用钩子"，真实动作仍由编排层执行。
+    // 这样五类死锁的处置路径与既有控制面保持同一条事实源，不产生第二套状态机。
+    this.deadlock = new DeadlockResilience({
+      abortContract: async (contractId, reason) => {
+        const aborted = await this.orchestrator.abort(contractId, {
+          reviewer: "system:deadlock-watchdog",
+          reason,
+        });
+        this.emitContractUpdate(aborted);
+      },
+      isWorktreeAlive: (contractId) =>
+        fs.existsSync(getWorktreePath(this.repoRoot, contractId)),
+      healResume: async (contractId) => {
+        const healed = await this.orchestrator.healResume(contractId);
+        this.emitContractUpdate(healed);
+      },
+      writeTimeoutEvidence: async (contractId, info) => {
+        await this.orchestrator.recordCommandTimeout(contractId, info);
+      },
+      onEvent: (event) => {
+        // 死锁处置属安全事件：复用既有告警帧，控制台无需新增订阅
+        this.broadcast("GATEWAY_VIOLATION", {
+          source: "deadlock-watchdog",
+          action: event.code,
+          ...(event.contract_id === undefined
+            ? {}
+            : { contract_id: event.contract_id }),
+          message: event.detail,
+        });
+      },
+    });
   }
 
   /** 最近一次启动时的崩溃自愈报告（便于状态端点与测试观测） */
@@ -358,6 +406,8 @@ export class StagentDaemon {
     this.currentPort = port;
     this.running = true;
     this.stopping = false;
+    // TASK-D.3：1s 粒度的死锁扫描；判据最小为 15s，无需更高精度
+    this.stopSweepFn = this.deadlock.startAutoSweep(1_000);
 
     // 服务端心跳守护：超过 30s 无任何帧的客户端强制断开
     this.heartbeatTimer = setInterval(() => {
@@ -388,6 +438,9 @@ export class StagentDaemon {
       return;
     }
     this.stopping = true;
+    // TASK-D.3：停机时先撤掉扫描，避免看门狗在关闭过程中触发新的流转
+    this.stopSweepFn?.();
+    this.stopSweepFn = null;
 
     if (this.signalCleanupFn) {
       this.signalCleanupFn();
@@ -472,11 +525,72 @@ export class StagentDaemon {
    * 客户端据此立即刷新，无需等待下一轮轮询 —— 状态机是推的，不是拉的。
    */
   emitContractUpdate(contract: SoftwareContract): number {
-    return this.broadcast("CONTRACT_UPDATE", {
+    const sent = this.broadcast("CONTRACT_UPDATE", {
       contract_id: contract.contract_id,
       lifecycle_state: contract.lifecycle_state,
       approval_status: contract.approval?.status,
     });
+    // CONTRACT_UPDATE 是既有帧；STATE_CHANGED 才是"前端零逻辑"的权威帧
+    this.publishPresentationState(contract);
+    return sent;
+  }
+
+  /**
+   * TASK-D.3：投影 → 落盘 → 广播。
+   *
+   * 顺序不可颠倒：先落盘再广播，保证"前端收到状态"与"重连能读回"是同一份事实。
+   * 若当前信息不足以给出确定性展示态（projectContract 返回 null），
+   * 不广播也不落盘——宁可让界面停在上一帧，也不给用户一个错误的进度。
+   */
+  private publishPresentationState(
+    contract: SoftwareContract,
+    signals?: DaemonRuntimeSignals,
+  ): number {
+    const contractId = contract.contract_id;
+
+    if (contract.lifecycle_state === "PENDING_RESUME") {
+      this.deadlock.watchResume(contractId);
+    } else {
+      this.deadlock.unwatchResume(contractId);
+    }
+
+    const record = projectContract(
+      contract,
+      signals ?? {
+        stopping_requested: this.stoppingContracts.has(contractId),
+        evidence: readLatestEvidenceSignal(this.repoRoot, contractId),
+      },
+    );
+    if (!record) return 0;
+
+    persistPresentation(this.repoRoot, record);
+    return this.broadcast("STATE_CHANGED", toStateChangedPayload(record));
+  }
+
+  /** 断线重连/重启后，从 `.stagent/state.json` 还原全部展示态 */
+  replayPresentationState(ws: WebSocket): number {
+    const snapshot = loadPresentationSnapshot(this.repoRoot);
+    let sent = 0;
+    for (const record of Object.values(snapshot.contracts)) {
+      if (ws.readyState !== WebSocket.OPEN) break;
+      ws.send(
+        JSON.stringify(
+          createFrame("STATE_CHANGED", toStateChangedPayload(record)),
+        ),
+      );
+      sent += 1;
+    }
+    return sent;
+  }
+
+  /** 供 `GET /api/state` 读取（也便于测试断言落盘结果） */
+  getPresentationSnapshot(): ReturnType<typeof loadPresentationSnapshot> {
+    return loadPresentationSnapshot(this.repoRoot);
+  }
+
+  /** 供测试/诊断：看门狗当前积压的条目 */
+  getDeadlockPending(): ReturnType<DeadlockResilience["pendingCounts"]> {
+    return this.deadlock.pendingCounts();
   }
 
   /**
@@ -651,6 +765,8 @@ export class StagentDaemon {
         tracked.authenticated = true;
         clearTimeout(authTimer);
         ws.send(JSON.stringify(createFrame("AUTH_OK")));
+        // TASK-D.3：鉴权通过即回放持久化展示态，前端无需再拉一次接口
+        this.replayPresentationState(ws);
         return;
       }
 
@@ -1810,6 +1926,16 @@ export class StagentDaemon {
       return;
     }
 
+    if (method === "GET" && pathname === "/api/state") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      // 返回持久化快照本身，前端据此在首帧前也能还原界面
+      this.sendJson(res, 200, this.getPresentationSnapshot());
+      return;
+    }
+
     if (method === "GET" && pathname === "/api/arch/graph") {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -2217,6 +2343,10 @@ export class StagentDaemon {
         }
 
         if (method === "POST" && action === "abort") {
+          // TASK-D.3 / D-1：登记停止看门狗。回收在 15s 内未完成即强杀并转 ABORTED，
+          // 避免进程树/锁悬挂把整个合同永久卡在"正在停止"。
+          this.stoppingContracts.add(contractId);
+          this.deadlock.beginStop(contractId);
           try {
             const body = (await this.readJsonBody(req)) as {
               reviewer?: string;
@@ -2236,6 +2366,9 @@ export class StagentDaemon {
             this.sendJson(res, 200, { contract });
           } catch (err) {
             this.sendActionError(res, err);
+          } finally {
+            this.deadlock.completeStop(contractId);
+            this.stoppingContracts.delete(contractId);
           }
           return;
         }
