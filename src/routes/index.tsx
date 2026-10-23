@@ -43,6 +43,8 @@ import {
   fetchTaskGraph,
   generateSupervisorDraft,
   submitDisputeSelfCheck,
+  submitJourneyMessage,
+  createTaskGraph,
   fetchPresentationSnapshot,
   listContracts,
   loadConnection,
@@ -77,7 +79,12 @@ import { EditorOpener } from "@/components/editor/EditorOpener";
 import { EvidenceChecklist } from "@/components/evidence/EvidenceChecklist";
 import { useDaemonStream } from "@/hooks/use-daemon-stream";
 import { WorkspaceLayout } from "@/components/WorkspaceLayout";
-import { AgentChatPane } from "@/components/AgentChatPane";
+import {
+  AgentChatPane,
+  type JourneyChatCard,
+} from "@/components/AgentChatPane";
+import { buildProposalFromContract } from "@/lib/journey/proposal-from-contract";
+import type { StudioViewportId } from "@/components/studio/viewport-routing";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
 import {
   ProtectionApprovalCard,
@@ -194,6 +201,16 @@ function Console() {
   );
   const [disputeBusy, setDisputeBusy] = useState(false);
   const [disputeError, setDisputeError] = useState<string | null>(null);
+  /** TASK-S.6：右侧旅程卡与确认原型忙态 */
+  const [journeyCards, setJourneyCards] = useState<JourneyChatCard[]>([]);
+  const [journeyBusy, setJourneyBusy] = useState(false);
+  const [confirmPrototypeBusy, setConfirmPrototypeBusy] = useState(false);
+  const [confirmPrototypeError, setConfirmPrototypeError] = useState<
+    string | null
+  >(null);
+  const [studioViewportOverride, setStudioViewportOverride] =
+    useState<StudioViewportId | null>(null);
+  const [requirementsHint, setRequirementsHint] = useState<string | null>(null);
 
   const [diff, setDiff] = useState<{ patch: string; stat: string } | null>(
     null,
@@ -277,7 +294,9 @@ function Console() {
         kind: "requirement",
         label: selected.intent.title,
         status: "READY",
-        hint: `${selected.intent.acceptance_criteria.length} 条验收标准 · ${selected.intent.risk_level} 风险`,
+        hint: requirementsHint
+          ? `${requirementsHint} · ${selected.intent.acceptance_criteria.length} 条验收 · ${selected.intent.risk_level}`
+          : `${selected.intent.acceptance_criteria.length} 条验收标准 · ${selected.intent.risk_level} 风险`,
       },
       {
         id: "contract",
@@ -314,7 +333,7 @@ function Console() {
           },
     );
     return assets;
-  }, [selected, repoRelativePaths]);
+  }, [selected, repoRelativePaths, requirementsHint]);
 
   /** 本轮生成进度：只认当前合同自己的图，别把 A 的进度显示在 B 上 */
   const specsGeneration = useMemo(() => {
@@ -512,6 +531,146 @@ function Console() {
         : null,
     [connected, conn],
   );
+
+  /** 把 Daemon 质疑报告压成控制台视图（TASK-S.6 / S.5） */
+  const toDisputeView = useCallback(
+    (
+      report: import("@/lib/daemon-api").DisputeReportApiView,
+      degraded?: boolean,
+    ): DisputeReportView => ({
+      report_id: report.report_id,
+      contract_id: report.contract_id,
+      challenge: report.challenge,
+      classification: report.classification,
+      suggested_classification: report.suggested_classification,
+      confidence: report.confidence,
+      degraded: report.degraded || degraded === true,
+      plain_summary: report.plain_summary,
+      rationale: report.rationale,
+      facts: {
+        prompt: {
+          original_request: report.facts.prompt.original_request,
+          matched_messages: report.facts.prompt.matched_messages.length,
+          confirmations: report.facts.prompt.confirmations.length,
+        },
+        spec: report.facts.spec
+          ? {
+              matched_entries: report.facts.spec.matched_entries,
+              version: report.facts.spec.version,
+            }
+          : null,
+        code: {
+          worktree_available: report.facts.code.available,
+          changed_files: report.facts.code.changed_files,
+          evidence_id: report.facts.code.evidence_id,
+        },
+      },
+      next_action: report.next_action
+        ? {
+            kind: report.next_action.kind,
+            message: report.next_action.message,
+          }
+        : undefined,
+    }),
+    [],
+  );
+
+  /** TASK-S.6：右侧唯一入口分流 */
+  const handleJourneyBeforeSend = useCallback(
+    async (text: string): Promise<"handled" | "passthrough"> => {
+      if (!conn || !connected) return "passthrough";
+      setJourneyBusy(true);
+      try {
+        const result = await submitJourneyMessage(conn, {
+          message: text,
+          ...(selectedId ? { contract_id: selectedId } : {}),
+        });
+        const kind = result.route;
+        if (kind === "CHAT") {
+          return "passthrough";
+        }
+        const card: JourneyChatCard = {
+          id: `journey-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          kind,
+          text: result.plain_summary,
+        };
+        setJourneyCards((prev) => [...prev.slice(-19), card]);
+
+        if (kind === "DISPUTE" && result.dispute_report) {
+          setDisputeReport(toDisputeView(result.dispute_report));
+          setDisputeError(null);
+          setStudioViewportOverride("dispute");
+          setStudioNonce((n) => n + 1);
+        }
+
+        if (result.draft) {
+          setDraft(result.draft);
+          setShowForm(true);
+          setStudioNonce((n) => n + 1);
+        }
+
+        if (result.requirements_updated) {
+          setRequirementsHint(
+            result.requirements_hint ??
+              `需求说明已更新 · ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
+          );
+        }
+
+        if (result.suggest_viewport) {
+          setStudioViewportOverride(result.suggest_viewport);
+        }
+
+        return "handled";
+      } catch (error) {
+        const card: JourneyChatCard = {
+          id: `journey-err-${Date.now()}`,
+          kind: "SYSTEM",
+          text:
+            error instanceof Error
+              ? `分流暂时不可用：${error.message}。已改走普通对话。`
+              : "分流暂时不可用，已改走普通对话。",
+        };
+        setJourneyCards((prev) => [...prev.slice(-19), card]);
+        return "passthrough";
+      } finally {
+        setJourneyBusy(false);
+      }
+    },
+    [conn, connected, selectedId, toDisputeView],
+  );
+
+  /** TASK-S.6：确认原型 → 建全灰 TaskGraph（禁止空壳 nonce） */
+  const handleConfirmPrototype = useCallback(async () => {
+    if (!conn || !selected) {
+      setConfirmPrototypeError(
+        "请先在左侧点一份合同（或先出草案并落盘），再确认原型开工。",
+      );
+      return;
+    }
+    setConfirmPrototypeBusy(true);
+    setConfirmPrototypeError(null);
+    try {
+      const proposal = buildProposalFromContract(selected);
+      const graph = await createTaskGraph(conn, proposal);
+      setTaskGraph(graph);
+      setStudioViewportOverride("graph");
+      setStudioNonce((n) => n + 1);
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `journey-confirm-${Date.now()}`,
+          kind: "SYSTEM",
+          text: `已按合同「${selected.intent.title}」建好全灰任务图（${graph.nodes.length} 个节点）。审批通过后会随 Evidence 逐个点亮。`,
+        },
+      ]);
+    } catch (error) {
+      setConfirmPrototypeError(
+        error instanceof Error ? error.message : "确认原型失败：无法建立任务图",
+      );
+    } finally {
+      setConfirmPrototypeBusy(false);
+    }
+  }, [conn, selected]);
 
   // C.3：Agent 改完文件 → 中栏自动打开并刷新（Sprint 1 门禁「中栏实时可见」）
   const [openRequest, setOpenRequest] = useState<{
@@ -887,7 +1046,12 @@ function Console() {
         }
         rightPanel={
           // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
-          <AgentChatPane transport={chatTransport} />
+          <AgentChatPane
+            transport={chatTransport}
+            onBeforeSend={handleJourneyBeforeSend}
+            journeyCards={journeyCards}
+            journeyBusy={journeyBusy}
+          />
         }
         supervisorContent={
           // 左下角 Supervisor 图标 → 中央可关闭 Tab；数据全部来自合同/保护清单
@@ -1173,6 +1337,9 @@ function Console() {
                   setDraft(null);
                   setDisputeReport(null);
                   setDisputeError(null);
+                  setStudioViewportOverride(null);
+                  setConfirmPrototypeError(null);
+                  setRequirementsHint(null);
                   // 首屏不再默认打开操作台，点需求才把它拉起来（否则点了没反应）
                   setStudioNonce((n) => n + 1);
                 }}
@@ -1200,17 +1367,22 @@ function Console() {
                 ? presentationByContract[selectedId]?.message || null
                 : null
             }
+            activeViewport={studioViewportOverride ?? undefined}
+            onViewportChange={(id) => setStudioViewportOverride(id)}
             demo={
               <DemoPreviewPane
                 previewUrl={demoPreview?.url ?? null}
                 status={demoPreview?.status ?? null}
-                errorMessage={demoPreview?.message ?? null}
+                errorMessage={
+                  confirmPrototypeError ?? demoPreview?.message ?? null
+                }
+                busy={confirmPrototypeBusy}
+                allowConfirmWithoutRunning={Boolean(selected)}
                 onRevise={() => {
-                  // 回到右栏继续聊原型——不关 Studio，用户能对照着改
+                  setStudioViewportOverride(null);
                 }}
                 onConfirm={() => {
-                  // 旅程推进（建图/施工）由 Supervisor 会话承担；此处仅确认入口可见
-                  setStudioNonce((n) => n + 1);
+                  void handleConfirmPrototype();
                 }}
               />
             }

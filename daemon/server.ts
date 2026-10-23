@@ -54,6 +54,7 @@ import { collectWorktreeEvidence } from "./graph/evidence-collector";
 import type { IlluminationInput } from "./graph/illumination-verifier";
 import type { SupervisorProposalV1 } from "../src/lib/graph/task-graph";
 import { RequirementsStore } from "./supervisor/specs/requirements-store";
+import { orchestrateJourney } from "./supervisor/journey/orchestrate";
 import {
   buildTimeoutFallbackReport,
   runDisputeSelfCheck,
@@ -1747,6 +1748,137 @@ export class StagentDaemon {
   }
 
   /**
+   * `POST /api/supervisor/journey` —— 非技术旅程右侧唯一入口分流（TASK-S.6）。
+   *
+   * 根据白话意图静默路由：质疑 → dispute；大事 → 草案；小事 → Fast Path（免强制 Demo）。
+   * 底座复用 S.2 / S.5 / requirements-store，不重砌引擎。
+   */
+  private async handleSupervisorJourney(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+  ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    try {
+      let body: {
+        message?: unknown;
+        contract_id?: unknown;
+        session_id?: unknown;
+      };
+      try {
+        body = (await this.readJsonBody(req)) as typeof body;
+      } catch (err) {
+        this.sendJson(res, 400, {
+          error: "invalid_json",
+          message: (err as Error).message,
+        });
+        return;
+      }
+
+      const message =
+        typeof body.message === "string" ? body.message.trim() : "";
+      if (message.length === 0) {
+        this.sendJson(res, 400, {
+          error: "message_required",
+          message: "message 不能为空",
+        });
+        return;
+      }
+      if (message.length > 4000) {
+        this.sendJson(res, 400, {
+          error: "message_too_long",
+          message: `message 长度 ${message.length} 超过 4000 字符上限`,
+        });
+        return;
+      }
+
+      const contractId =
+        typeof body.contract_id === "string" ? body.contract_id.trim() : "";
+      const sessionId =
+        typeof body.session_id === "string" ? body.session_id : undefined;
+
+      let contract = undefined as
+        import("../src/lib/contract.schema").SoftwareContract | undefined;
+      if (contractId !== "") {
+        const loaded = this.orchestrator
+          .getStore()
+          .getWithMigration(contractId);
+        if (!loaded) {
+          this.sendJson(res, 404, {
+            error: "contract_not_found",
+            message: `合同不存在或不可解析: ${contractId}`,
+          });
+          return;
+        }
+        contract = loaded.contract;
+      }
+
+      const ledger = SupervisorBudgetLedger.independent({
+        repoRoot: this.repoRoot,
+      });
+
+      const result = await orchestrateJourney({
+        message,
+        repoRoot: this.repoRoot,
+        ...(contract === undefined ? {} : { contract }),
+        ...(sessionId === undefined ? {} : { sessionId }),
+        requirementsStore: this.requirementsStore,
+        budgetLedger: ledger,
+        ...(this.supervisorEnrich === undefined
+          ? {}
+          : { enrich: this.supervisorEnrich }),
+      });
+
+      if (result.dispute_report) {
+        this.broadcastDisputeReport(result.dispute_report);
+      }
+
+      const draftPayload =
+        result.draft === undefined
+          ? null
+          : {
+              contract: result.draft.contract,
+              plan: {
+                writable_paths: result.draft.plan.writable_paths,
+                readonly_paths: result.draft.plan.readonly_paths,
+                strictly_forbidden_paths:
+                  result.draft.plan.strictly_forbidden_paths,
+                commands: result.draft.plan.commands,
+                budget: result.draft.plan.budget,
+                protected_files: result.draft.plan.protected_files,
+                protected_entry_names: result.draft.plan.protected_entry_names,
+                needs_protection_approval:
+                  result.draft.plan.needs_protection_approval,
+              },
+              rationale: result.draft.rationale,
+              unresolved_questions: result.draft.unresolved_questions,
+              model_calls: result.draft.model_calls,
+              usage: result.draft.usage ?? null,
+            };
+
+      this.sendJson(res, 200, {
+        intent: result.intent,
+        route: result.route,
+        plain_summary: result.plain_summary,
+        skip_demo: result.skip_demo === true,
+        requirements_updated: result.requirements_updated === true,
+        requirements_hint: result.requirements_hint ?? null,
+        suggest_viewport: result.suggest_viewport ?? null,
+        code: result.code ?? null,
+        draft: draftPayload,
+        dispute_report: result.dispute_report ?? null,
+        budget: ledger.snapshot(),
+      });
+    } catch (err) {
+      this.sendActionError(res, err);
+    }
+  }
+
+  /**
    * `POST /api/supervisor/dispute` —— 质疑自查（TASK-S.5 / 架构 §5.7）。
    *
    * 只读合同与会话、只读 Worktree；产出返工提案或新合同草案（均为未落盘对象），
@@ -2058,6 +2190,15 @@ export class StagentDaemon {
         return;
       }
       await this.handleSupervisorDispute(req, res, method);
+      return;
+    }
+
+    if (pathname === "/api/supervisor/journey") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleSupervisorJourney(req, res, method);
       return;
     }
 
