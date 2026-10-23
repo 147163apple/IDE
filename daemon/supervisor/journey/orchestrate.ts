@@ -3,6 +3,7 @@
  *
  * 不重砌 S.2 / S.5 / C.7：只做粘合。
  * - DISPUTE → runDisputeSelfCheck
+ * - REAL_PLAYTEST → 提示前端挂真机预览（实际启动由 Daemon HTTP / 前端触发）
  * - MAJOR_DRAFT / FAST_PATH → generateContractDraft（Fast Path 标 LOW + skip_demo）
  * - CHAT → 透传提示，由前端交给 Worker
  */
@@ -57,7 +58,8 @@ export interface JourneyOrchestrateResult {
   requirements_updated?: boolean | undefined;
   requirements_hint?: string | undefined;
   skip_demo?: boolean | undefined;
-  suggest_viewport?: "dispute" | "demo" | "graph" | "contract" | undefined;
+  suggest_viewport?:
+    "dispute" | "demo" | "graph" | "contract" | "playtest" | undefined;
   code?: string | undefined;
 }
 
@@ -113,6 +115,32 @@ export async function orchestrateJourney(
       suggest_viewport: "dispute",
       requirements_updated: true,
       requirements_hint: `需求基准已对齐 · ${formatLocalTime(now)}`,
+    };
+  }
+
+  if (intent.kind === "REAL_PLAYTEST") {
+    if (!input.contract) {
+      return {
+        intent,
+        route: "REAL_PLAYTEST",
+        plain_summary:
+          "要打开真机预览，请先在左侧选一个合同（或先确认原型开工）。选好后再说「打开真机预览」。",
+        code: "CONTRACT_REQUIRED",
+        suggest_viewport: "contract",
+        skip_demo: true,
+      };
+    }
+    return {
+      intent,
+      route: "REAL_PLAYTEST",
+      plain_summary: [
+        "好，去开真机预览。",
+        ...intent.reasons,
+        "中栏会挂上真实页面，也可以点「在浏览器打开」。没有业务产物时会先放一页试玩桩，方便你点通流程。",
+      ].join(" "),
+      suggest_viewport: "playtest",
+      skip_demo: true,
+      code: "START_REAL_PLAYTEST",
     };
   }
 

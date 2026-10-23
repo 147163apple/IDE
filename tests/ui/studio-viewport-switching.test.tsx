@@ -2,6 +2,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { DemoPreviewPane } from "../../src/components/studio/DemoPreviewPane";
+import { RealPlaytestPane } from "../../src/components/studio/RealPlaytestPane";
 import { DisputeConsolePane } from "../../src/components/studio/DisputeConsolePane";
 import { StudioViewportShell } from "../../src/components/studio/StudioViewportShell";
 import { TaskGraphPane } from "../../src/components/studio/TaskGraphPane";
@@ -45,16 +46,18 @@ function renderShell(opts: {
       graph={<TaskGraphPane graph={null} loading={false} error={null} />}
       dispute={<DisputeConsolePane contractId="ctr-1" onSubmit={onSubmit} />}
       contract={<div data-testid="contract-slot">合同内容</div>}
+      playtest={<RealPlaytestPane status={null} />}
     />,
   );
   return { ...utils, onRevise, onConfirm, onSubmit };
 }
 
 describe("resolveDefaultViewport（展示态 → 默认视口）", () => {
-  it("任务卡明示三例：DEMO_PREVIEW / EXECUTING / DISPUTED_INSPECTING", () => {
+  it("任务卡明示三例：DEMO_PREVIEW / EXECUTING / DISPUTED_INSPECTING / REAL_PLAYTEST", () => {
     expect(resolveDefaultViewport("DEMO_PREVIEW")).toBe("demo");
     expect(resolveDefaultViewport("EXECUTING")).toBe("graph");
     expect(resolveDefaultViewport("DISPUTED_INSPECTING")).toBe("dispute");
+    expect(resolveDefaultViewport("REAL_PLAYTEST")).toBe("playtest");
   });
 
   it("施工相关态落图谱，审批/收口落合同", () => {
@@ -70,7 +73,6 @@ describe("resolveDefaultViewport（展示态 → 默认视口）", () => {
     for (const state of [
       "EXPLORING",
       "NEEDS_APPROVAL",
-      "REAL_PLAYTEST",
       "READY_TO_MERGE",
       "CONFLICT",
       "MERGED",
@@ -78,6 +80,7 @@ describe("resolveDefaultViewport（展示态 → 默认视口）", () => {
     ] as const) {
       expect(resolveDefaultViewport(state)).toBe("contract");
     }
+    expect(resolveDefaultViewport("REAL_PLAYTEST")).toBe("playtest");
     expect(resolveDefaultViewport(null)).toBe("contract");
     expect(resolveDefaultViewport(undefined)).toBe("contract");
   });
@@ -137,6 +140,7 @@ describe("StudioViewportShell 切换与保活", () => {
         graph={<div />}
         dispute={<DisputeConsolePane contractId="ctr-1" />}
         contract={<div />}
+        playtest={<div />}
       />,
     );
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
@@ -165,6 +169,7 @@ describe("StudioViewportShell 切换与保活", () => {
         graph={<TaskGraphPane graph={null} />}
         dispute={<DisputeConsolePane contractId="ctr-1" />}
         contract={<div data-testid="contract-slot">合同内容</div>}
+        playtest={<RealPlaytestPane status={null} />}
       />,
     );
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
@@ -198,7 +203,7 @@ describe("StudioViewportShell 切换与保活", () => {
     );
   });
 
-  it("四个 Tab 与四个面板齐全", () => {
+  it("五个 Tab 与五个面板齐全（含真机试玩）", () => {
     renderShell({ presentationState: null });
     for (const id of STUDIO_VIEWPORT_IDS) {
       expect(
@@ -323,5 +328,35 @@ describe("DisputeConsolePane 表单与报告", () => {
     expect(
       within(screen.getByTestId("dispute-next-action")).getByText(/拍板|裁决/),
     ).toBeTruthy();
+  });
+});
+
+describe("RealPlaytestPane 挂载与外链", () => {
+  it("RUNNING 时嵌入 iframe，并提供外链打开", () => {
+    render(
+      <RealPlaytestPane previewUrl="http://127.0.0.1:4201/" status="RUNNING" />,
+    );
+    const iframe = screen.getByTestId("real-playtest-iframe");
+    expect(iframe).toHaveAttribute("src", "http://127.0.0.1:4201/");
+    const open = screen.getByTestId("real-playtest-open-external");
+    expect(open).toHaveAttribute("href", "http://127.0.0.1:4201/");
+    expect(open).toHaveAttribute("target", "_blank");
+  });
+
+  it("空态可点启动；无 iframe", () => {
+    const onStart = vi.fn();
+    render(<RealPlaytestPane status={null} onStart={onStart} />);
+    expect(screen.getByTestId("real-playtest-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("real-playtest-iframe")).toBeNull();
+    fireEvent.click(screen.getByTestId("real-playtest-start"));
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("REAL_PLAYTEST 展示态默认激活真机试玩视口", () => {
+    renderShell({ presentationState: "REAL_PLAYTEST" });
+    expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
+      "data-active-viewport",
+      "playtest",
+    );
   });
 });

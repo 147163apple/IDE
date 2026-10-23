@@ -20,6 +20,7 @@ import {
   WS_CLOSE_UNAUTHORIZED,
   type AuthPayload,
   type DemoPreviewStatusPayload,
+  type RealPlaytestStatusPayload,
   type IpcFrame,
   type IpcFrameType,
 } from "../src/lib/ipc/frames";
@@ -28,10 +29,20 @@ import {
   isDemoPreviewOrigin,
 } from "../src/lib/ipc/demo-origin";
 import {
+  isRealPreviewOrigin,
+  REAL_ORIGIN_FORBIDDEN,
+} from "../src/lib/ipc/real-preview-origin";
+
+import {
   createDemoPreviewServer,
   type DemoPreviewServer,
   type DemoPreviewServerOptions,
 } from "./supervisor/demo/preview-server";
+import {
+  createRealPreviewServer,
+  writeRealPlaytestStub,
+  type RealPreviewServer,
+} from "./supervisor/preview/real-preview-server";
 import {
   createSessionToken,
   clearSessionToken,
@@ -235,6 +246,8 @@ export class StagentDaemon {
    * 在用户做出 merge-decision 之前一直保留；做出后清除。
    */
   private readonly targetAdvancedContracts: Set<string> = new Set();
+  /** TASK-S.6b：合同 → 真机预览服务（自建或外链挂载） */
+  private readonly realPreviews = new Map<string, RealPreviewServer>();
   private stopSweepFn: (() => void) | null = null;
 
   constructor(options: DaemonServerOptions) {
@@ -477,6 +490,16 @@ export class StagentDaemon {
     this.stopSweepFn?.();
     this.stopSweepFn = null;
 
+    // TASK-S.6b：回收真机预览进程
+    for (const [id, srv] of [...this.realPreviews.entries()]) {
+      try {
+        await srv.stop();
+      } catch {
+        // 停机路径尽最大努力
+      }
+      this.realPreviews.delete(id);
+    }
+
     if (this.signalCleanupFn) {
       this.signalCleanupFn();
       this.signalCleanupFn = null;
@@ -595,6 +618,7 @@ export class StagentDaemon {
         stopping_requested: this.stoppingContracts.has(contractId),
         evidence: readLatestEvidenceSignal(this.repoRoot, contractId),
         target_branch_ahead: this.targetAdvancedContracts.has(contractId),
+        real_preview_running: this.isRealPreviewRunning(contractId),
       },
     );
     if (!record) return 0;
@@ -659,6 +683,111 @@ export class StagentDaemon {
     });
   }
 
+  emitRealPlaytestStatus(payload: RealPlaytestStatusPayload): number {
+    return this.broadcast("REAL_PLAYTEST_STATUS", payload);
+  }
+
+  isRealPreviewRunning(contractId: string): boolean {
+    const srv = this.realPreviews.get(contractId);
+    return srv?.handle !== null && srv?.handle !== undefined;
+  }
+
+  /**
+   * TASK-S.6b：启动或挂载真机预览，并在合同为 AUDITED+APPROVED 时投影 REAL_PLAYTEST。
+   */
+  async startRealPlaytest(input: {
+    contractId: string;
+    attachUrl?: string | undefined;
+    rootDir?: string | undefined;
+    /** 无业务产物时写一页白话桩（产品壳走通） */
+    stub?: boolean | undefined;
+    title?: string | undefined;
+  }): Promise<RealPlaytestStatusPayload> {
+    const contractId = input.contractId.trim();
+    if (!contractId) {
+      throw new Error("[E_REAL_PREVIEW_NO_CONTRACT] contract_id 不能为空");
+    }
+    const existing = this.realPreviews.get(contractId);
+    if (existing) {
+      await existing.stop();
+      this.realPreviews.delete(contractId);
+    }
+
+    let rootDir = input.rootDir;
+    if (input.stub === true || (!input.attachUrl && !rootDir)) {
+      rootDir = path.join(
+        this.repoRoot,
+        ".stagent",
+        "real-preview",
+        contractId,
+      );
+      writeRealPlaytestStub(rootDir, input.title ?? "真机试玩");
+    }
+
+    const server = createRealPreviewServer({
+      contractId,
+      ...(rootDir === undefined ? {} : { rootDir }),
+      ...(input.attachUrl === undefined ? {} : { attachUrl: input.attachUrl }),
+      onStatusChange: (payload) => {
+        this.emitRealPlaytestStatus(payload);
+      },
+    });
+    const handle = await server.start();
+    this.realPreviews.set(contractId, server);
+
+    const contract = this.orchestrator.getStore().get(contractId);
+    if (
+      contract &&
+      contract.lifecycle_state === "AUDITED" &&
+      contract.approval.status === "APPROVED"
+    ) {
+      this.publishPresentationState(contract, {
+        stopping_requested: this.stoppingContracts.has(contractId),
+        evidence: readLatestEvidenceSignal(this.repoRoot, contractId),
+        target_branch_ahead: this.targetAdvancedContracts.has(contractId),
+        real_preview_running: true,
+      });
+    }
+
+    return {
+      contract_id: contractId,
+      url: handle.url,
+      port: handle.port,
+      status: "RUNNING",
+      owned: handle.owned,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  async stopRealPlaytest(
+    contractId: string,
+  ): Promise<RealPlaytestStatusPayload> {
+    const id = contractId.trim();
+    const server = this.realPreviews.get(id);
+    const prev = server?.handle;
+    if (server) {
+      await server.stop();
+      this.realPreviews.delete(id);
+    }
+    const contract = this.orchestrator.getStore().get(id);
+    if (contract) {
+      this.publishPresentationState(contract, {
+        stopping_requested: this.stoppingContracts.has(id),
+        evidence: readLatestEvidenceSignal(this.repoRoot, id),
+        target_branch_ahead: this.targetAdvancedContracts.has(id),
+        real_preview_running: false,
+      });
+    }
+    return {
+      contract_id: id,
+      url: prev?.url ?? "",
+      port: prev?.port ?? 0,
+      status: "STOPPED",
+      owned: prev?.owned ?? false,
+      updated_at: new Date().toISOString(),
+    };
+  }
+
   /** Evidence 生成广播：携带结论，供控制台决定是否点亮「核销」 */
   emitEvidenceReady(contractId: string, evidence: EvidenceBundle): number {
     return this.broadcast("EVIDENCE_READY", {
@@ -695,7 +824,7 @@ export class StagentDaemon {
     // Origin 校验仍在 Upgrade 阶段硬阻断（防跨站 WS 劫持）
     const origin = req.headers.origin;
     // Demo 预览来源额外拦截：sandbox iframe 的 "null" 源与 4100~4110 端口
-    if (isDemoPreviewOrigin(origin)) {
+    if (isDemoPreviewOrigin(origin) || isRealPreviewOrigin(origin)) {
       this.rejectUpgrade(socket, 403, "Forbidden");
       return;
     }
@@ -1748,6 +1877,118 @@ export class StagentDaemon {
   }
 
   /**
+   * TASK-S.6b：真机预览启动 / 停止 / 查询。
+   * POST /api/preview/real/start|stop ；GET /api/preview/real/status?contract_id=
+   */
+  private async handleRealPlaytest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+    parsedUrl: URL,
+  ): Promise<void> {
+    try {
+      if (pathname === "/api/preview/real/status") {
+        if (method !== "GET") {
+          this.sendJson(res, 405, { error: "Method not allowed" });
+          return;
+        }
+        const contractId = (
+          parsedUrl.searchParams.get("contract_id") ?? ""
+        ).trim();
+        if (!contractId) {
+          this.sendJson(res, 400, {
+            error: "contract_id_required",
+            message: "需要 contract_id",
+          });
+          return;
+        }
+        const handle = this.realPreviews.get(contractId)?.handle ?? null;
+        this.sendJson(res, 200, {
+          contract_id: contractId,
+          url: handle?.url ?? null,
+          port: handle?.port ?? null,
+          status: handle ? "RUNNING" : "STOPPED",
+          owned: handle?.owned ?? false,
+          updated_at: new Date().toISOString(),
+        });
+        return;
+      }
+
+      if (method !== "POST") {
+        this.sendJson(res, 405, { error: "Method not allowed" });
+        return;
+      }
+
+      let body: {
+        contract_id?: unknown;
+        attach_url?: unknown;
+        root_dir?: unknown;
+        stub?: unknown;
+        title?: unknown;
+      };
+      try {
+        body = (await this.readJsonBody(req)) as typeof body;
+      } catch (err) {
+        this.sendJson(res, 400, {
+          error: "invalid_json",
+          message: (err as Error).message,
+        });
+        return;
+      }
+
+      const contractId =
+        typeof body.contract_id === "string" ? body.contract_id.trim() : "";
+      if (!contractId) {
+        this.sendJson(res, 400, {
+          error: "contract_id_required",
+          message: "contract_id 不能为空",
+        });
+        return;
+      }
+
+      if (pathname === "/api/preview/real/stop") {
+        const payload = await this.stopRealPlaytest(contractId);
+        this.sendJson(res, 200, payload);
+        return;
+      }
+
+      // start
+      const loaded = this.orchestrator.getStore().getWithMigration(contractId);
+      const title =
+        typeof body.title === "string"
+          ? body.title
+          : loaded?.contract.intent?.title;
+      const attachUrl =
+        typeof body.attach_url === "string"
+          ? body.attach_url.trim()
+          : undefined;
+      const rootDir =
+        typeof body.root_dir === "string" ? body.root_dir.trim() : undefined;
+      const stub =
+        body.stub === true ||
+        (attachUrl === undefined && (rootDir === undefined || rootDir === ""));
+
+      const payload = await this.startRealPlaytest({
+        contractId,
+        stub,
+        ...(attachUrl ? { attachUrl } : {}),
+        ...(rootDir ? { rootDir } : {}),
+        ...(title ? { title } : {}),
+      });
+      this.sendJson(res, 200, {
+        ...payload,
+        plain_summary: stub
+          ? "真机预览已启动（试玩桩）。可在中栏试玩，或点「在浏览器打开」。"
+          : "真机预览已挂载。可在中栏试玩，或点「在浏览器打开」。",
+        suggest_viewport: "playtest",
+      });
+    } catch (err) {
+      this.sendActionError(res, err);
+    }
+  }
+
+  /**
    * `POST /api/supervisor/journey` —— 非技术旅程右侧唯一入口分流（TASK-S.6）。
    *
    * 根据白话意图静默路由：质疑 → dispute；大事 → 草案；小事 → Fast Path（免强制 Demo）。
@@ -2067,6 +2308,13 @@ export class StagentDaemon {
       });
       return;
     }
+    if (isRealPreviewOrigin(req.headers.origin)) {
+      this.sendJson(res, 403, {
+        error: "Forbidden",
+        code: REAL_ORIGIN_FORBIDDEN,
+      });
+      return;
+    }
 
     const parsedUrl = new URL(req.url ?? "/", `http://${this.host}`);
     const pathname = parsedUrl.pathname;
@@ -2190,6 +2438,19 @@ export class StagentDaemon {
         return;
       }
       await this.handleSupervisorDispute(req, res, method);
+      return;
+    }
+
+    if (
+      pathname === "/api/preview/real/start" ||
+      pathname === "/api/preview/real/stop" ||
+      pathname === "/api/preview/real/status"
+    ) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleRealPlaytest(req, res, method, pathname, parsedUrl);
       return;
     }
 

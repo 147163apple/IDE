@@ -59,6 +59,7 @@ describe("Studio 高度链（走查回归）", () => {
                 </button>
               </div>
             }
+            playtest={<div data-testid="playtest-slot">playtest</div>}
           />
         }
       />,
@@ -100,6 +101,7 @@ describe("Studio 高度链（走查回归）", () => {
             graph={<div />}
             dispute={<div />}
             contract={<div data-testid="contract-slot">合同</div>}
+            playtest={<div />}
           />
         }
       />,
@@ -146,6 +148,7 @@ describe("Studio 高度链（走查回归）", () => {
             让 Supervisor 出草案
           </button>
         }
+        playtest={<div />}
       />,
     );
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(

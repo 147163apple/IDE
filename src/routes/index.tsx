@@ -44,6 +44,8 @@ import {
   generateSupervisorDraft,
   submitDisputeSelfCheck,
   submitJourneyMessage,
+  startRealPlaytest,
+  stopRealPlaytest,
   createTaskGraph,
   fetchPresentationSnapshot,
   listContracts,
@@ -94,6 +96,7 @@ import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
 import { StudioViewportShell } from "@/components/studio/StudioViewportShell";
 import { DemoPreviewPane } from "@/components/studio/DemoPreviewPane";
+import { RealPlaytestPane } from "@/components/studio/RealPlaytestPane";
 import { TaskGraphPane } from "@/components/studio/TaskGraphPane";
 import {
   DisputeConsolePane,
@@ -130,6 +133,7 @@ import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
   DemoPreviewStatusPayload,
+  RealPlaytestStatusPayload,
   EvidenceReadyPayload,
   StateChangedPayload,
   TaskGraphUpdatedPayload,
@@ -196,6 +200,12 @@ function Console() {
   >({});
   const [demoPreview, setDemoPreview] =
     useState<DemoPreviewStatusPayload | null>(null);
+  const [realPlaytest, setRealPlaytest] =
+    useState<RealPlaytestStatusPayload | null>(null);
+  const [realPlaytestBusy, setRealPlaytestBusy] = useState(false);
+  const [realPlaytestError, setRealPlaytestError] = useState<string | null>(
+    null,
+  );
   const [disputeReport, setDisputeReport] = useState<DisputeReportView | null>(
     null,
   );
@@ -620,6 +630,48 @@ function Console() {
           setStudioViewportOverride(result.suggest_viewport);
         }
 
+        if (
+          kind === "REAL_PLAYTEST" &&
+          result.code === "START_REAL_PLAYTEST" &&
+          selectedId
+        ) {
+          setRealPlaytestBusy(true);
+          setRealPlaytestError(null);
+          try {
+            const preview = await startRealPlaytest(conn, {
+              contract_id: selectedId,
+              stub: true,
+              title: selected?.intent.title,
+            });
+            setRealPlaytest({
+              contract_id: preview.contract_id,
+              url: preview.url,
+              port: preview.port,
+              status: preview.status,
+              owned: preview.owned,
+              updated_at: preview.updated_at,
+              ...(preview.message ? { message: preview.message } : {}),
+            });
+            setStudioViewportOverride("playtest");
+            setJourneyCards((prev) => [
+              ...prev.slice(-19),
+              {
+                id: `journey-playtest-${Date.now()}`,
+                kind: "REAL_PLAYTEST",
+                text:
+                  preview.plain_summary ??
+                  `真机预览已就绪：${preview.url}（也可点「在浏览器打开」）`,
+              },
+            ]);
+          } catch (err) {
+            setRealPlaytestError(
+              err instanceof Error ? err.message : "真机预览启动失败",
+            );
+          } finally {
+            setRealPlaytestBusy(false);
+          }
+        }
+
         return "handled";
       } catch (error) {
         const card: JourneyChatCard = {
@@ -636,8 +688,71 @@ function Console() {
         setJourneyBusy(false);
       }
     },
-    [conn, connected, selectedId, toDisputeView],
+    [conn, connected, selectedId, selected, toDisputeView],
   );
+
+  const handleStartRealPlaytest = useCallback(async () => {
+    if (!conn || !selectedId) {
+      setRealPlaytestError("请先在左侧选一份合同，再启动真机预览。");
+      setStudioViewportOverride("playtest");
+      return;
+    }
+    setRealPlaytestBusy(true);
+    setRealPlaytestError(null);
+    try {
+      const preview = await startRealPlaytest(conn, {
+        contract_id: selectedId,
+        stub: true,
+        title: selected?.intent.title,
+      });
+      setRealPlaytest({
+        contract_id: preview.contract_id,
+        url: preview.url,
+        port: preview.port,
+        status: preview.status,
+        owned: preview.owned,
+        updated_at: preview.updated_at,
+        ...(preview.message ? { message: preview.message } : {}),
+      });
+      setStudioViewportOverride("playtest");
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `journey-playtest-${Date.now()}`,
+          kind: "REAL_PLAYTEST",
+          text: preview.plain_summary ?? `真机预览已就绪：${preview.url}`,
+        },
+      ]);
+    } catch (err) {
+      setRealPlaytestError(
+        err instanceof Error ? err.message : "真机预览启动失败",
+      );
+    } finally {
+      setRealPlaytestBusy(false);
+    }
+  }, [conn, selectedId, selected]);
+
+  const handleStopRealPlaytest = useCallback(async () => {
+    if (!conn || !selectedId) return;
+    setRealPlaytestBusy(true);
+    try {
+      const preview = await stopRealPlaytest(conn, { contract_id: selectedId });
+      setRealPlaytest({
+        contract_id: preview.contract_id,
+        url: preview.url,
+        port: preview.port,
+        status: preview.status,
+        owned: preview.owned,
+        updated_at: preview.updated_at,
+      });
+    } catch (err) {
+      setRealPlaytestError(
+        err instanceof Error ? err.message : "停止真机预览失败",
+      );
+    } finally {
+      setRealPlaytestBusy(false);
+    }
+  }, [conn, selectedId]);
 
   /** TASK-S.6：确认原型 → 建全灰 TaskGraph（禁止空壳 nonce） */
   const handleConfirmPrototype = useCallback(async () => {
@@ -776,6 +891,15 @@ function Console() {
     },
     onDemoPreviewStatus: (p: DemoPreviewStatusPayload) => {
       setDemoPreview(p);
+    },
+    onRealPlaytestStatus: (p: RealPlaytestStatusPayload) => {
+      setRealPlaytest(p);
+      if (p.status === "RUNNING") {
+        setRealPlaytestError(null);
+      }
+      if (p.status === "ERROR") {
+        setRealPlaytestError(p.message ?? "真机预览启动失败");
+      }
     },
     onDisputeReportReady: (p) => {
       // 完整报告仍以 HTTP 响应为准；这里只在切合同后避免错挂摘要
@@ -1786,6 +1910,31 @@ function Console() {
                   </div>
                 )}
               </div>
+            }
+            playtest={
+              <RealPlaytestPane
+                previewUrl={
+                  realPlaytest &&
+                  (!selectedId || realPlaytest.contract_id === selectedId)
+                    ? realPlaytest.url
+                    : null
+                }
+                status={
+                  realPlaytest &&
+                  (!selectedId || realPlaytest.contract_id === selectedId)
+                    ? realPlaytest.status
+                    : null
+                }
+                errorMessage={realPlaytestError}
+                contractLabel={selected?.intent.title ?? null}
+                busy={realPlaytestBusy}
+                onStart={() => {
+                  void handleStartRealPlaytest();
+                }}
+                onStop={() => {
+                  void handleStopRealPlaytest();
+                }}
+              />
             }
           />
         }

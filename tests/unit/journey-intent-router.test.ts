@@ -35,6 +35,13 @@ describe("TASK-S.6 intent router（确定性分流）", () => {
     expect(r.skip_demo).toBe(false);
   });
 
+  it("打开真机预览 → REAL_PLAYTEST", () => {
+    const r = classifyJourneyIntent("打开真机预览，我想看看真实页面");
+    expect(r.kind).toBe("REAL_PLAYTEST");
+    expect(r.skip_demo).toBe(true);
+    expect(r.confidence).toBeGreaterThan(0.5);
+  });
+
   it("空消息 → CHAT", () => {
     expect(classifyJourneyIntent("   ").kind).toBe("CHAT");
   });

@@ -8,11 +8,11 @@ import {
 } from "./viewport-routing";
 
 /**
- * Studio 四视口外壳（TASK-C.2）。
+ * Studio 视口外壳（TASK-C.2 + S.6b 真机试玩）。
  *
- * - 顶栏手动切换四个视口；
+ * - 顶栏手动切换视口；
  * - 消费 Daemon 的 `presentation_state`：状态一变就回到该态默认视口；
- * - **四个面板始终挂载**，非激活仅 `hidden`——表单填写与 Graph 点亮不会因切换丢失。
+ * - **全部面板始终挂载**，非激活仅 `hidden`——表单填写与 Graph 点亮不会因切换丢失。
  */
 export interface StudioViewportShellProps {
   presentationState?: PresentationState | null | undefined;
@@ -25,6 +25,8 @@ export interface StudioViewportShellProps {
   graph: ReactNode;
   dispute: ReactNode;
   contract: ReactNode;
+  /** TASK-S.6b：真机试玩视口 */
+  playtest: ReactNode;
 }
 
 export function StudioViewportShell(props: StudioViewportShellProps) {
@@ -52,6 +54,7 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
     graph: props.graph,
     dispute: props.dispute,
     contract: props.contract,
+    playtest: props.playtest,
   };
 
   return (

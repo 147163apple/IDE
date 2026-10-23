@@ -1058,7 +1058,8 @@ export async function markTaskGraphStale(
 // TASK-S.6：非技术旅程右侧唯一入口分流
 // ---------------------------------------------------------------------------
 
-export type JourneyRouteKind = "DISPUTE" | "FAST_PATH" | "MAJOR_DRAFT" | "CHAT";
+export type JourneyRouteKind =
+  "DISPUTE" | "REAL_PLAYTEST" | "FAST_PATH" | "MAJOR_DRAFT" | "CHAT";
 
 export interface JourneyIntentView {
   kind: JourneyRouteKind;
@@ -1074,7 +1075,8 @@ export interface JourneyResponse {
   skip_demo: boolean;
   requirements_updated: boolean;
   requirements_hint: string | null;
-  suggest_viewport: "dispute" | "demo" | "graph" | "contract" | null;
+  suggest_viewport:
+    "dispute" | "demo" | "graph" | "contract" | "playtest" | null;
   code: string | null;
   draft: SupervisorDraftResult | null;
   dispute_report: DisputeReportApiView | null;
@@ -1102,4 +1104,66 @@ export async function submitJourneyMessage(
         : { session_id: input.session_id }),
     }),
   });
+}
+
+// ---------------------------------------------------------------------------
+// TASK-S.6b：真机预览挂载
+// ---------------------------------------------------------------------------
+
+export interface RealPlaytestApiView {
+  contract_id: string;
+  url: string;
+  port: number;
+  status: "RUNNING" | "STOPPED" | "ERROR";
+  owned: boolean;
+  updated_at: string;
+  plain_summary?: string;
+  suggest_viewport?: "playtest" | null;
+  message?: string;
+}
+
+export async function startRealPlaytest(
+  conn: DaemonConnection,
+  input: {
+    contract_id: string;
+    attach_url?: string | undefined;
+    root_dir?: string | undefined;
+    stub?: boolean | undefined;
+    title?: string | undefined;
+  },
+): Promise<RealPlaytestApiView> {
+  return request<RealPlaytestApiView>(conn, "/api/preview/real/start", {
+    method: "POST",
+    body: JSON.stringify({
+      contract_id: input.contract_id,
+      ...(input.attach_url === undefined
+        ? {}
+        : { attach_url: input.attach_url }),
+      ...(input.root_dir === undefined ? {} : { root_dir: input.root_dir }),
+      ...(input.stub === undefined ? {} : { stub: input.stub }),
+      ...(input.title === undefined ? {} : { title: input.title }),
+    }),
+  });
+}
+
+export async function stopRealPlaytest(
+  conn: DaemonConnection,
+  input: { contract_id: string },
+): Promise<RealPlaytestApiView> {
+  return request<RealPlaytestApiView>(conn, "/api/preview/real/stop", {
+    method: "POST",
+    body: JSON.stringify({ contract_id: input.contract_id }),
+  });
+}
+
+export async function getRealPlaytestStatus(
+  conn: DaemonConnection,
+  contractId: string,
+): Promise<RealPlaytestApiView> {
+  const q = encodeURIComponent(contractId);
+  return request<RealPlaytestApiView>(
+    conn,
+    `/api/preview/real/status?contract_id=${q}`,
+    { method: "GET" },
+  );
 }
