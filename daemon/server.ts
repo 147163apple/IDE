@@ -39,6 +39,10 @@ import {
   loadCurrentGatewayViolation,
 } from "./guard/gateway-violation-store";
 import { ContractOrchestrator } from "./pipeline/orchestrator";
+import { TaskGraphEngine } from "./graph/graph-engine";
+import { collectWorktreeEvidence } from "./graph/evidence-collector";
+import type { IlluminationInput } from "./graph/illumination-verifier";
+import type { SupervisorProposalV1 } from "../src/lib/graph/task-graph";
 import {
   loadEvidenceSnapshot,
   loadLatestEvidenceSnapshot,
@@ -165,6 +169,8 @@ export class StagentDaemon {
   private signalCleanupFn: (() => void) | null = null;
   private lastRecoveryReport: RecoveryReport | null = null;
   private readonly orchestrator: ContractOrchestrator;
+  /** TASK-C.7：Task Graph 权威引擎（Daemon 独占，唯一写手） */
+  private readonly graphEngine: TaskGraphEngine;
   readonly chat: ChatSessionManager;
   private readonly supervisorEnrich:
     | ((prompt: string) => Promise<DraftEnrichment> | DraftEnrichment)
@@ -187,6 +193,13 @@ export class StagentDaemon {
     this.maxConnectionsPerWindow = options.maxConnectionsPerWindow ?? 30;
     this.connectionWindowMs = options.connectionWindowMs ?? 10_000;
     this.maxClients = options.maxClients ?? 64;
+    // §3.3：图状态由 Daemon 独占维护；每次变更都以全量快照广播给前端。
+    // 订阅放在构造期而不是首个请求，保证"第一个连接建立前发生的变更"
+    // 也能在后续连接拿到磁盘上的最新状态（getGraph 会读盘恢复）。
+    this.graphEngine = new TaskGraphEngine({ repoRoot: this.repoRoot });
+    this.graphEngine.subscribe((payload) => {
+      this.broadcast("TASK_GRAPH_UPDATED", payload);
+    });
     this.orchestrator = new ContractOrchestrator({
       repoRoot: this.repoRoot,
       // TASK-C.5：验证命令的逐行输出实时推给页面（脱敏在 runner 内完成）
@@ -660,7 +673,9 @@ export class StagentDaemon {
     const error = err as Error & { code?: string };
     const conflict =
       error?.code === "E_INVALID_STATE_TRANSITION" ||
-      error?.code === "E_CONCURRENT_OPERATION";
+      error?.code === "E_CONCURRENT_OPERATION" ||
+      error?.code === "E_ILLEGAL_NODE_TRANSITION" ||
+      error?.code === "E_UPSTREAM_NOT_ILLUMINATED";
     this.sendJson(res, conflict ? 409 : 400, {
       error: error?.message ?? String(err),
       ...(error?.code === undefined ? {} : { code: error.code }),
@@ -697,6 +712,9 @@ export class StagentDaemon {
       worktreePath,
       onChange: (changed) => {
         const results = engine.handleChanges(changed);
+        // TASK-C.7 §3.4：外部改码不只让 Evidence 失效，也要把相关节点
+        // 由绿变灰（STALE_REVERIFY）；这是 Node 级与 Evidence 级的同源降级。
+        this.graphEngine.markStale(changed);
         for (const hit of results) {
           if (!hit.stale) continue;
           // 规范 §6.1 帧：证据失效的权威通知通道
@@ -1239,6 +1257,265 @@ export class StagentDaemon {
     }
   }
 
+  /**
+   * Task Graph 控制面（架构 §3.3 / §3.4，TASK-C.7）。
+   *
+   * 四个端点都只碰 `TaskGraphEngine`，没有任何一处直接写
+   * `.stagent/specs/task_graph.json`——"Daemon 独占权威状态"靠这一点保证。
+   *
+   * - `GET  /api/graph`               读取当前权威快照
+   * - `POST /api/graph/proposal`      从 Supervisor 提案建图（全 PENDING）
+   * - `POST /api/graph/nodes/start`   按拓扑序开工
+   * - `POST /api/graph/verify`        提交物理证据并判定是否点亮
+   * - `POST /api/graph/stale`         外部改码 → 节点降级 + 合同降级
+   */
+  private async handleTaskGraph(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    url: URL,
+  ): Promise<void> {
+    try {
+      if (method === "GET" && url.pathname === "/api/graph") {
+        const contractId = url.searchParams.get("contract_id") ?? undefined;
+        const graph = this.graphEngine.getGraph(contractId);
+        if (!graph) {
+          this.sendJson(res, 404, {
+            error: "TASK_GRAPH_NOT_FOUND",
+            code: "E_GRAPH_NOT_FOUND",
+            message: this.graphEngine.lastLoadError ?? "尚未生成任务图谱",
+          });
+          return;
+        }
+        this.sendJson(res, 200, { graph });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/api/graph/proposal") {
+        const body = (await this.readJsonBody(req)) as {
+          proposal?: unknown;
+        };
+        if (!body.proposal) {
+          this.sendJson(res, 400, {
+            error: "proposal_required",
+            code: "E_PROPOSAL_INVALID",
+            message: "proposal 不能为空",
+          });
+          return;
+        }
+        const graph = this.graphEngine.createFromProposal(
+          body.proposal as SupervisorProposalV1,
+        );
+        this.sendJson(res, 200, { graph });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/api/graph/nodes/start") {
+        const body = (await this.readJsonBody(req)) as { node_id?: unknown };
+        if (typeof body.node_id !== "string" || body.node_id === "") {
+          this.sendJson(res, 400, {
+            error: "node_id_required",
+            code: "E_GRAPH_UNKNOWN_NODE",
+            message: "node_id 不能为空",
+          });
+          return;
+        }
+        const graph = this.graphEngine.startNode(body.node_id);
+        this.sendJson(res, 200, { graph });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/api/graph/verify") {
+        const body = (await this.readJsonBody(req)) as Record<string, unknown>;
+        const nodeId =
+          typeof body["node_id"] === "string" ? body["node_id"] : "";
+        if (nodeId === "") {
+          this.sendJson(res, 400, {
+            error: "node_id_required",
+            code: "E_GRAPH_UNKNOWN_NODE",
+            message: "node_id 不能为空",
+          });
+          return;
+        }
+
+        // 证据采集：文件写入、SHA-256、Scope、HEAD 全部由 Daemon 现算。
+        // 请求体里即使带了这些字段也会被忽略——前端不得自造证据。
+        const snapshot = this.graphEngine.getGraph();
+        if (!snapshot) {
+          this.sendJson(res, 404, {
+            error: "TASK_GRAPH_NOT_FOUND",
+            code: "E_GRAPH_NOT_FOUND",
+            message: "尚未生成任务图谱",
+          });
+          return;
+        }
+        const node = snapshot.nodes.find((item) => item.node_id === nodeId);
+        if (!node) {
+          this.sendJson(res, 400, {
+            error: "unknown_node",
+            code: "E_GRAPH_UNKNOWN_NODE",
+            message: `图中不存在节点 ${nodeId}`,
+          });
+          return;
+        }
+        const contract = this.orchestrator
+          .getStore()
+          .get(snapshot.contract_id);
+        if (!contract) {
+          this.sendJson(res, 409, {
+            error: "contract_not_found",
+            code: "E_GRAPH_NOT_FOUND",
+            message: `图谱所属合同 ${snapshot.contract_id} 不存在`,
+          });
+          return;
+        }
+
+        const collected = await collectWorktreeEvidence({
+          repoRoot: this.repoRoot,
+          contractId: snapshot.contract_id,
+          targetFiles: node.target_files,
+          scope: contract.authorization.file_system_scope,
+        });
+        if (!collected.worktree_available) {
+          this.sendJson(res, 409, {
+            error: "worktree_unavailable",
+            code: "E_WORKTREE_UNAVAILABLE",
+            message: `任务 Worktree 不存在：${collected.worktree_path}`,
+          });
+          return;
+        }
+
+        const commandResults = Array.isArray(body["command_results"])
+          ? body["command_results"]
+              .filter(
+                (item): item is Record<string, unknown> =>
+                  typeof item === "object" && item !== null,
+              )
+              .map((item) => ({
+                alias: typeof item["alias"] === "string" ? item["alias"] : "",
+                exit_code:
+                  typeof item["exit_code"] === "number"
+                    ? item["exit_code"]
+                    : Number.NaN,
+              }))
+              .filter((item) => item.alias !== "")
+          : [];
+
+        const sideEffects = Array.isArray(body["side_effects"])
+          ? body["side_effects"]
+              .filter(
+                (item): item is Record<string, unknown> =>
+                  typeof item === "object" && item !== null,
+              )
+              .map((item) => ({
+                path: typeof item["path"] === "string" ? item["path"] : "",
+                before_sha256:
+                  typeof item["before_sha256"] === "string"
+                    ? item["before_sha256"]
+                    : null,
+                after_sha256:
+                  typeof item["after_sha256"] === "string"
+                    ? item["after_sha256"]
+                    : null,
+              }))
+              .filter((item) => item.path !== "")
+          : [];
+
+        const evidence: Omit<IlluminationInput, "node" | "now"> = {
+          files_written: collected.files_written,
+          file_hashes: collected.file_hashes,
+          scope_valid: collected.scope_valid,
+          commit_sha: collected.commit_sha,
+          command_results: commandResults,
+          ...(typeof body["execution_exit_code"] === "number"
+            ? { execution_exit_code: body["execution_exit_code"] }
+            : {}),
+          ...(typeof body["expected_exit_code"] === "number"
+            ? { expected_exit_code: body["expected_exit_code"] }
+            : {}),
+          ...(body["manual_approved"] === true
+            ? { manual_approved: true }
+            : {}),
+          ...(typeof body["syntax_check_exit_code"] === "number"
+            ? { syntax_check_exit_code: body["syntax_check_exit_code"] }
+            : {}),
+          ...(sideEffects.length > 0 ? { side_effects: sideEffects } : {}),
+        };
+
+        const { result, graph } = this.graphEngine.verifyNode(nodeId, evidence);
+        this.sendJson(res, 200, {
+          illuminated: result.illuminated,
+          ...(result.illuminated
+            ? {}
+            : { code: result.code, message: result.message }),
+          ...(collected.scope_violations.length > 0
+            ? { scope_violations: collected.scope_violations }
+            : {}),
+          graph,
+        });
+        return;
+      }
+
+      if (method === "POST" && url.pathname === "/api/graph/stale") {
+        const body = (await this.readJsonBody(req)) as {
+          contract_id?: unknown;
+          paths?: unknown;
+        };
+        const paths = Array.isArray(body.paths)
+          ? body.paths.filter(
+              (item): item is string => typeof item === "string",
+            )
+          : [];
+        if (paths.length === 0) {
+          this.sendJson(res, 400, {
+            error: "paths_required",
+            message: "paths 至少需要一个变更路径",
+          });
+          return;
+        }
+
+        const staleIds = this.graphEngine.markStale(paths);
+        const graph = this.graphEngine.getGraph();
+        const contractId =
+          typeof body.contract_id === "string"
+            ? body.contract_id
+            : (graph?.contract_id ?? null);
+
+        // §3.4 级联降级：任一 STALE_REVERIFY 出现，AUDITED 合同原子退回 VERIFYING。
+        // 图已过期但合同不存在/不是 AUDITED 时不报错——降级是安全动作，不是前置条件。
+        let demoted = false;
+        if (staleIds.length > 0 && contractId !== null) {
+          const contract = this.orchestrator.getStore().get(contractId);
+          if (contract?.lifecycle_state === "AUDITED") {
+            const next = this.orchestrator.getStore().transition({
+              contractId,
+              lifecycleState: "VERIFYING",
+            });
+            this.emitContractUpdate(next);
+            demoted = true;
+          }
+          this.broadcast("SCOPE_ALERT", {
+            contract_id: contractId,
+            code: "E_EVIDENCE_STALE",
+            message:
+              "外部文件改动使节点证据过期；相关节点已降级为 STALE_REVERIFY，等待重新验证",
+          });
+        }
+
+        this.sendJson(res, 200, {
+          node_ids: staleIds,
+          contract_demoted: demoted,
+          graph,
+        });
+        return;
+      }
+
+      this.sendJson(res, 404, { error: "Not found" });
+    } catch (err) {
+      this.sendActionError(res, err);
+    }
+  }
+
   private async handleHttpRequest(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -1343,6 +1620,15 @@ export class StagentDaemon {
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }
+      return;
+    }
+
+    if (pathname.startsWith("/api/graph")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleTaskGraph(req, res, method, parsedUrl);
       return;
     }
 

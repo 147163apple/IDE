@@ -1,5 +1,6 @@
 import type { SoftwareContract } from "./contract.schema";
 import type { EvidenceBundle } from "./evidence.schema";
+import type { SupervisorProposalV1, TaskGraph } from "./graph/task-graph";
 
 /**
  * Daemon REST 客户端（浏览器侧唯一数据入口）。
@@ -827,4 +828,117 @@ export async function undoProtectionRound(
   return request<UndoRoundResult>(conn, "/api/protection/undo", {
     method: "POST",
   });
+}
+
+// ---------------------------------------------------------------------------
+// Task Graph（TASK-C.7 / 架构 §3.3）
+// 前端只消费 Daemon 的权威快照：GET 一次做首屏兜底，之后靠
+// `TASK_GRAPH_UPDATED` 帧推送。任何"本地算一下节点状态"的写法都不在这里。
+// ---------------------------------------------------------------------------
+
+export interface TaskGraphVerifyRequest {
+  node_id: string;
+  /**
+   * 验证命令结果由执行器（orchestrator / CLI）提交。
+   * 文件写入、SHA-256、Scope 与 Commit SHA 一律由 Daemon 在 Worktree 上现算，
+   * 这里刻意不提供对应字段——前端不得自造证据。
+   */
+  command_results: Array<{ alias: string; exit_code: number }>;
+  execution_exit_code?: number;
+  expected_exit_code?: number;
+  manual_approved?: boolean;
+  syntax_check_exit_code?: number;
+  side_effects?: Array<{
+    path: string;
+    before_sha256: string | null;
+    after_sha256: string | null;
+  }>;
+}
+
+export interface TaskGraphVerifyResponse {
+  illuminated: boolean;
+  code?: string;
+  message?: string;
+  /** Scope 越界明细（仅在未点亮且存在越界时返回） */
+  scope_violations?: string[];
+  graph: TaskGraph;
+}
+
+/**
+ * 读取当前 Task Graph。尚未建图时 Daemon 返回 404，这里归一成 null，
+ * 让调用方用"空态"而不是一个红色错误横幅来迎接第一次使用。
+ */
+export async function fetchTaskGraph(
+  conn: DaemonConnection,
+  contractId?: string,
+): Promise<TaskGraph | null> {
+  try {
+    const query =
+      contractId === undefined
+        ? ""
+        : `?contract_id=${encodeURIComponent(contractId)}`;
+    const body = await request<{ graph: TaskGraph }>(
+      conn,
+      `/api/graph${query}`,
+    );
+    return body.graph;
+  } catch (err) {
+    if (err instanceof DaemonApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function createTaskGraph(
+  conn: DaemonConnection,
+  proposal: SupervisorProposalV1,
+): Promise<TaskGraph> {
+  const body = await request<{ graph: TaskGraph }>(
+    conn,
+    "/api/graph/proposal",
+    {
+      method: "POST",
+      body: JSON.stringify({ proposal }),
+    },
+  );
+  return body.graph;
+}
+
+export async function startTaskGraphNode(
+  conn: DaemonConnection,
+  nodeId: string,
+): Promise<TaskGraph> {
+  const body = await request<{ graph: TaskGraph }>(
+    conn,
+    "/api/graph/nodes/start",
+    { method: "POST", body: JSON.stringify({ node_id: nodeId }) },
+  );
+  return body.graph;
+}
+
+export async function verifyTaskGraphNode(
+  conn: DaemonConnection,
+  input: TaskGraphVerifyRequest,
+): Promise<TaskGraphVerifyResponse> {
+  return request<TaskGraphVerifyResponse>(conn, "/api/graph/verify", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function markTaskGraphStale(
+  conn: DaemonConnection,
+  paths: string[],
+  contractId?: string,
+): Promise<{ node_ids: string[]; contract_demoted: boolean }> {
+  return request<{ node_ids: string[]; contract_demoted: boolean }>(
+    conn,
+    "/api/graph/stale",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        paths,
+        ...(contractId === undefined ? {} : { contract_id: contractId }),
+      }),
+    },
+  );
 }

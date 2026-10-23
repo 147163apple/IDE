@@ -195,9 +195,10 @@ describe("设置入口：Activity Bar 齿轮", () => {
     const labels = Array.from(
       bar.querySelectorAll("[data-testid^='activity-']"),
     ).map((el) => el.getAttribute("data-testid"));
-    // Supervisor 与设置相邻，且在终端的上面
+    // Supervisor 与设置相邻，且在终端的上面；任务图谱紧随资源管理器
     expect(labels).toEqual([
       "activity-explorer",
+      "activity-graph",
       "activity-supervisor",
       "activity-settings",
       "activity-terminal",

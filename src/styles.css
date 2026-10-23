@@ -142,3 +142,30 @@
     color: var(--color-foreground);
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * TASK-C.7 渐进点亮动效
+ * 规范要求 TASK_GRAPH_UPDATED 到达后 ≤100ms 完成翠绿过渡；这里把时长
+ * 写死为 100ms，并用 prefers-reduced-motion 给需要的用户关掉动画。
+ * ------------------------------------------------------------------------- */
+@keyframes dag-illuminate {
+  0% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  45% {
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+}
+
+.dag-illuminate {
+  animation: dag-illuminate 100ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dag-illuminate {
+    animation: none;
+  }
+}

@@ -19,6 +19,8 @@ export const STUDIO_TAB_ID = "system:supervisor-studio";
 export const SUPERVISOR_TAB_ID = "system:supervisor";
 /** 设置 Tab（⚙️ 图标入口；连接/诊断/开关全在这一页） */
 export const SETTINGS_TAB_ID = "system:settings";
+/** Task Graph Tab（业务功能导图 / 执行 DAG，TASK-C.7） */
+export const GRAPH_TAB_ID = "system:task-graph";
 
 interface Tab {
   id: string;
@@ -42,6 +44,10 @@ export interface WorkspaceLayoutProps {
   supervisorContent?: ReactNode;
   /** 设置 Tab 内容（由主页面注入，连接与模型 Key 面板在那里） */
   settingsContent?: ReactNode;
+  /** Task Graph Tab 内容（业务功能导图 / 执行 DAG，TASK-C.7） */
+  graphContent?: ReactNode;
+  /** 左栏文件树上方的【规范与资产】专区（需求文档 / 合同 / Demo 原型） */
+  specsSection?: ReactNode;
   /** 右栏：AI 对话（主要需求沟通入口） */
   rightPanel?: ReactNode;
   /** 底栏 SmartTerminal 抽屉内容 */
@@ -179,6 +185,23 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     );
     setActiveTab(SUPERVISOR_TAB_ID);
   };
+  /** 任务图谱图标：打开/聚焦 Graph Tab（与 Supervisor 一样不 toggle） */
+  const openGraph = () => {
+    setTabs((t) =>
+      t.some((x) => x.id === GRAPH_TAB_ID)
+        ? t
+        : [
+            ...t,
+            {
+              id: GRAPH_TAB_ID,
+              title: "任务图谱",
+              system: true,
+              closable: true,
+            },
+          ],
+    );
+    setActiveTab(GRAPH_TAB_ID);
+  };
   /** 左下角齿轮：打开设置 Tab（同样不做 toggle，避免误触关掉正在填的表单） */
   const openSettings = () => {
     setTabs((t) =>
@@ -224,6 +247,15 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
       )}
     </div>
   );
+  const graphPane = (
+    <div data-testid="graph-pane" className="flex min-h-0 flex-col">
+      {props.graphContent ?? (
+        <div className="p-3 text-sm opacity-60">
+          任务图谱需要主页面注入权威快照（TASK-C.7）。
+        </div>
+      )}
+    </div>
+  );
   const welcome = (
     <div data-testid="welcome-surface" className="h-full overflow-auto">
       {props.welcome ?? (
@@ -240,7 +272,8 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     id &&
     id !== STUDIO_TAB_ID &&
     id !== SUPERVISOR_TAB_ID &&
-    id !== SETTINGS_TAB_ID ? (
+    id !== SETTINGS_TAB_ID &&
+    id !== GRAPH_TAB_ID ? (
       props.renderFile ? (
         props.renderFile(id, useWorktree)
       ) : (
@@ -255,6 +288,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const isStudio = activeTab === STUDIO_TAB_ID;
   const isSupervisor = activeTab === SUPERVISOR_TAB_ID;
   const isSettings = activeTab === SETTINGS_TAB_ID;
+  const isGraph = activeTab === GRAPH_TAB_ID;
   /** 没有打开任何标签 = 空编辑区（首屏默认就是这个） */
   const showWelcome = tabs.length === 0 || activeTab === null;
   const lastFile = [...tabs].reverse().find((t) => !t.system)?.id ?? null;
@@ -293,6 +327,8 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
           onToggleExplorer={() => setLeftOpen((v) => !v)}
           supervisorOpen={isSupervisor}
           onOpenSupervisor={focusSupervisor}
+          graphOpen={isGraph}
+          onOpenGraph={openGraph}
           settingsOpen={isSettings}
           onOpenSettings={openSettings}
           terminalOpen={terminalOpen}
@@ -326,6 +362,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                 repoPath={props.repoPath}
               />
               <div className="min-h-0 flex-1 overflow-auto">
+                {props.specsSection}
                 <FileTree
                   nodes={props.files}
                   rootLabel={root}
@@ -402,6 +439,8 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
               supervisor
             ) : isSettings ? (
               settings
+            ) : isGraph ? (
+              graphPane
             ) : (
               editorFor(activeTab)
             )}
