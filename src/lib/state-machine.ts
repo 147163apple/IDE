@@ -118,6 +118,34 @@ export function validateStatePair(pair: ContractStatePair): ValidationResult {
 
 // --- 3. 跃迁表 ---
 
+/**
+ * §0.2.3.1：Fast Path 系统审批标识。
+ *
+ * 放在本模块而非 contract.schema.ts，是为了避免运行期循环依赖
+ * （contract.schema 运行期依赖本模块；本模块只以 `import type` 引用其类型）。
+ */
+export const FAST_PATH_APPROVER = "system:fast-path" as const;
+
+/**
+ * 受控跃迁的触发原因（§9.1.1.1 C-02 / C-07 / C-08）。
+ * 这些边不是通用回边：缺少对应原因时必须 Fail-Closed，避免被当成捷径。
+ */
+export type TransitionReason =
+  "FAST_PATH_ADMISSION" | "WORKTREE_MISSING_HEAL" | "EXTERNAL_MUTATION";
+
+/**
+ * 受控跃迁的上下文事实。
+ *
+ * 为什么需要它：`DRAFT -> PREPARING` 是否合法取决于审批凭证与风险等级，
+ * 而这两项不在 `ContractStatePair`（只有 lifecycle × approval 两个标量）里。
+ * 不传上下文一律视为「无法证明条件成立」，按拒绝处理。
+ */
+export interface TransitionContext {
+  approval?: { approved_by?: string | undefined } | undefined;
+  intent?: { risk_level?: "LOW" | "MEDIUM" | "HIGH" | undefined } | undefined;
+  reason?: TransitionReason | undefined;
+}
+
 /** 终态：不可再迁出 */
 export const TERMINAL_STATES = [
   "MERGED",
@@ -136,8 +164,9 @@ export function isTerminalState(state: LifecycleState): boolean {
 export const LIFECYCLE_TRANSITIONS: Readonly<
   Record<LifecycleState, readonly LifecycleState[]>
 > = {
-  // 用户提交审批
-  DRAFT: ["PENDING_APPROVAL", "ABORTED"],
+  // 用户提交审批；Fast Path 自动准入直接进入 PREPARING（§0.2.3.1 C-02，带 Guard）
+  // 注意：这里没有、也不允许出现 DRAFT -> EXECUTING —— 物理环境初始化不可跳过。
+  DRAFT: ["PENDING_APPROVAL", "PREPARING", "ABORTED"],
   // 通过 → PREPARING；拒绝 → ABORTED
   PENDING_APPROVAL: ["PREPARING", "ABORTED"],
   // 准备成功 → EXECUTING；初始化中断清理后回退等待重新审批；安全中止
@@ -146,10 +175,10 @@ export const LIFECYCLE_TRANSITIONS: Readonly<
   EXECUTING: ["VERIFYING", "PENDING_RESUME", "ABORTED"],
   // 门禁通过 → AUDITED；非安全失败重试 → EXECUTING；挂起 → PENDING_RESUME
   VERIFYING: ["AUDITED", "EXECUTING", "PENDING_RESUME", "ABORTED"],
-  // 用户显式确认续跑；或放弃
-  PENDING_RESUME: ["EXECUTING", "ABORTED"],
-  // 用户核销合并；Evidence 失效需重新验证；或放弃
-  AUDITED: ["MERGED", "EXECUTING", "ABORTED"],
+  // 用户显式续跑；或 Worktree 丢失时自愈重建（§9.1.1.1 C-07，带 Guard）；或放弃
+  PENDING_RESUME: ["EXECUTING", "PREPARING", "ABORTED"],
+  // 用户核销合并；Evidence 失效需重新验证；外部改码级联降级（§9.1.1.1 C-08，带 Guard）；或放弃
+  AUDITED: ["MERGED", "EXECUTING", "VERIFYING", "ABORTED"],
   // 终态
   MERGED: [],
   ABORTED: [],
@@ -164,10 +193,21 @@ export function canTransition(
 
 /**
  * 逐边附加约束：某些跃迁除了「边存在」还要求落点组合满足额外条件。
- * 目前只有 PREPARING → PENDING_APPROVAL：§9.1.1 明确要求同时把
- * approval.status 回置为 PENDING_REVIEW，只有用户再次确认才能重建 Worktree。
+ *
+ * 三类：
+ * 1. PREPARING → PENDING_APPROVAL：§9.1.1 要求同时把 approval.status 回置为
+ *    PENDING_REVIEW，只有用户再次确认才能重建 Worktree；
+ * 2. DRAFT → PREPARING：Fast Path 专用（§9.1.1.1 C-02），必须持有
+ *    `system:fast-path` 审批凭证且风险等级为 LOW；
+ * 3. PENDING_RESUME → PREPARING 与 AUDITED → VERIFYING：自愈/降级专用
+ *    （§9.1.1.1 C-07 / C-08），必须携带对应触发原因。
+ *
+ * Guard 一律 Fail-Closed：上下文缺省即视为条件不成立。
  */
-type EdgeGuard = (to: ContractStatePair) => ValidationResult | null;
+type EdgeGuard = (
+  to: ContractStatePair,
+  context: TransitionContext,
+) => ValidationResult | null;
 
 const EDGE_GUARDS: Partial<
   Record<`${LifecycleState}->${LifecycleState}`, EdgeGuard>
@@ -182,20 +222,66 @@ const EDGE_GUARDS: Partial<
             "PREPARING -> PENDING_APPROVAL must reset approval.status to " +
             `PENDING_REVIEW (§9.1.1), got ${to.approval_status}`,
         },
+
+  "DRAFT->PREPARING": (_to, context) => {
+    const approvedBy = context.approval?.approved_by;
+    const riskLevel = context.intent?.risk_level;
+    if (approvedBy !== FAST_PATH_APPROVER || riskLevel !== "LOW") {
+      return {
+        ok: false,
+        code: "ILLEGAL_TRANSITION",
+        message:
+          `DRAFT -> PREPARING is reserved for Fast Path admission (§9.1.1.1 C-02): ` +
+          `requires approval.approved_by="${FAST_PATH_APPROVER}" and ` +
+          `intent.risk_level="LOW", got ` +
+          `approved_by=${approvedBy ?? "unset"}, risk_level=${riskLevel ?? "unset"}. ` +
+          `Standard flow must go DRAFT -> PENDING_APPROVAL -> PREPARING; ` +
+          `DRAFT -> EXECUTING is never allowed.`,
+      };
+    }
+    return null;
+  },
+
+  "PENDING_RESUME->PREPARING": (_to, context) =>
+    context.reason === "WORKTREE_MISSING_HEAL"
+      ? null
+      : {
+          ok: false,
+          code: "ILLEGAL_TRANSITION",
+          message:
+            `PENDING_RESUME -> PREPARING requires reason="WORKTREE_MISSING_HEAL" ` +
+            `(§9.1.1.1 C-07), got ${context.reason ?? "unset"}`,
+        },
+
+  "AUDITED->VERIFYING": (_to, context) =>
+    context.reason === "EXTERNAL_MUTATION"
+      ? null
+      : {
+          ok: false,
+          code: "ILLEGAL_TRANSITION",
+          message:
+            `AUDITED -> VERIFYING requires reason="EXTERNAL_MUTATION" ` +
+            `(§9.1.1.1 C-08), got ${context.reason ?? "unset"}. ` +
+            `Evidence must be marked STALE in the same atomic step.`,
+        },
 };
 
 /**
- * 校验一次状态跃迁（4 维：from 组合 → to 组合）。
+ * 校验一次状态跃迁（4 维：from 组合 → to 组合，外加受控边所需的上下文）。
  *
  * 依次检查：
  * 1. 源状态为终态 → TERMINAL_STATE（ABORTED / MERGED 不可再迁出，含 resume 跃迁）；
  * 2. 跃迁边不存在 → ILLEGAL_TRANSITION（自环同样视为非法，避免空转洗状态）；
  * 3. 边附加约束不满足 → ILLEGAL_TRANSITION；
  * 4. 落点组合违反 §9.1.1 → ILLEGAL_STATE_PAIR。
+ *
+ * `context` 只对三条受控边（DRAFT→PREPARING、PENDING_RESUME→PREPARING、
+ * AUDITED→VERIFYING）有影响；其余边忽略。
  */
 export function validateTransition(
   from: ContractStatePair,
   to: ContractStatePair,
+  context: TransitionContext = {},
 ): ValidationResult {
   if (isTerminalState(from.lifecycle_state)) {
     return {
@@ -216,7 +302,7 @@ export function validateTransition(
   const guard =
     EDGE_GUARDS[`${from.lifecycle_state}->${to.lifecycle_state}` as const];
   if (guard) {
-    const failure = guard(to);
+    const failure = guard(to, context);
     if (failure) return failure;
   }
 

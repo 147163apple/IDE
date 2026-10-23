@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { validateStatePair } from "./state-machine";
+import { FAST_PATH_APPROVER, validateStatePair } from "./state-machine";
 
 /**
- * 软件合同 Schema (v1.2.0)
- * 严格对齐《Stagent 系统架构设计规范 v1.2.1》§9.1 与 §9.1.1。
+ * 软件合同 Schema (v1.3.0)
+ * 严格对齐《Stagent 系统架构设计规范 v1.6.1》§9.1 与 §9.1.1。
  * 本文件是全工程唯一合同契约（红线一：Schema 即宪法）。
  *
  * v1.2.0 相对 v1.1.3 的增量：
@@ -13,10 +13,36 @@ import { validateStatePair } from "./state-machine";
  *  - `creator` 由 `"tech_lead"` 改为 `"supervisor"`（ADR-007 双 Agent 术语归一）
  *  - `approval.approved_revision?`：记录被批准时的合同版本，用于防 TOCTOU
  *  - 状态组合校验下沉到 state-machine.ts，避免内联逻辑与独立校验器漂移
+ *
+ * v1.3.0 相对 v1.2.0 的增量（TASK-0.2c / 架构 §9.1、§0.2.3.1）：
+ *  - `schema_version` 放宽为 1.2.0 | 1.3.0 双版本：存量合同继续可解析，新合同签发 1.3.0
+ *  - `creator` 增加 `"system:fast-path"`：Fast Path 自动准入需要系统签发留痕
+ *  - `authorization.git` 补齐显式受控字段：允许的 Git 操作白名单、强制禁用参数、
+ *    干净基线检查；禁用参数必须包含规范规定的五个强制项，任何配置都不可覆盖
+ *  - `approval` 补齐审批凭证字段：签名摘要、准入决策、决策说明、驳回者
+ *  - 新增不变式：`ADMITTED_AUTOMATIC` 只能由 `system:fast-path` 签发
+ *
+ * 未在本卡落地的 §9.1 目标字段（已记录于交付说明，避免误读为"已实现"）：
+ *  - 顶层 `scope` / `change_request_id` / `presentation_state`（分别牵动 daemon 全链路
+ *    与 TASK-D.3 的 15 态投影，另行推进）
+ *  - `worker_spec` 的 `SANDBOX_ENFORCED` / `billing_model` / `verified_on`
+ *  - `EvidenceBundleV12`（架构 §9.2，单独演进）
  */
 
-/** 合同 Schema 版本号（唯一事实源，禁止在别处硬编码） */
-export const SOFTWARE_CONTRACT_SCHEMA_VERSION = "1.2.0" as const;
+/** 当前签发版本：新建合同一律使用此版本 */
+export const SOFTWARE_CONTRACT_SCHEMA_VERSION = "1.3.0" as const;
+/** 存量兼容版本：v1.2.0 合同继续可解析、可迁移 */
+export const LEGACY_CONTRACT_SCHEMA_VERSION_V12 = "1.2.0" as const;
+
+/** 允许解析的合同 Schema 版本（白名单，未列出的版本一律拒绝） */
+export const SUPPORTED_CONTRACT_SCHEMA_VERSIONS = [
+  LEGACY_CONTRACT_SCHEMA_VERSION_V12,
+  SOFTWARE_CONTRACT_SCHEMA_VERSION,
+] as const;
+
+export const contractSchemaVersionSchema = z.enum(
+  SUPPORTED_CONTRACT_SCHEMA_VERSIONS,
+);
 
 // --- 1. 生命周期与状态模型 (§9.1 9 态枚举) ---
 
@@ -44,9 +70,16 @@ export type ApprovalStatus = z.infer<typeof approvalStatusSchema>;
 export const riskLevelSchema = z.enum(["LOW", "MEDIUM", "HIGH"]);
 export type RiskLevel = z.infer<typeof riskLevelSchema>;
 
-/** §9.1：`creator` 仅 user / supervisor（v1.1.3 的 tech_lead 已废止） */
-export const creatorSchema = z.enum(["user", "supervisor"]);
+/**
+ * §9.1 / §0.2.3.1：`creator` 为 user / supervisor / system:fast-path
+ * （v1.1.3 的 tech_lead 已废止）。`system:fast-path` 只用于 Fast Path 自动准入签发，
+ * 必须与 `approval.approved_by === "system:fast-path"` 成对出现。
+ */
+export const creatorSchema = z.enum(["user", "supervisor", "system:fast-path"]);
 export type Creator = z.infer<typeof creatorSchema>;
+
+/** Fast Path 系统签发标识（唯一事实源在 state-machine.ts，此处仅做语义别名） */
+export const FAST_PATH_CREATOR = FAST_PATH_APPROVER;
 
 // --- 2. 预算与成本硬上限 (§9.1) ---
 
@@ -212,7 +245,92 @@ export const supervisorMetadataSchema = z.object({
 });
 export type SupervisorMetadata = z.infer<typeof supervisorMetadataSchema>;
 
-// --- 7. 软件合同模式 (§9.1 SoftwareContractV12) ---
+// --- 7. Git 授权凭证 (§9.1 authorization.git，v1.3.0 补齐) ---
+
+/**
+ * 强制禁用参数（§9.1 不变式 3）：任何用户配置都不可覆盖。
+ * 列表顺序即规范列出的顺序，便于审计比对。
+ */
+export const MANDATORY_GIT_FORBIDDEN_FLAGS = [
+  "--force",
+  "-f",
+  "--hard",
+  "--amend",
+  "--no-verify",
+] as const;
+
+/** 允许显式授权的 Git 操作白名单（未列出的一律视为未授权） */
+export const gitOperationSchema = z.enum([
+  "status",
+  "diff",
+  "add",
+  "commit",
+  "checkout",
+  "branch",
+  "merge",
+]);
+export type GitOperation = z.infer<typeof gitOperationSchema>;
+
+/** 默认安全白名单：只覆盖本地可逆操作，不含 push / reset / clean */
+export const DEFAULT_ALLOWED_GIT_OPERATIONS: GitOperation[] = [
+  "status",
+  "diff",
+  "add",
+  "commit",
+  "checkout",
+  "branch",
+  "merge",
+];
+
+/**
+ * v1.3.0 的 Git 授权凭证。
+ *
+ * 向后兼容策略：v1.2.0 的 `base_branch` / `task_branch` / `use_worktree` 保留为可选，
+ * 使存量合同（以及依赖这些字段的 Worktree 创建逻辑）继续可解析；
+ * 而 `allowed_operations` / `forbidden_flags` / `enforce_clean_base` 三项
+ * 对 `schema_version === "1.3.0"` 的合同为必填（见文件底部 superRefine）。
+ */
+export const gitAuthorizationSchema = z.object({
+  // —— v1.2.0 兼容字段（存量合同依赖，新合同继续写入） ——
+  base_branch: z.string().min(1).default("main"),
+  /**
+   * 任务分支：既是 v1.2.0 的必填字段，也是 Worktree 创建逻辑实际使用的分支名。
+   * v1.3.0 的 `task_worktree_branch` 是同一事实的规范别名，两者由 createContractDraft
+   * 与迁移函数同时写入；此处保持必填，避免下游拿到 undefined 后静默退化。
+   */
+  task_branch: z
+    .string()
+    .regex(/^task\//, "task_branch must use 'task/' prefix"),
+  target_branch: z.string().min(1).default("main"),
+  /** v0.1 强制 Worktree 物理隔离；v1.3.0 由 execution 侧语义承接 */
+  use_worktree: z.literal(true).optional(),
+
+  // —— v1.3.0 显式受控字段 ——
+  /** 任务 Worktree 分支名（替代 v1.2.0 的 task_branch） */
+  task_worktree_branch: z
+    .string()
+    .regex(/^task\//, "task_worktree_branch must use 'task/' prefix")
+    .optional(),
+  /** 允许的 Git 操作白名单 */
+  allowed_operations: z.array(gitOperationSchema).optional(),
+  /** 禁止的 Git 参数；必须完整包含 MANDATORY_GIT_FORBIDDEN_FLAGS */
+  forbidden_flags: z.array(z.string().min(1)).optional(),
+  /** 是否要求基于干净基线开工（脏工作区需显式确认） */
+  enforce_clean_base: z.boolean().optional(),
+});
+export type GitAuthorization = z.infer<typeof gitAuthorizationSchema>;
+
+// --- 8. 软件合同模式 (§9.1 SoftwareContractV13) ---
+
+/**
+ * 准入决策：区分「系统自动准入」与「用户显式批准」。
+ * §0.2.3.1 要求 Fast Path 必须留下 `ADMITTED_AUTOMATIC` 痕迹，不得与人工审批混同。
+ */
+export const admissionDecisionSchema = z.enum([
+  "ADMITTED_AUTOMATIC",
+  "ADMITTED_EXPLICIT_APPROVAL",
+]);
+export type AdmissionDecision = z.infer<typeof admissionDecisionSchema>;
 
 const approvalSchema = z
   .object({
@@ -221,6 +339,14 @@ const approvalSchema = z
     approved_at: z.string().optional(),
     /** 被批准时的 contract_revision；与当前 revision 不一致即审批失效 */
     approved_revision: z.number().int().nonnegative().optional(),
+    /** v1.3.0：审批凭证摘要（签名或哈希），用于事后核验审批事实未被篡改 */
+    approval_signature: z.string().min(1).optional(),
+    /** v1.3.0：准入决策来源（自动 / 显式） */
+    admitted_policy_decision: admissionDecisionSchema.optional(),
+    /** v1.3.0：决策说明，面向用户的白话理由 */
+    decision_notes: z.string().optional(),
+    /** v1.3.0：驳回者（ABORTED 历史合同迁移时回填 `system:aborted`） */
+    rejected_by: z.string().min(1).optional(),
     rejection_reason: z.string().optional(),
   })
   .superRefine((approval, ctx) => {
@@ -233,6 +359,21 @@ const approvalSchema = z
             "approval.status is APPROVED but approved_by/approved_at are missing",
         });
       }
+    }
+
+    // §0.2.3.1 / 零静默授权：自动准入只能由 Fast Path 系统凭证签发。
+    // 否则任何调用方都能把 ADMITTED_AUTOMATIC 贴到人工合同上，掩盖审批事实。
+    if (
+      approval.admitted_policy_decision === "ADMITTED_AUTOMATIC" &&
+      approval.approved_by !== FAST_PATH_CREATOR
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          `approval.admitted_policy_decision=ADMITTED_AUTOMATIC requires ` +
+          `approved_by="${FAST_PATH_CREATOR}" (§0.2.3.1), got ` +
+          `${approval.approved_by ?? "unset"}`,
+      });
     }
   });
 
@@ -249,7 +390,8 @@ const EXECUTION_CAPABLE_STATES: readonly LifecycleState[] = [
 export const softwareContractSchema = z
   .object({
     contract_id: z.string().min(1),
-    schema_version: z.literal(SOFTWARE_CONTRACT_SCHEMA_VERSION),
+    /** 双版本白名单：存量 1.2.0 继续可解析，新合同签发 1.3.0 */
+    schema_version: contractSchemaVersionSchema,
     contract_revision: z.number().int().min(1),
     created_at: z.string(),
     creator: creatorSchema,
@@ -265,14 +407,7 @@ export const softwareContractSchema = z
       risk_level: riskLevelSchema,
     }),
     authorization: z.object({
-      git: z.object({
-        base_branch: z.string().min(1).default("main"),
-        task_branch: z
-          .string()
-          .regex(/^task\//, "task_branch must use 'task/' prefix"),
-        target_branch: z.string().min(1).default("main"),
-        use_worktree: z.literal(true), // v0.1 强制 Worktree 物理隔离
-      }),
+      git: gitAuthorizationSchema,
       file_system_scope: z.object({
         writable_paths: z.array(safePathString).min(1, "empty scope rejected"),
         readonly_paths: z.array(safePathString).default([]),
@@ -316,11 +451,54 @@ export const softwareContractSchema = z
           `uncontrolled workers must not execute contracts or produce mergeable evidence)`,
       });
     }
+
+    // §9.1 不变式 3：禁用参数不可为空，且必须覆盖规范规定的五个强制项。
+    // 只对"提供了该字段"的合同校验，v1.2.0 存量合同不受追溯影响。
+    const forbiddenFlags = contract.authorization.git.forbidden_flags;
+    if (forbiddenFlags !== undefined) {
+      const missing = MANDATORY_GIT_FORBIDDEN_FLAGS.filter(
+        (flag) => !forbiddenFlags.includes(flag),
+      );
+      if (missing.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            `authorization.git.forbidden_flags is missing mandatory flags: ` +
+            `${missing.join(", ")} (§9.1 invariant 3: these can never be overridden)`,
+        });
+      }
+    }
+
+    // v1.3.0 必填字段：新合同必须显式声明 Git 授权凭证，
+    // 不允许靠缺省值"看起来合规"。存量 1.2.0 合同不做追溯要求。
+    if (contract.schema_version === SOFTWARE_CONTRACT_SCHEMA_VERSION) {
+      const git = contract.authorization.git;
+      const requiredGitFields: Array<[string, unknown]> = [
+        ["allowed_operations", git.allowed_operations],
+        ["forbidden_flags", git.forbidden_flags],
+        ["enforce_clean_base", git.enforce_clean_base],
+      ];
+      for (const [field, value] of requiredGitFields) {
+        if (value === undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message:
+              `authorization.git.${field} is required for schema_version ` +
+              `${SOFTWARE_CONTRACT_SCHEMA_VERSION} (§9.1)`,
+          });
+        }
+      }
+    }
   });
 
-export type SoftwareContractV12 = z.infer<typeof softwareContractSchema>;
+export type SoftwareContractV13 = z.infer<typeof softwareContractSchema>;
+/**
+ * @deprecated 使用 `SoftwareContractV13`。保留别名只为避免全仓批量改导入；
+ * 两者指向同一个解析结果类型（Schema 已同时接受 1.2.0 与 1.3.0）。
+ */
+export type SoftwareContractV12 = SoftwareContractV13;
 /** 兼容别名：全仓既有代码使用 `SoftwareContract` */
-export type SoftwareContract = SoftwareContractV12;
+export type SoftwareContract = SoftwareContractV13;
 
 // 兼容导出：Evidence 定义已迁至 evidence.schema.ts（红线五：单一事实源）
 export {
@@ -367,6 +545,7 @@ export function createContractDraft(params: {
 }): SoftwareContractV12 {
   const contractId = `contract_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const baseBranch = params.baseBranch ?? "main";
+  const taskBranch = `task/${contractId}`;
 
   const raw = {
     contract_id: contractId,
@@ -391,9 +570,15 @@ export function createContractDraft(params: {
     authorization: {
       git: {
         base_branch: baseBranch,
-        task_branch: `task/${contractId}`,
+        task_branch: taskBranch,
+        task_worktree_branch: taskBranch,
         target_branch: params.targetBranch ?? baseBranch,
         use_worktree: true as const,
+        // v1.3.0：显式授权凭证。默认只放可逆的本地操作，
+        // 禁用参数强制内嵌规范五项，调用方无法通过参数收窄。
+        allowed_operations: [...DEFAULT_ALLOWED_GIT_OPERATIONS],
+        forbidden_flags: [...MANDATORY_GIT_FORBIDDEN_FLAGS],
+        enforce_clean_base: true,
       },
       file_system_scope: {
         writable_paths: params.writablePaths,

@@ -1,9 +1,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  LEGACY_CONTRACT_SCHEMA_VERSION_V12,
+  MANDATORY_GIT_FORBIDDEN_FLAGS,
+  DEFAULT_ALLOWED_GIT_OPERATIONS,
   SOFTWARE_CONTRACT_SCHEMA_VERSION,
   softwareContractSchema,
-  type SoftwareContractV12,
+  type SoftwareContractV13,
   type WorkerSpec,
 } from "./contract.schema";
 import { writeJsonAtomic } from "./state-machine";
@@ -50,14 +53,19 @@ export class MigrationRequiresExplicitApplyError extends Error {
 export interface MigrationResult {
   contractId: string;
   from: typeof LEGACY_SCHEMA_VERSION;
-  to: typeof SOFTWARE_CONTRACT_SCHEMA_VERSION;
+  /**
+   * v1.1.3 迁移的**终点是 v1.2.0**，不是当前签发版本。
+   * v1.2.0 → v1.3.0 由 `migrateContractToV13` 承担，两段迁移职责分离：
+   * 前者补齐 v1.2.0 的必填结构，后者补齐审批/授权凭证与版本号。
+   */
+  to: typeof LEGACY_CONTRACT_SCHEMA_VERSION_V12;
   /** 发生变更的字段路径，便于审计与测试断言 */
   changedFields: string[];
   /** 是否需要用户重新审批 */
   requiresReapproval: boolean;
   /** 备份文件路径（apply 模式下写入后填充） */
   backupPath?: string;
-  contract: SoftwareContractV12;
+  contract: SoftwareContractV13;
 }
 
 type RawContract = Record<string, unknown>;
@@ -94,7 +102,7 @@ export function migrateV113Contract(raw: unknown): MigrationResult {
   const migrated: RawContract = { ...raw };
 
   // 1. schema_version
-  migrated["schema_version"] = SOFTWARE_CONTRACT_SCHEMA_VERSION;
+  migrated["schema_version"] = LEGACY_CONTRACT_SCHEMA_VERSION_V12;
   changedFields.push("schema_version");
 
   // 2. contract_revision：v1.1.3 无此字段，历史合同固定落为 1
@@ -149,7 +157,7 @@ export function migrateV113Contract(raw: unknown): MigrationResult {
   return {
     contractId: contract.contract_id,
     from: LEGACY_SCHEMA_VERSION,
-    to: SOFTWARE_CONTRACT_SCHEMA_VERSION,
+    to: LEGACY_CONTRACT_SCHEMA_VERSION_V12,
     changedFields,
     requiresReapproval,
     contract,
@@ -223,4 +231,226 @@ export function migrateContractDirectory(
     if (migrated) results.push(migrated);
   }
   return results;
+}
+
+// --- v1.2.0 → v1.3.0（TASK-0.2c / 架构 §9.1） ---
+
+export const E_MIGRATION_V13_UNSUPPORTED_VERSION =
+  "E_MIGRATION_V13_UNSUPPORTED_VERSION";
+
+/**
+ * 执行态族白名单（卡片 §3）：这些历史状态说明合同**确实已经被批准过**，
+ * 迁移时可以回填审批事实；其余状态一律不得回填为 APPROVED。
+ */
+export const V13_APPROVED_LEGACY_STATES = [
+  "PREPARING",
+  "EXECUTING",
+  "VERIFYING",
+  "PENDING_RESUME",
+  "AUDITED",
+  "MERGED",
+] as const;
+
+/** 迁移合成的历史审批人凭证（标明"不是我批的，是历史事实"） */
+export const LEGACY_APPROVER = "user:legacy" as const;
+/** 中止态迁移的驳回者凭证 */
+export const ABORTED_REJECTER = "system:aborted" as const;
+
+export interface MigrationResultV13 {
+  contractId: string;
+  from: typeof LEGACY_CONTRACT_SCHEMA_VERSION_V12;
+  to: typeof SOFTWARE_CONTRACT_SCHEMA_VERSION;
+  changedFields: string[];
+  /** 迁移后是否仍需用户批准（DRAFT / PENDING_APPROVAL 为 true） */
+  requiresReapproval: boolean;
+  contract: SoftwareContractV13;
+}
+
+/** 判断一份原始 JSON 是否为待升级的 v1.2.0 合同 */
+export function needsV13Migration(raw: unknown): boolean {
+  return (
+    isRecord(raw) &&
+    raw["schema_version"] === LEGACY_CONTRACT_SCHEMA_VERSION_V12
+  );
+}
+
+/**
+ * v1.2.0 → v1.3.0 纯转换（不做任何 IO）：补齐 `authorization.git` 授权凭证、
+ * 升级版本号，并按生命周期回填审批事实。
+ *
+ * **零静默授权**（本卡红线）：
+ * - `DRAFT` → 保持 `DRAFT`；
+ * - `PENDING_APPROVAL` → 保持 `PENDING_REVIEW`；
+ * - 仅执行态族（白名单）回填 `APPROVED`，且审批人固定为 `user:legacy`，
+ *   表示"这是历史既成事实"，不是本次迁移给出的新授权；
+ * - `ABORTED` → `REJECTED`，驳回者 `system:aborted`，保留原有终止原因。
+ *
+ * 函数末尾有后置断言兜底：任何路径都不可能把未审批合同输出为 APPROVED。
+ */
+export function migrateContractToV13(raw: unknown): MigrationResultV13 {
+  if (!isRecord(raw)) {
+    throw new Error(
+      "Contract v1.3 migration failed: payload is not a JSON object",
+    );
+  }
+
+  const version = raw["schema_version"];
+  if (version !== LEGACY_CONTRACT_SCHEMA_VERSION_V12) {
+    throw new Error(
+      `[${E_MIGRATION_V13_UNSUPPORTED_VERSION}] Contract v1.3 migration expects ` +
+        `schema_version ${LEGACY_CONTRACT_SCHEMA_VERSION_V12}, got ${String(version)}` +
+        (version === LEGACY_SCHEMA_VERSION
+          ? " (run migrateV113Contract first)"
+          : ""),
+    );
+  }
+
+  const changedFields: string[] = [];
+  const migrated: RawContract = { ...raw };
+
+  // 1. 版本号
+  migrated["schema_version"] = SOFTWARE_CONTRACT_SCHEMA_VERSION;
+  changedFields.push("schema_version");
+
+  // 2. authorization.git：补齐显式授权凭证，禁用参数只增不减
+  const authorization: RawContract = isRecord(migrated["authorization"])
+    ? { ...migrated["authorization"] }
+    : {};
+  const git: RawContract = isRecord(authorization["git"])
+    ? { ...authorization["git"] }
+    : {};
+
+  if (!Array.isArray(git["allowed_operations"])) {
+    git["allowed_operations"] = [...DEFAULT_ALLOWED_GIT_OPERATIONS];
+    changedFields.push("authorization.git.allowed_operations");
+  }
+
+  const existingFlags = Array.isArray(git["forbidden_flags"])
+    ? git["forbidden_flags"].filter(
+        (flag): flag is string => typeof flag === "string",
+      )
+    : [];
+  const mergedFlags = [...existingFlags];
+  for (const flag of MANDATORY_GIT_FORBIDDEN_FLAGS) {
+    if (!mergedFlags.includes(flag)) mergedFlags.push(flag);
+  }
+  if (
+    !Array.isArray(git["forbidden_flags"]) ||
+    mergedFlags.length !== existingFlags.length
+  ) {
+    changedFields.push("authorization.git.forbidden_flags");
+  }
+  git["forbidden_flags"] = mergedFlags;
+
+  if (typeof git["enforce_clean_base"] !== "boolean") {
+    git["enforce_clean_base"] = true;
+    changedFields.push("authorization.git.enforce_clean_base");
+  }
+
+  if (
+    typeof git["task_worktree_branch"] !== "string" &&
+    typeof git["task_branch"] === "string"
+  ) {
+    git["task_worktree_branch"] = git["task_branch"];
+    changedFields.push("authorization.git.task_worktree_branch");
+  }
+
+  authorization["git"] = git;
+  migrated["authorization"] = authorization;
+
+  // 3. approval：按生命周期回填，绝不对草稿/待审静默授权
+  const approval: RawContract = isRecord(migrated["approval"])
+    ? { ...migrated["approval"] }
+    : {};
+  const originalStatus = approval["status"];
+  const lifecycle = migrated["lifecycle_state"];
+  const createdAt =
+    typeof migrated["created_at"] === "string"
+      ? migrated["created_at"]
+      : new Date().toISOString();
+  const revision =
+    typeof migrated["contract_revision"] === "number"
+      ? migrated["contract_revision"]
+      : 1;
+
+  let requiresReapproval = false;
+
+  if ((V13_APPROVED_LEGACY_STATES as readonly unknown[]).includes(lifecycle)) {
+    approval["status"] = "APPROVED";
+    if (typeof approval["approved_by"] !== "string") {
+      approval["approved_by"] = LEGACY_APPROVER;
+      changedFields.push("approval.approved_by");
+    }
+    if (typeof approval["approved_at"] !== "string") {
+      // 用合同创建时间作为历史审批时间：迁移不得凭空造一个"刚刚批准"的时刻
+      approval["approved_at"] = createdAt;
+      changedFields.push("approval.approved_at");
+    }
+    if (typeof approval["approved_revision"] !== "number") {
+      approval["approved_revision"] = revision;
+      changedFields.push("approval.approved_revision");
+    }
+  } else if (lifecycle === "DRAFT") {
+    approval["status"] = "DRAFT";
+    requiresReapproval = true;
+  } else if (lifecycle === "PENDING_APPROVAL") {
+    approval["status"] = "PENDING_REVIEW";
+    requiresReapproval = true;
+  } else if (lifecycle === "ABORTED") {
+    // §9.1.1 允许 ABORTED × {REJECTED, APPROVED}：已批准后安全中止的合同
+    // 保留 APPROVED 才是历史事实，改写成 REJECTED 等于抹掉"批过又停"的经过。
+    // 只有本就没有批准记录的终止，才回填驳回凭证。
+    if (approval["status"] !== "APPROVED") {
+      approval["status"] = "REJECTED";
+      if (typeof approval["rejected_by"] !== "string") {
+        approval["rejected_by"] = ABORTED_REJECTER;
+        changedFields.push("approval.rejected_by");
+      }
+    }
+  } else {
+    throw new Error(
+      `Contract v1.3 migration failed: unknown lifecycle_state ${String(lifecycle)}`,
+    );
+  }
+
+  // 脏数据保护：被拉回草稿/待审的合同不得残留旧审批戳记，
+  // 否则下游读到 approved_by 会误以为"这份合同已经批过"。
+  if (
+    (lifecycle === "DRAFT" || lifecycle === "PENDING_APPROVAL") &&
+    originalStatus === "APPROVED"
+  ) {
+    for (const field of ["approved_by", "approved_at", "approved_revision"]) {
+      delete approval[field];
+      changedFields.push(`approval.${field}`);
+    }
+  }
+
+  if (originalStatus !== approval["status"]) {
+    changedFields.push("approval.status");
+  }
+  migrated["approval"] = approval;
+
+  // 4. 迁移结果必须能通过 v1.3.0 Schema（不合规就抛错，不写半成品）
+  const contract = softwareContractSchema.parse(migrated);
+
+  // 5. 零静默授权后置断言：即使上面的分支未来被改错，也不会放行
+  if (
+    (contract.lifecycle_state === "DRAFT" ||
+      contract.lifecycle_state === "PENDING_APPROVAL") &&
+    contract.approval.status === "APPROVED"
+  ) {
+    throw new Error(
+      "Contract v1.3 migration violated zero-silent-authorization: " +
+        `lifecycle_state=${contract.lifecycle_state} must not become APPROVED`,
+    );
+  }
+
+  return {
+    contractId: contract.contract_id,
+    from: LEGACY_CONTRACT_SCHEMA_VERSION_V12,
+    to: SOFTWARE_CONTRACT_SCHEMA_VERSION,
+    changedFields,
+    requiresReapproval,
+    contract,
+  };
 }
