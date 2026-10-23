@@ -2,18 +2,19 @@
 
 > **版本定义与基线声明 (v1.6.2 · 2026-10-23)**：
 > 1. **架构规范深度对齐**：本工程规范依据《Stagent 系统架构设计规范 (v1.6.1 代码对齐与规范定稿版)》全面修订签发，严格对齐其 §10 演进路线图（包含 P0.2c、P3.7、P4.5、P5.7 等关键里程碑）；
-> 2. **代码物理基线明确**：当前本地物理 HEAD 为仓库 `main`@`9f3b303`。测试基线以最近干净环境四件套为准（C.7 复验 **1032 passed / 6 skipped**）；本轮为文档状态校正，未重跑 TypeScript 与 Lint，故不将其列为新实测结论。代码当前已交付数据模型为 Contract Schema v1.3.0（经 TASK-0.2c）；
+> 2. **代码物理基线明确**：当前本地物理 HEAD 为仓库 `main`@`9a19f4d`（含 D.3 merge）。测试基线以合后四件套为准（**1084 passed / 6 skipped**）；本轮为文档状态回写，未另起 TypeScript / Lint 复验。代码当前已交付数据模型为 Contract Schema v1.3.0（经 TASK-0.2c）；
 > 3. **底座演进任务认领**：本规范新增 **`TASK-0.2c`**，明确认领架构规范之 P0.2c 里程碑（C-01 整改项），将 Schema v1.3.0（`approval`、`authorization.git`）、Fast Path 确定性流转边 (`DRAFT -> PREPARING -> EXECUTING`)、自愈迁移边 (`PENDING_RESUME -> PREPARING`) 与外部改码级联降级边 (`AUDITED -> VERIFYING`) 列为当前工程第一执行优先级；
 > 4. **通信与防死锁引擎认领**：新增 **`TASK-D.3`**，认领架构规范之 P3.7 里程碑（15 展示状态确定性投影持久化与五类死锁自愈机制 D-1~D-5）；
 > 5. **卡片状态净化**：已完成任务卡仅描述该卡已交付内容；后续增补需求拆为独立待办卡。新增 `TASK-W.2b` 与 `TASK-D.2b` 承接未跟踪文件 Scope 阻断和 v1.3 合同迁移接入，不再混入已完成卡。
 > 6. **状态回写（2026-10-23）**：`TASK-C.7` 已合入 main（merge `5117b27`）。§1.1 矩阵与 §3.5 详细卡状态由 `[NEW_TASK]` 更新为 `[COMPLETED]`，并按实际代码校正卡片文件清单（`TaskGraphPanel` / `FunctionalTree` / `ExecutionDag`，含 `evidence-collector.ts`）。门禁：干净环境四件套全绿（1032 passed / 6 skipped）。残余口径差已在卡片内登记。
 > 7. **状态回写（2026-10-23 · 文档校正）**：`TASK-W.2b` 由 `[NEW_TASK]` 更正为 `[COMPLETED]`（证据 `87f909c` / merge `05f090f`，`untracked-scope-guard` + `E_OUT_OF_SCOPE_UNTRACKED`）；`TASK-S.4` 去掉「待合入 main」并注明经 `d5ee448` 合入；`TASK-S.1` PARTIAL 备注校正为「L0/L1 已在 S.2，仅剩 3s 防抖节流器（main 无 `throttler.ts`）」；测试基线改写为 `main`@`9f3b303`，并以 C.7 干净环境复验（1032 passed / 6 skipped）为准。
+> 8. **状态回写（2026-10-23 · D.3）**：`TASK-D.3` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `9a19f4d`，含 `c2fcb8a` 持久化/`STATE_CHANGED`/看门狗引擎 + `83ec516` D-2/D-4/D-5 生产接线）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`9a19f4d`，合后四件套 **1084 passed / 6 skipped**。残余口径差已在卡片内登记。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`9f3b303`。测试基线以最近干净环境四件套为准（C.7 复验 1032 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`9a19f4d`。测试基线以合后四件套为准（1084 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -21,7 +22,7 @@
 | **TASK-0.2b** | Schema v1.2.0 增量演进、双状态机联动与存量迁移 | 数据模型 | **[COMPLETED]**（提交 `52c807c` 锁定基线；当前物理基线已交付） | P0 契约底座 | • 升级 `SoftwareContractV12` 与 `EvidenceBundleV11` 完整字段<br>• 实现 `validateStatePair`、`validateTransition` 与原子落盘<br>• 承接历史合同迁移与备份机制，10 错误码映射通过 |
 | **TASK-0.2c** | Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 | 数据模型与状态机 | **[COMPLETED]**（提交 `fb2cc67`，经 `cd7e7e0` 合入 main；tsc 0 错 / eslint 0 错；新增 48 项单测、迁移矩阵 +7，全量 903 例） | P0.2c 契约与状态机演进 (C-01) | • 认领 C-01 整改项，代码落地第一优先级<br>• 升级 `SoftwareContractV13` 与 Zod Schema，增设 `approval` 与 `authorization.git`<br>• 补齐 Fast Path 严格流转边 (`DRAFT -> PREPARING -> EXECUTING`，严禁直跳)<br>• 补齐外部改码级联降级边 (`AUDITED -> VERIFYING`，使 Evidence 失效并回退重验)<br>• 补齐恢复探测自愈边 (`PENDING_RESUME -> PREPARING`，探测 Worktree 丢失自愈重建)<br>• 升级 `migrateContractToV13`，执行态族白名单回填 (`user:legacy`)，草案/待审安全保持，零静默授权<br>• 新增 `tests/unit/contract-schema-v13.test.ts`、9 态 lifecycle 迁移矩阵覆盖及 15 态展示投影测试 |
 | **TASK-D.1** | CLI 引导入口与安全 WebSocket 通信桥 | 通信核销 | **[COMPLETED]**（2026-10-20；48 文件 / 377 用例全绿，含首帧 50ms 切断、Token 轮换、Origin/Host/2MB/速率/心跳断言） | P1 通信鉴权 | • 提前至 Sprint 1 解除 DAG 死锁<br>• CLI `stagent start`、动态端口 (3001~3010)、PID 锁与 Token 轮换 (G-13)<br>• 检测到存活 PID 锁时抛出 `E_WORKSPACE_LOCKED` 拒绝重复绑定工作区<br>• 首帧 AUTH 握手鉴权、非法以 `4401` 关闭<br>• 规范帧字典（同时保留 `EVIDENCE_READY`、`EVIDENCE_STATUS_CHANGED`、`TERMINAL_STREAM`）<br>• 补齐 Origin 校验、帧大小（≤2MB）与速率限制、失联 3 次心跳遮罩 |
-| **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[PARTIAL]**（投影引擎与 `STATE_CHANGED` 帧已交付 `f548aeb`；`.stagent/state.json` 持久化、广播接线与 D-1~D-5 看门狗未实现） | P3.7 状态投影与防死锁 | • 15 展示状态确定性映射引擎，通过 `presentation_state` 持久化落盘与 WebSocket 帧广播<br>• 闭环五类防死锁引擎 (D-1 15s 停止超时看门狗、D-2 90s 心跳租约与 60s 锁防悬挂、D-3 恢复探测与 Worktree 重建自愈、D-4 目标分支前进二选一仲裁、D-5 会话与命令超时分层看门狗)<br>• 新增 `tests/unit/presentation-state-mapping.test.ts` 与 `tests/unit/deadlock-resilience.test.ts` |
+| **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[COMPLETED]**（2026-10-23 合入 main，merge `9a19f4d`；含 `c2fcb8a` + `83ec516`；合后四件套 1084 passed / 6 skipped） | P3.7 状态投影与防死锁 | • `presentation_state` 落盘 `.stagent/state.json`（与 contracts 并列，不写回合同）+ Daemon `STATE_CHANGED` 广播与重连回放<br>• D-1~D-5 看门狗引擎（可注入时钟 + `sweep`）及生产接线：D-1 abort 超时、D-2 租约心跳、D-3 `PENDING_RESUME` 自愈、D-4 merge 409 二选一、D-5 Gateway 分层超时<br>• 新增/更新：`presentation-store` / `presentation-projector` / `deadlock-resilience` 与接线、集成测试 |
 | **TASK-A.1** | Git Worktree 物理隔离与生命周期管理 | 执行内核 | **[COMPLETED]** | P1 本地 Git | Worktree 创建、销毁、分支保护与 `.git/info/exclude` 隔离就绪。 |
 | **TASK-A.2** | Scoped MCP 工具网关与路径沙箱校验 | 执行内核 | **[COMPLETED]** | P2 安全网关 | 路径防逃逸、Scope 读写授权、禁区强拦截与环境脱敏就绪。 |
 | **TASK-A.3** | 依赖分级复用与工作区构建缓存隔离 | 执行内核 | **[COMPLETED]** | P1 依赖隔离 | 只读依赖复用 (ADR-002)、构建缓存目录隔离与符号链接降级就绪。 |
@@ -275,7 +276,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task D.3】15 状态确定性投影持久化与防死锁自愈引擎 `[认领架构 P3.7]`
 * **任务编号**：`TASK-D.3`
 * **前置依赖**：`TASK-0.2c`, `TASK-D.1`
-* **任务状态**：**[PARTIAL]**（2026-10-23 首次交付：分支 `feat/task-d3-presentation-state` 提交 `f548aeb`，经 `cd7e7e0` 合入 main。已交付：§6.3.1/§9.6 唯一 15 态词汇表（禁止 `INITIAL_EMPTY`/`GRAPH_ORCHESTRATING` 等额外态）、`getPresentationState` 确定性投影（`ABORTED` 最高优先级短路，`APPROVED`/`REJECTED` 均归 `ABORTED`；`(AUDITED,APPROVED)` 四分支按 `CONFLICT > DISPUTED_INSPECTING > REAL_PLAYTEST > READY_TO_MERGE` 顺序短路；非法组合抛 `ILLEGAL_STATE_PAIR`，四支全不成立抛 `UNDEFINED_PROJECTION` 而不猜状态）、`STATE_CHANGED` 帧（必含 `presentation_state` 与白话提示）、§6.3.1 CI 不变式。门禁：tsc 0 错、定向 129 例全绿、新增 31 项单测。**本卡剩余范围（未完成）**：① `presentation_state` 写入 `.stagent/state.json` 的持久化；② Daemon 侧投影计算与 `STATE_CHANGED` 广播接线；③ D-1~D-5 五类防死锁看门狗（`deadlock-resilience.ts`）。实现位置：`src/lib/state/presentation-state.ts`（与卡片原定 `daemon/state/` 的差异经需求方批准，使 daemon 与前端共用同一词汇表））
+* **任务状态**：**[COMPLETED]**（2026-10-23 合入 main，merge `9a19f4d`；分支 `feat/task-d3-deadlock-persistence`：`c2fcb8a`（持久化 / 投影广播 / D-1~D-5 引擎）+ `83ec516`（D-2/D-4/D-5 生产接线）；首段投影词汇表仍为 `f548aeb` / `cd7e7e0`。门禁：合后四件套全绿（1084 passed / 6 skipped）；tsc 0 错、eslint 0 错、build 通过。落地清单：`src/lib/state/presentation-state.ts`（15 态词汇表，daemon/前端共用）、`daemon/state/presentation-store.ts` / `presentation-projector.ts`（`.stagent/state.json` 落盘，不写回合同）、`daemon/state/deadlock-resilience.ts`（可注入时钟 + `sweep`；D-1~D-5）、`daemon/core/contract-mutex.ts`（D-2 租约观察者 + 锁文件白名单回收）、`daemon/pipeline/merger.ts`（D-4 `assertTargetBranchNotAdvanced` + `TargetBranchAdvancedError`）、`daemon/pipeline/orchestrator.ts`（`replayOnCurrentBaseline` / `healResume` / 超时证据）、`daemon/mcp/gateway.ts` + `daemon/runner/command-runner.ts`（D-5 分层登记与 pid 回填）、`daemon/server.ts`（回收钩子、`POST .../merge` 409 options、`POST .../merge-decision`）。**口径说明**：① 展示态变化不写进合同，避免误触发 `contract_revision` 重新审批；② 看门狗不用裸 `setTimeout`，由心跳驱动 `sweep`，挂起恢复后一次补齐过期项；③ D-1 强杀经 `orchestrator.abort` → runner 进程树 SIGTERM→SIGKILL（Daemon 无独立 worker pid 登记表）；④ D-5 超时证据借用 `BLOCKED + BUDGET_EXHAUSTED` + `TIMEOUT:` 前缀（Evidence verdict 无独立 `TIMEOUT` 枚举）。**残余口径差（不阻塞验收，需登记）**：① D-4 仅比证据 `base_commit_sha` 与当前 main tip，不校验工作树真实 merge-base；② 沙箱 `SAFE_DELETE_BULK_CONFIRM_REQUIRED` 配额耗尽时 D-2 盘上锁文件断言可跳过（租约事件断言仍严格）；③ 信息不足时投影返回 `null`，界面停在上一帧而不猜状态）
 * **v0.1 范围**：15 种展示状态确定性映射引擎、`presentation_state` 持久化落盘与 WebSocket 广播、五类死锁自愈机制 (D-1~D-5)。
 * **核心目标**：
   1. **确定性状态投影引擎 (`daemon/state/presentation-state.ts`)**：
@@ -305,11 +306,12 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
      - **D-3 恢复自愈探测**：`PENDING_RESUME` 时探测任务工作树物理存在性，若已被外部意外删除，自动触发 `PENDING_RESUME -> PREPARING` 重建自愈；
      - **D-4 目标分支前进二选一**：合并前检测目标分支向前推进，提示【以当前分支为基线重演】或【放弃候选成果】，禁止前端死锁；
      - **D-5 分层超时机制**：命令执行按 60s/300s/600s 分层看门狗兜底，超限安全回收并生成 TIMEOUT 证据。
-* **涉及核心文件**：
-  - 新增：`daemon/state/presentation-state.ts`
+* **涉及核心文件（以实际落地为准）**：
+  - 共享词汇表：`src/lib/state/presentation-state.ts`（首段 `f548aeb`；daemon/前端共用）
+  - 新增：`daemon/state/presentation-store.ts`、`daemon/state/presentation-projector.ts`
   - 新增：`daemon/state/deadlock-resilience.ts`
-  - 测试：`tests/unit/presentation-state-mapping.test.ts`
-  - 测试：`tests/unit/deadlock-resilience.test.ts`
+  - 修改：`daemon/core/contract-mutex.ts`、`daemon/mcp/gateway.ts`、`daemon/pipeline/merger.ts`、`daemon/pipeline/orchestrator.ts`、`daemon/pipeline/contract-store.ts`、`daemon/runner/command-runner.ts`、`daemon/server.ts`
+  - 测试：`tests/unit/presentation-state.test.ts`、`tests/unit/presentation-persistence.test.ts`、`tests/unit/deadlock-resilience.test.ts`、`tests/unit/deadlock-call-sites.test.ts`、`tests/integration/merge-decision-d4.test.ts`
 * **Pass/Fail 验收判定**：
   - **PASS**：架构 §6.3.1 的 15 种展示状态均由明确的 `(approval.status, lifecycle_state)` 二元组及运行时判据确定性派生；D-1~D-5 故障注入测试 100% 成功解除死锁，断网断线重连无数据丢失。
   - **FAIL**：前端展示态脱离底层物理状态伪造；子进程卡死超过 15 秒未强制回收导致锁悬挂。
@@ -1139,11 +1141,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
-> - **当前工程物理起点**：本地代码仓库 `main`@`9f3b303`；测试基线以最近干净环境四件套为准（C.7 复验 1032 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）。本轮文档校正未重跑 TypeScript 与 Lint。
-> - **当前首要编码任务**：**`TASK-0.2c`**。必须先在代码中完成 Schema v1.3.0 (`approval` / `authorization.git`) 与 Fast Path / 恢复自愈迁移边，方可进入 Sprint 4 的状态投影（`TASK-D.3`）与高阶视口开发。
+> - **当前工程物理起点**：本地代码仓库 `main`@`9a19f4d`；测试基线以合后四件套为准（1084 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）与 TASK-D.3（投影持久化 + D-1~D-5）。本轮为文档状态回写。
+> - **当前首要编码任务**：Sprint 4 主链中 `TASK-D.3` / `TASK-S.2` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 已完成；剩余 `TASK-S.1`（仅 3s 防抖节流器）与 `TASK-C.2`（Studio 多维视口集成）按 DAG 推进。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
-> - **Sprint 4 准备就绪**：`TASK-S.2`（精简版）已闭环，中栏 Tab 审阅面板初步在位；需先完成 Sprint 0 的 `TASK-0.2c`，再按 DAG 推进 D.3 与体验闭环。
+> - **Sprint 4 进展**：`TASK-D.3` 已合入（merge `9a19f4d`）；Demo / Graph / 质疑自查主体已闭环，待 C.2 收口 Studio 四视口。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -1205,5 +1207,6 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-14（本轮修正）**：TASK-C.7 节点口径由"四态"更正为架构 §3.2.1 的七态（补 `REPAIRING` / `BLOCKED`），并将点亮依据由"Git Commit SHA"更正为架构 §3.2.2/ADR-009 的 `node_patch_fingerprint`。
 - **P-15（本轮增补，2026-10-23）**：TASK-S.5「三方事实核验管道」追加**自查对照源**实现要点，明确质疑分析以不可变需求快照 `.stagent/specs/revisions/req-v*.md` 为对照基准，而非 `requirements.md` 最新态（对齐架构 §5.1 需求快照机制与 RFC-2026-002 §7.3.3）。本条仅追加实现要点，不改动任务范围、前置依赖、验收判定与 Sprint 排期。
 - **P-16（交付回写，2026-10-23）**：TASK-D.2b 状态由 `[NEW_TASK]` 回写为 `[COMPLETED]`，锁定提交 `150dc47`（分支 `feat/task-d2b-untracked-merge-guard`，基线 `05f090f`）。同步在卡内补「交付事实与差异报告」，登记三项与既有声明/文档不一致的事实：D.2 未实现 Trailer 尺寸边界、架构 §5.2 的 1024B 与卡片 512B 冲突（经裁决取 512）、旧合同加载缺口实为「读不出来」而非「静默授权」。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
+- **P-17（交付回写，2026-10-23）**：TASK-D.3 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `9a19f4d`（含 `c2fcb8a` / `83ec516`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`9a19f4d`，1084 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
