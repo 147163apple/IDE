@@ -30,7 +30,7 @@
 | **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[COMPLETED]**（按需触发、L0 规则引擎、L1 强模型补全、G-11 未决问题零丢失、脱敏均已落地） | P4 合同草案 | • 用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• 断言未决问题 100% 保留至草案元数据供用户确认 (G-11)<br>• 保留脱敏模块 `src/lib/ipc/redaction.ts` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
 | **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，**待合入 main**；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
-| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[NEW_TASK]** | P5.7 质疑自查 (v1.6.1) | • 自然语言质疑入口与三方事实抓取管道 (Prompt vs Spec vs Diff)<br>• 60s 质询看门狗硬超时兜底；置信度治理 (`confidence < 0.7` 自动降级呈递事实，由用户人工仲裁)<br>• 判定算法分流【实现偏差 Bug（免费返工）】与【需求变更 Drift（增量演进）】<br>• 自动返工严格受限原合同 Scope 子集，严禁越界扩权；统一关联键 `change_request_id` 贯通资产 |
+| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[NEW_TASK]** | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
@@ -506,7 +506,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task S.5】Supervisor 质疑自查与根因分流归因引擎 `[v1.6.1 升级]`
 * **任务编号**：`TASK-S.5`
 * **前置依赖**：`TASK-S.1`, `TASK-S.2`, `TASK-D.2b`
-* **任务状态**：**[NEW_TASK]** (认领架构规范 §10 P5.7 质疑自查)
+* **任务状态**：**[COMPLETED]**（2026-10-23 交付于 `feat/task-s5-dispute-engine`：`a1469b7` 主体 + `a83f18a` 口径修正，经 `2bb1313`、`5748ad0` 合入 main。门禁：`npm run typecheck` 0 错；`tests/unit/requirements-store.test.ts` 7 通过、`tests/unit/dispute-triad.test.ts` 12 通过；main 上 4 个定向文件 60 例、集成 30 例全绿。落地清单：`daemon/supervisor/specs/requirements-store.ts`（`requirements.md` 读写、合同意图初始化、`specs/revisions/req-v*.md` 版本冻结、执行期锁定与 SHA-256 完整性校验）、`daemon/supervisor/dispute/evidence-triad.ts`（会话/规范/Worktree 三方抓取，终端与退出码取自最新 Evidence）、`classification.ts`（确定性归因 + 置信度 + 返工/变更提案）、`index.ts`（60s 看门狗与报告装配）、`types.ts`、`daemon/server.ts` 的 `POST /api/supervisor/dispute` 与 `DISPUTE_REPORT_READY` 广播。**口径说明**：① 文件命名按实际落地为 `classification.ts` / `index.ts` / `types.ts`（卡内设计期 `root-cause-analyzer.ts` / `rework-dispatcher.ts` / `dispute-types.ts` 未沿用）；② 需求快照按架构 §5.1 落在 `.stagent/specs/revisions/req-v<N>-<sha8>.md`，索引 `.stagent/specs/requirements.snapshots.json`；③ 归因是确定性规则而非模型打分，置信度由证据信号计算，`< 0.7` 强制降级；④ 越界返工以 `rejected_paths` + `requires_scope_expansion` 阻断并提示升版，未新增 `EXPANDED_SCOPE_REQUIRED` 错误码，避免扩充错误码目录。**残余口径差（不阻塞验收，需登记）**：① 路由级 401/404/超时降级未加集成用例（按交付指令仅两个单测文件）；② 终端日志取自最新 Evidence 的 stdout/stderr tail，无 Evidence 时为空且置信度下调；③ 返工提案与变更草案均为未落盘对象，执行/审批沿用既有链路）
 * **v0.1 范围**：自然语言质疑入口 + 三方事实交叉核验管道 + 看门狗超时控制 + 置信度治理 + 严格 Scope 子集自动返工。
 * **质疑入口路由**：右栏会话在真实试玩/验收阶段识别质疑意图时，提供转入 Studio 质疑自查的明确入口；该路由由本卡与 TASK-C.2 集成实现，不属于已完成 TASK-C.6 的交付内容。
 * **核心目标**：
@@ -525,13 +525,15 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
      - 实现偏差派发的 `DefectFixTask`，其可修改文件范围必须严格限制在原已批准合同 `writable_paths` 的**真子集或全集**之内；
      - 若自查修复方案需要新增文件或引入新依赖，必须抛出 `EXPANDED_SCOPE_REQUIRED`，立即阻断自动返工并转入需求变更增量合同审批流程；
      - 资产关联贯通：在会话、草案与 Evidence 中贯穿统一关联键 `change_request_id`，实现全链路可审计溯源。
-* **涉及核心文件**：
+* **涉及核心文件（以实际落地为准）**：
+  - 新增：`daemon/supervisor/specs/requirements-store.ts`
   - 新增：`daemon/supervisor/dispute/evidence-triad.ts`
-  - 新增：`daemon/supervisor/dispute/root-cause-analyzer.ts`
-  - 新增：`daemon/supervisor/dispute/rework-dispatcher.ts`
-  - 新增：`daemon/supervisor/dispute/dispute-types.ts`
-  - 测试：`tests/unit/supervisor-dispute-engine.test.ts`
-  - 测试：`tests/unit/supervisor-rework-scope.test.ts`
+  - 新增：`daemon/supervisor/dispute/classification.ts`
+  - 新增：`daemon/supervisor/dispute/index.ts`
+  - 新增：`daemon/supervisor/dispute/types.ts`
+  - 修改：`daemon/server.ts`（`POST /api/supervisor/dispute` 与 `DISPUTE_REPORT_READY`）、`src/lib/ipc/frames.ts`、`src/lib/error-codes.ts`
+  - 测试：`tests/unit/requirements-store.test.ts`（7 用例）
+  - 测试：`tests/unit/dispute-triad.test.ts`（12 用例）
 * **Pass/Fail 验收判定**：
   - **PASS**：对于需求已写但代码写漏的典型 Case，置信度高且 100% 裁决为实现偏差；低置信度案例自动降级为事实陈述并由用户裁决；自动返工超出原合同 Scope 时被坚决拦截并提示升版审批；60 秒内必出结果或安全超时。
   - **FAIL**：低置信度时向用户强加主观判定；自动返工越界修改了原合同未授权的文件。
