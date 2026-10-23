@@ -2,7 +2,7 @@
 
 > **版本定义与基线声明 (v1.6.2 · 2026-10-23)**：
 > 1. **架构规范深度对齐**：本工程规范依据《Stagent 系统架构设计规范 (v1.6.1 代码对齐与规范定稿版)》全面修订签发，严格对齐其 §10 演进路线图（包含 P0.2c、P3.7、P4.5、P5.7 等关键里程碑）；
-> 2. **代码物理基线明确**：当前本地物理 HEAD 为仓库 `main`@`a9066dd`（含 S.1 merge）。测试基线以合后四件套为准（**1122 passed / 6 skipped**）；本轮为文档状态回写（合后已实测四件套）。代码当前已交付数据模型为 Contract Schema v1.3.0（经 TASK-0.2c）；
+> 2. **代码物理基线明确**：当前本地物理 HEAD 为仓库 `main`@`6415fbd`（含 S.6 merge）。测试基线以合后四件套为准（**1155 passed / 6 skipped**）；本轮为文档状态回写（合后已实测四件套）。代码当前已交付数据模型为 Contract Schema v1.3.0（经 TASK-0.2c）；
 > 3. **底座演进任务认领**：本规范新增 **`TASK-0.2c`**，明确认领架构规范之 P0.2c 里程碑（C-01 整改项），将 Schema v1.3.0（`approval`、`authorization.git`）、Fast Path 确定性流转边 (`DRAFT -> PREPARING -> EXECUTING`)、自愈迁移边 (`PENDING_RESUME -> PREPARING`) 与外部改码级联降级边 (`AUDITED -> VERIFYING`) 列为当前工程第一执行优先级；
 > 4. **通信与防死锁引擎认领**：新增 **`TASK-D.3`**，认领架构规范之 P3.7 里程碑（15 展示状态确定性投影持久化与五类死锁自愈机制 D-1~D-5）；
 > 5. **卡片状态净化**：已完成任务卡仅描述该卡已交付内容；后续增补需求拆为独立待办卡。新增 `TASK-W.2b` 与 `TASK-D.2b` 承接未跟踪文件 Scope 阻断和 v1.3 合同迁移接入，不再混入已完成卡。
@@ -11,7 +11,8 @@
 > 8. **状态回写（2026-10-23 · D.3）**：`TASK-D.3` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `9a19f4d`，含 `c2fcb8a` 持久化/`STATE_CHANGED`/看门狗引擎 + `83ec516` D-2/D-4/D-5 生产接线）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`9a19f4d`，合后四件套 **1084 passed / 6 skipped**。残余口径差已在卡片内登记。
 > 9. **状态回写（2026-10-24 · C.2）**：`TASK-C.2` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `51039aa`，功能提交 `c1ad3be`：Studio 四视口壳 + 展示态智能切换）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`51039aa`，合后四件套 **1099 passed / 6 skipped**。残余口径差已在卡片内登记。
 > 10. **状态回写（2026-10-24 · S.1）**：`TASK-S.1` 由 `[PARTIAL]` 更新为 `[COMPLETED]`（merge `a9066dd`，功能提交 `a7d7292`：`SupervisorWakeupThrottler` 3s 防抖默认关闭）。§1.1 矩阵与详细卡状态同步回写；测试基线改写为 `main`@`a9066dd`，合后四件套 **1122 passed / 6 skipped**。残余口径差已在卡片内登记。
-> 11. **状态回写（2026-10-24 · S.6）**：新增 **`TASK-S.6` 非技术旅程串联**（`[NEW_TASK]`）。吸收 `TASK-C.2` 残余「【修改原型】/【确认原型并实施真实工程】弱接线」；`TASK-S.4` / `TASK-C.7` / `TASK-S.5` / `TASK-C.2` / `TASK-S.1` 已为 `[COMPLETED]`，本轮不再重复回写状态；`TASK-S.3` 仍为 `[DEFERRED → v0.2+]`（HUD 广播），**不承载**本缺口；**不改**《系统架构设计规范》v1.6.1。对照白话验收：`docs/reports/非技术用户旅程验收稿.md`。
+> 11. **状态回写（2026-10-24 · S.6 立卡）**：新增 **`TASK-S.6` 非技术旅程串联**（当时 `[NEW_TASK]`）。吸收 `TASK-C.2` 残余「【修改原型】/【确认原型并实施真实工程】弱接线」；`TASK-S.3` 仍为 `[DEFERRED → v0.2+]`；**不改**架构规范 v1.6.1。对照：`docs/reports/非技术用户旅程验收稿.md`。
+> 12. **状态回写（2026-10-24 · S.6 合入）**：`TASK-S.6` 由 `[NEW_TASK]` 更新为 `[COMPLETED]`（merge `6415fbd`，功能 `bbab79e`；合后四件套 **1155 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：右侧确定性分流（质疑/Fast Path/大事草案）、`POST /api/supervisor/journey`、确认原型真建全灰 TaskGraph、需求说明可感知刷新、视口建议切换。**降级登记 S.6b**：`REAL_PLAYTEST` 真预览 URL 挂中栏/外链未做，不阻塞 1–4。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
@@ -37,7 +38,7 @@
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
 | **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，经 `d5ee448` 合入 main；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
 | **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
-| **TASK-S.6** | 非技术旅程串联（右侧分流 + 确认原型开工） | 建议中枢 / 编排粘合 | **[NEW_TASK]** | P4.5 / P5.7 串联（八步旅程最后一公里） | • 右侧唯一入口白话分流：质疑 → `POST /api/supervisor/dispute` + 白话卡；大事 → 草案；小事 → Fast Path（免强制 Demo）<br>• 吸收 C.2 残余：【确认原型并实施真实工程】真建全灰 TaskGraph 并进入审批/开工链（禁止只改 nonce）<br>• 聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 verify）<br>• 可选/S.6b：`REAL_PLAYTEST` 真预览 URL 挂中栏或外链（超范围则登记后续）<br>• 底座复用 S.4/C.7/S.5/C.2/S.2/W.5a，不重砌；对照 `docs/reports/非技术用户旅程验收稿.md` |
+| **TASK-S.6** | 非技术旅程串联（右侧分流 + 确认原型开工） | 建议中枢 / 编排粘合 | **[COMPLETED]**（2026-10-24 合入 main，merge `6415fbd`；功能 `bbab79e`；合后四件套 1155 passed / 6 skipped；S.6b REAL_PLAYTEST 降级登记） | P4.5 / P5.7 串联（八步旅程最后一公里） | • 右侧唯一入口白话分流：质疑 → `POST /api/supervisor/dispute` + 白话卡；大事 → 草案；小事 → Fast Path（免强制 Demo）<br>• 吸收 C.2 残余：【确认原型并实施真实工程】真建全灰 TaskGraph 并进入审批/开工链（禁止只改 nonce）<br>• 聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 verify）<br>• 可选/S.6b：`REAL_PLAYTEST` 真预览 URL 挂中栏或外链（超范围则登记后续）<br>• 底座复用 S.4/C.7/S.5/C.2/S.2/W.5a，不重砌；对照 `docs/reports/非技术用户旅程验收稿.md` |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
 | **TASK-W.2b** | 未跟踪文件 Scope 联合检查与越界阻断 | 编码内核 | **[COMPLETED]**（提交 `87f909c`，经 `05f090f` 合入 main；`daemon/pipeline/untracked-scope-guard.ts` + `E_OUT_OF_SCOPE_UNTRACKED`） | P2 Scope 完整性 | • 执行后同时检查 tracked Diff 与 untracked 文件<br>• 新增稳定错误码 `E_OUT_OF_SCOPE_UNTRACKED`<br>• 前置：TASK-0.2c、TASK-W.2 |
@@ -555,10 +556,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   - **PASS**：对于需求已写但代码写漏的典型 Case，置信度高且 100% 裁决为实现偏差；低置信度案例自动降级为事实陈述并由用户裁决；自动返工超出原合同 Scope 时被坚决拦截并提示升版审批；60 秒内必出结果或安全超时。
   - **FAIL**：低置信度时向用户强加主观判定；自动返工越界修改了原合同未授权的文件。
 
-#### 【Task S.6】非技术旅程串联（右侧唯一入口分流 + 确认原型开工）`[NEW_TASK · 2026-10-24]`
+#### 【Task S.6】非技术旅程串联（右侧唯一入口分流 + 确认原型开工）`[COMPLETED · 2026-10-24]`
 * **任务编号**：`TASK-S.6`
 * **前置依赖**：`TASK-S.4` (COMPLETED), `TASK-C.7` (COMPLETED), `TASK-S.5` (COMPLETED), `TASK-C.2` (COMPLETED), `TASK-S.2` (COMPLETED), `TASK-W.5a` (PASS)
-* **任务状态**：**[NEW_TASK]**（2026-10-24 立卡。承接《非技术用户旅程验收稿》走查缺口：底座已齐，瓶颈在编排/粘合「最后一公里」。**吸收** `TASK-C.2` 残余口径差①——【修改原型】/【确认原型并实施真实工程】按钮 UI 在位但旅程编排层弱接线。`TASK-S.3` 仍为 HUD 广播推迟项，**不装**本缺口。不改架构规范。）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，merge `6415fbd`；分支 `feat/task-s6-journey-orchestration` 功能提交 `bbab79e`。门禁：合后四件套全绿（1155 passed / 6 skipped）；tsc 0 错、eslint 0 错、build 通过。落地：`classifyJourneyIntent` / `orchestrateJourney` / `POST /api/supervisor/journey`；右侧 `onBeforeSend` 分流卡；`buildProposalFromContract` + `createTaskGraph` 真接线【确认原型】；需求 hint 刷新；Studio 视口建议切换；单测 `journey-intent-router` / `journey-orchestrate` / `journey-proposal-from-contract`。**降级登记 S.6b**：`REAL_PLAYTEST` 真预览 URL 挂中栏或外链未纳入本卡交付，不阻塞断言 1–4。不改架构规范；未做 W.5b/c / S.3 HUD / C.2 重做。）
 * **对照白话验收**：`docs/reports/非技术用户旅程验收稿.md`（八步 + Fast Path + 右侧唯一入口）
 * **v0.1 范围**：右侧唯一入口的白话分流路由器 +「确认原型 → 建全灰 TaskGraph → 进入可审批/开工链」主链粘合；聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 illumination verify）。底座（S.4 Demo、C.7 Graph、S.5 dispute、C.2 四视口、S.2 草案、W.5a Worker）只接线、不重砌。
 * **明确不包含**：
@@ -1185,10 +1186,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`a9066dd`；测试基线以合后四件套为准（1122 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）、TASK-D.3（投影持久化 + D-1~D-5）、TASK-C.2（Studio 四视口）与 TASK-S.1（3s 防抖节流器默认关闭）。本轮为文档状态回写。
-> - **当前首要编码任务**：Sprint 4 底座主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 等）已完成；**下一张实现卡为 `TASK-S.6`（非技术旅程串联）**；Sprint 5（`TASK-W.5b` / `TASK-W.5c`）仍按 DAG 其后推进。
+> - **当前首要编码任务**：Sprint 4 底座主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 等）已完成；**`TASK-S.6` 已合入（merge `6415fbd`）**；下一实现卡按 DAG 推进 Sprint 5（`TASK-W.5b` / `TASK-W.5c`）或产品试用反馈；Sprint 5（`TASK-W.5b` / `TASK-W.5c`）仍按 DAG 其后推进。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
-> - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里**由新增 `TASK-S.6` 承接（吸收 C.2 确认/修改原型弱接线）。
+> - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`；S.6b REAL_PLAYTEST 降级登记）。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -1253,6 +1254,7 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-17（交付回写，2026-10-23）**：TASK-D.3 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `9a19f4d`（含 `c2fcb8a` / `83ec516`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`9a19f4d`，1084 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 - **P-18（交付回写，2026-10-24）**：TASK-C.2 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `51039aa`（功能 `c1ad3be`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`51039aa`，1099 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
 - **P-19（交付回写，2026-10-24）**：TASK-S.1 状态由 `[PARTIAL]` 回写为 `[COMPLETED]`，锁定 merge `a9066dd`（功能 `a7d7292`）。同步更新 §1.1 矩阵、详细卡文件清单与测试基线（`main`@`a9066dd`，1122 passed / 6 skipped）。本条仅回写交付事实，不改动任务范围、依赖边与 Sprint 排期。
-- **P-20（立卡，2026-10-24）**：新增 `TASK-S.6` 非技术旅程串联（`[NEW_TASK]`）。同步：版本头第 11 条状态回写、§1.1 矩阵新行、§2.1 ASCII/JSON 依赖边（S.4/C.7/S.5/C.2/S.2/W.5a → S.6）、§3.2 详细卡、Sprint 4 链尾与「当前首要编码任务」指向 S.6；C.2 残余①注明已转交 S.6。S.4/C.7/S.5/C.2/S.1 已 COMPLETED 不重复改状态；S.3 仍 DEFERRED→v0.2+。**不改**架构规范与产品代码；对照 `docs/reports/非技术用户旅程验收稿.md`。
+- **P-20（立卡，2026-10-24）**：新增 `TASK-S.6` 非技术旅程串联（当时 `[NEW_TASK]`）。
+- **P-21（合入，2026-10-24）**：`TASK-S.6` → `[COMPLETED]`（merge `6415fbd` / `bbab79e`；1155 passed / 6 skipped）。S.6b REAL_PLAYTEST 降级登记。同步：版本头第 11 条状态回写、§1.1 矩阵新行、§2.1 ASCII/JSON 依赖边（S.4/C.7/S.5/C.2/S.2/W.5a → S.6）、§3.2 详细卡、Sprint 4 链尾与「当前首要编码任务」指向 S.6；C.2 残余①注明已转交 S.6。S.4/C.7/S.5/C.2/S.1 已 COMPLETED 不重复改状态；S.3 仍 DEFERRED→v0.2+。**不改**架构规范与产品代码；对照 `docs/reports/非技术用户旅程验收稿.md`。
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
