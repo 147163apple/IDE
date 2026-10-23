@@ -26,3 +26,6 @@ export * from "./arch/parser";
 export * from "./arch/graph";
 export * from "./watcher/fs-watcher";
 export * from "./watcher/invalidation-engine";
+
+export * from "./core/recent-projects";
+export * from "./core/open-workspace";

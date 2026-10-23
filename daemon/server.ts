@@ -10,6 +10,7 @@ import {
   releasePidLock,
   readPidLock,
   PidLockInfo,
+  PidLockError,
 } from "./core/pid-lock";
 import {
   createFrame,
@@ -54,6 +55,15 @@ import {
   isLocalOrigin,
   isLocalHostAuthority,
 } from "./core/session-token";
+import {
+  isRecentProjectPath,
+  readRecentProjects,
+  recordRecentProject,
+} from "./core/recent-projects";
+import {
+  buildWorkspaceLaunchUrl,
+  ensureWorkspaceSession,
+} from "./core/open-workspace";
 
 import {
   recoverDaemonState,
@@ -2005,6 +2015,114 @@ export class StagentDaemon {
   }
 
   /**
+   * TASK-D.1c：最近项目列表与一点重开。
+   * - GET  /api/recent-projects
+   * - POST /api/recent-projects/open  { path }（仅允许最近列表内路径；不含任意路径选择器）
+   */
+  private async handleRecentProjects(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+  ): Promise<void> {
+    if (method === "GET" && pathname === "/api/recent-projects") {
+      // 确保当前工作区也出现在列表（用户首次从本 Daemon 进来时）
+      try {
+        recordRecentProject(this.repoRoot);
+      } catch {
+        // ignore
+      }
+      const items = readRecentProjects();
+      this.sendJson(res, 200, { items });
+      return;
+    }
+
+    if (method === "POST" && pathname === "/api/recent-projects/open") {
+      let body: { path?: string };
+      try {
+        body = (await this.readJsonBody(req)) as { path?: string };
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+        return;
+      }
+      const rawPath = typeof body.path === "string" ? body.path.trim() : "";
+      if (!rawPath) {
+        this.sendJson(res, 400, { error: "path is required" });
+        return;
+      }
+      const resolved = path.resolve(rawPath);
+      // 当前工作区始终允许；其余必须已在最近列表（防浏览器任意开盘）
+      const isCurrent = resolved === this.repoRoot;
+      if (!isCurrent && !isRecentProjectPath(resolved)) {
+        this.sendJson(res, 400, {
+          error:
+            "只能重开「最近项目」里的路径。新文件夹请先在终端执行：npx stagent open <路径>",
+          code: "E_NOT_RECENT_PROJECT",
+        });
+        return;
+      }
+
+      try {
+        let port: number;
+        let token: string;
+        let reused: boolean;
+        if (isCurrent) {
+          const t = this.getSessionToken();
+          if (!t || this.currentPort === null) {
+            this.sendJson(res, 503, {
+              error: "当前工作台尚未就绪，请稍后再试。",
+            });
+            return;
+          }
+          port = this.currentPort;
+          token = t;
+          reused = true;
+        } else {
+          const session = await ensureWorkspaceSession(resolved);
+          port = session.port;
+          token = session.token;
+          reused = session.reused;
+        }
+        const launch = buildWorkspaceLaunchUrl(
+          { port, token },
+          {
+            forceUiUrl: process.env["STAGENT_UI_URL"] !== undefined,
+            ...(process.env["STAGENT_UI_URL"]
+              ? { uiUrl: process.env["STAGENT_UI_URL"] }
+              : {}),
+          },
+        );
+        try {
+          recordRecentProject(resolved);
+        } catch {
+          // ignore
+        }
+        // 响应含 launchUrl（fragment 带 token）；仅经已鉴权的本机通道返回，日志不打印 token
+        this.sendJson(res, 200, {
+          path: resolved,
+          port,
+          reused,
+          sameOrigin: launch.sameOrigin,
+          uiUrl: launch.uiUrl,
+          launchUrl: launch.launchUrl,
+        });
+      } catch (err) {
+        if (err instanceof PidLockError) {
+          this.sendJson(res, 409, {
+            error: err.message,
+            code: err.code,
+          });
+          return;
+        }
+        this.sendJson(res, 500, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    this.sendJson(res, 404, { error: "Not found" });
+  }
+
+  /**
    * `POST /api/supervisor/journey` —— 非技术旅程右侧唯一入口分流（TASK-S.6）。
    *
    * 根据白话意图静默路由：质疑 → dispute；大事 → 草案；小事 → Fast Path（免强制 Demo）。
@@ -2467,6 +2585,15 @@ export class StagentDaemon {
         return;
       }
       await this.handleRealPlaytest(req, res, method, pathname, parsedUrl);
+      return;
+    }
+
+    if (pathname.startsWith("/api/recent-projects")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleRecentProjects(req, res, method, pathname);
       return;
     }
 

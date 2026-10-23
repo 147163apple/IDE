@@ -447,6 +447,8 @@ describe("TASK-W.5a spawn 静态禁令", () => {
       "daemon/server.ts",
       "daemon/editor/launcher.ts",
       "daemon/git/worktree-manager.ts",
+      // TASK-D.1c：最近项目一点重开，仅 spawn 本仓 stagent start
+      "daemon/core/open-workspace.ts",
     ]);
     const hits: string[] = [];
     const walk = (dir: string) => {

@@ -65,6 +65,12 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
     module: "bin",
     reason: "CLI 唤起浏览器",
   },
+  {
+    file: "daemon/core/open-workspace.ts",
+    module: "daemon/core",
+    reason:
+      "TASK-D.1c：仅 spawn 本仓 stagent start 以唤起最近项目 Daemon（非任意用户命令；路径须已在最近列表）",
+  },
 ];
 
 const CLI_HOST_PREFIX = "daemon/worker/cli-host/";
@@ -178,7 +184,7 @@ function relOf(abs: string): string {
 }
 
 describe("进程启动白名单（TASK-P.1 / C.5 加固）", () => {
-  it("cli-host 与 6 个历史遗留模块之外，不得出现任何进程启动迹象", () => {
+  it("cli-host 与 7 个历史遗留模块之外，不得出现任何进程启动迹象", () => {
     const files: string[] = [];
     for (const dir of SCAN_DIRS) walk(path.join(REPO_ROOT, dir), files);
 

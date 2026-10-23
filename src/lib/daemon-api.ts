@@ -257,6 +257,43 @@ export async function fetchHealth(
   return (await res.json()) as DaemonHealth;
 }
 
+/** TASK-D.1c：本机最近工作区（用户级配置，非业务仓） */
+export interface RecentProjectItem {
+  path: string;
+  name: string;
+  lastOpenedAt: string;
+}
+
+export interface OpenRecentProjectResult {
+  path: string;
+  port: number;
+  reused: boolean;
+  sameOrigin: boolean;
+  uiUrl: string;
+  /** 带 #token= 的控制台地址；前端应导航至此，勿手拷 Token */
+  launchUrl: string;
+}
+
+export async function fetchRecentProjects(
+  conn: DaemonConnection,
+): Promise<RecentProjectItem[]> {
+  const body = await request<{ items: RecentProjectItem[] }>(
+    conn,
+    "/api/recent-projects",
+  );
+  return body.items ?? [];
+}
+
+export async function openRecentProject(
+  conn: DaemonConnection,
+  projectPath: string,
+): Promise<OpenRecentProjectResult> {
+  return request<OpenRecentProjectResult>(conn, "/api/recent-projects/open", {
+    method: "POST",
+    body: JSON.stringify({ path: projectPath }),
+  });
+}
+
 export async function listContracts(
   conn: DaemonConnection,
 ): Promise<SoftwareContract[]> {

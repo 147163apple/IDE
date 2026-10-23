@@ -29,19 +29,23 @@ import {
   createSupervisorEnrich,
   isSupervisorEnrichConfigured,
 } from "../daemon/supervisor/enrich-openai";
+import { readPidLock, PidLockError } from "../daemon/core/pid-lock";
+import { sessionTokenPath } from "../daemon/core/session-token";
+import { recordRecentProject } from "../daemon/core/recent-projects";
 import {
-  readPidLock,
-  isProcessRunning,
-  PidLockError,
-} from "../daemon/core/pid-lock";
-import {
-  sessionTokenPath,
-  readSessionToken,
-} from "../daemon/core/session-token";
-import {
-  canHostConsoleLocally,
-  resolvePackageRoot,
-} from "../daemon/console/static-host";
+  assertLoopbackUiUrl,
+  buildUiLaunchUrl,
+  resolveConsoleUiTarget,
+  tryReuseRunningDaemon,
+} from "../daemon/core/open-workspace";
+
+// 兼容 D.1b 单测：仍从本模块 re-export
+export {
+  assertLoopbackUiUrl,
+  buildUiLaunchUrl,
+  resolveConsoleUiTarget,
+  tryReuseRunningDaemon,
+};
 
 export type CliCommand = "open" | "start" | "status" | "help" | "version";
 
@@ -121,58 +125,6 @@ export function parseArgs(argv: string[]): CliOptions {
 }
 
 /**
- * URL 安全守卫：Web UI 目标只允许本地回环地址。
- */
-export function assertLoopbackUiUrl(uiUrl: string): URL {
-  let url: URL;
-  try {
-    url = new URL(uiUrl);
-  } catch {
-    throw new Error(`拒绝启动：--ui-url 不是合法 URL：${uiUrl}`);
-  }
-  if (url.protocol !== "http:") {
-    throw new Error(
-      `拒绝启动：--ui-url 仅允许 http 协议（收到 ${url.protocol}）：${uiUrl}`,
-    );
-  }
-  const host = url.hostname.toLowerCase();
-  if (host !== "localhost" && host !== "127.0.0.1") {
-    throw new Error(
-      `拒绝启动：--ui-url 只能指向本地回环地址（localhost / 127.0.0.1），` +
-        `收到主机 ${url.hostname}：${uiUrl}`,
-    );
-  }
-  if (url.username || url.password) {
-    throw new Error(`拒绝启动：--ui-url 不允许携带 userinfo：${uiUrl}`);
-  }
-  return url;
-}
-
-export interface BuildUiLaunchUrlOptions {
-  /** 跨端口（Vite）时把真实 Daemon 地址写入 fragment，避免死认 3001 */
-  daemonBaseUrl?: string;
-}
-
-/**
- * 构造浏览器唤起地址：Token 只放 fragment；可选附带 base=。
- */
-export function buildUiLaunchUrl(
-  uiBase: string,
-  token: string,
-  options: BuildUiLaunchUrlOptions = {},
-): string {
-  const url = assertLoopbackUiUrl(uiBase);
-  url.searchParams.delete("token");
-  const parts = [`token=${token}`];
-  if (options.daemonBaseUrl) {
-    const daemon = assertLoopbackUiUrl(options.daemonBaseUrl);
-    parts.push(`base=${encodeURIComponent(daemon.origin)}`);
-  }
-  url.hash = parts.join("&");
-  return url.toString();
-}
-
-/**
  * 各平台的浏览器唤起命令（结构化 argv，绝无 shell 拼接）。
  */
 export function resolveBrowserOpener(
@@ -195,58 +147,6 @@ export function openBrowser(url: string): Promise<boolean> {
     });
     child.on("error", () => resolve(false));
   });
-}
-
-/**
- * TASK-D.1b：若本工作区已有存活且健康的 Daemon，复用其 port/token。
- */
-export async function tryReuseRunningDaemon(
-  repo: string,
-  fetchImpl: typeof fetch = fetch,
-): Promise<{ port: number; token: string } | null> {
-  const lock = readPidLock(repo);
-  if (!lock || !isProcessRunning(lock.pid)) {
-    return null;
-  }
-  const token = readSessionToken(repo);
-  if (!token) {
-    return null;
-  }
-  try {
-    const res = await fetchImpl(`http://127.0.0.1:${lock.port}/health`, {
-      signal: AbortSignal.timeout(1500),
-    });
-    if (!res.ok) return null;
-    return { port: lock.port, token };
-  } catch {
-    return null;
-  }
-}
-
-/**
- * 选择控制台 URL：有 dist/public 时用 Daemon 同源；否则回退 uiUrl（Vite）。
- */
-export function resolveConsoleUiTarget(options: {
-  daemonPort: number;
-  uiUrl: string;
-  packageRoot?: string;
-  forceUiUrl?: boolean;
-}): {
-  uiUrl: string;
-  sameOrigin: boolean;
-  daemonBaseUrl: string;
-} {
-  const daemonBaseUrl = `http://127.0.0.1:${options.daemonPort}`;
-  const packageRoot = options.packageRoot ?? resolvePackageRoot();
-  const canHost = !options.forceUiUrl && canHostConsoleLocally(packageRoot);
-  if (canHost) {
-    return { uiUrl: daemonBaseUrl, sameOrigin: true, daemonBaseUrl };
-  }
-  return {
-    uiUrl: options.uiUrl,
-    sameOrigin: false,
-    daemonBaseUrl,
-  };
 }
 
 function printHelp(): void {
@@ -331,6 +231,12 @@ async function runOpenOrStart(
         sameOrigin: target.sameOrigin,
         noBrowser: options.noBrowser,
       });
+      // TASK-D.1c：成功打开后写入本机最近项目（非业务仓）
+      try {
+        recordRecentProject(options.repo);
+      } catch {
+        // 最近列表写入失败不阻断打开
+      }
       // 复用场景：CLI 打开浏览器后退出，Daemon 由原进程托管
       return;
     }
@@ -424,6 +330,13 @@ async function runOpenOrStart(
     sameOrigin: effective.sameOrigin,
     noBrowser: options.noBrowser,
   });
+
+  // TASK-D.1c：open/start 成功后写入本机最近项目
+  try {
+    recordRecentProject(options.repo);
+  } catch {
+    // ignore
+  }
 
   console.log(`按下 Ctrl+C 停止`);
 
