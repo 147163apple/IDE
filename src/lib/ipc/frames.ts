@@ -26,7 +26,7 @@
 
 import type { PresentationState } from "../state/presentation-state";
 
-/** 规范 §6.1 帧类型字典（14 类规范帧 + 2 类历史扩展帧） */
+/** 规范 §6.1 帧类型字典（15 类规范帧 + 2 类历史扩展帧） */
 export type IpcFrameType =
   // ---- 规范 §6.1 定义的 13 类 ----
   | "AUTH"
@@ -44,6 +44,8 @@ export type IpcFrameType =
   | "TERMINAL_STREAM"
   // ---- v1.6.1 §6.1 / §6.3.1 新增的全量状态快照广播（TASK-D.3） ----
   | "STATE_CHANGED"
+  // ---- v1.6.1 §6.1 Demo 预览生命周期广播（TASK-S.4） ----
+  | "DEMO_PREVIEW_STATUS"
   // ---- 历史扩展帧（v1.1 协议遗留，仅保留兼容，禁止再新增） ----
   | "WORKER_LOG"
   | "SCOPE_ALERT";
@@ -169,6 +171,31 @@ export interface WorkerEventPayload {
   detail?: string;
 }
 
+/**
+ * Demo 预览服务生命周期（TASK-S.4 / §6.1 `DEMO_PREVIEW_STATUS`）。
+ *
+ * 只有三态：预览服务要么在跑、要么已停、要么起不来。
+ * 不设 `STARTING`：端口是启动时才确定的，提前广播会让前端拿到一个不可用的 URL。
+ */
+export type DemoPreviewLifecycleStatus = "RUNNING" | "STOPPED" | "ERROR";
+
+/**
+ * `DEMO_PREVIEW_STATUS` 载荷。
+ *
+ * 前端据此渲染"原型试玩中"视口：拿到 `url` 直接塞进
+ * `<iframe sandbox="allow-scripts">`，不得自行拼接地址或改写 sandbox。
+ */
+export interface DemoPreviewStatusPayload {
+  /** 独立 Origin 的访问地址，如 http://127.0.0.1:4101/ */
+  url: string;
+  port: number;
+  status: DemoPreviewLifecycleStatus;
+  /** 事件产生时刻（ISO），用于前端判断快照新鲜度 */
+  updated_at: string;
+  /** 失败原因，仅 status=ERROR 时出现 */
+  message?: string;
+}
+
 export interface ErrorPayload {
   code: string;
   message: string;
@@ -189,6 +216,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "EVIDENCE_STATUS_CHANGED",
   "TERMINAL_STREAM",
   "STATE_CHANGED",
+  "DEMO_PREVIEW_STATUS",
   "WORKER_LOG",
   "SCOPE_ALERT",
 ] as const;
@@ -271,6 +299,15 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     maxPayloadBytes: MAX_FRAME_BYTES,
     description:
       "全量状态快照广播，必含 15 态 presentation_state 与白话提示（TASK-D.3）",
+  },
+  {
+    type: "DEMO_PREVIEW_STATUS",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.1",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "Demo 预览服务生命周期广播，含独立 Origin 的 url / port / status / updated_at（TASK-S.4）",
   },
   {
     type: "CHAT_EVENT",
