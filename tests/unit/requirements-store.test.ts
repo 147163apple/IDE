@@ -78,6 +78,10 @@ describe("初始化：从 contract.intent 生成权威快照", () => {
     expect(baseline.snapshot.source).toBe("INITIALIZED_FROM_CONTRACT");
     expect(baseline.snapshot.immutable).toBe(true);
     expect(baseline.snapshot.sha256).toMatch(/^[a-f0-9]{64}$/);
+    // 架构 §5.1：快照落在 specs/revisions/req-v*.md
+    expect(baseline.snapshot.file).toMatch(
+      /^\.stagent\/specs\/revisions\/req-v1-[a-f0-9]{8}\.md$/,
+    );
     expect(baseline.content).toBe(content);
     expect(store.isLocked(contract.contract_id)).toBe(true);
   });

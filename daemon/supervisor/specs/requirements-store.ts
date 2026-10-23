@@ -13,7 +13,7 @@ import type { SoftwareContract } from "../../../src/lib/contract.schema";
  * 权威基准：
  *
  * 1. **唯一权威文件**：`.stagent/specs/requirements.md`；
- * 2. **版本快照**：每次变更在 `requirements.snapshots/<contract>/vN-<sha8>.md`
+ * 2. **版本快照**：每次变更在 `.stagent/specs/revisions/req-v<N>-<sha8>.md`
  *    留一份冻结副本，旧版本**永不覆写**；
  * 3. **执行期锁定**：合同一旦锁定，普通写入抛 `E_SPEC_SNAPSHOT_IMMUTABLE`；
  *    只有携带 `change_request_id` 的正式需求变更才能产生新版本；
@@ -27,8 +27,11 @@ import type { SoftwareContract } from "../../../src/lib/contract.schema";
 export const REQUIREMENTS_FILE_REL = ".stagent/specs/requirements.md";
 export const REQUIREMENTS_INDEX_REL =
   ".stagent/specs/requirements.snapshots.json";
-export const REQUIREMENTS_SNAPSHOT_DIR_REL =
-  ".stagent/specs/requirements.snapshots";
+/**
+ * 不可变快照目录（架构 §5.1）：`.stagent/specs/revisions/req-v<ID>.md`。
+ * 文件名以 `req-v` 开头，与任务卡 P-15 的对照源约定一致。
+ */
+export const REQUIREMENTS_SNAPSHOT_DIR_REL = ".stagent/specs/revisions";
 
 export const E_SPEC_SNAPSHOT_IMMUTABLE = "E_SPEC_SNAPSHOT_IMMUTABLE";
 export const E_SPEC_SNAPSHOT_NOT_FOUND = "E_SPEC_SNAPSHOT_NOT_FOUND";
@@ -419,10 +422,10 @@ export class RequirementsStore {
   ): RequirementsSnapshot {
     const digest = sha256(params.content);
     const segment = safeContractSegment(contractId);
+    // 架构 §5.1：快照是不可变文档历史，全局按版本+内容指纹命名
     const relative = path.posix.join(
       REQUIREMENTS_SNAPSHOT_DIR_REL,
-      segment,
-      `v${params.version}-${digest.slice(0, 8)}.md`,
+      `req-v${params.version}-${digest.slice(0, 8)}.md`,
     );
     const absolute = path.join(this.repoRoot, relative);
     fs.mkdirSync(path.dirname(absolute), { recursive: true });

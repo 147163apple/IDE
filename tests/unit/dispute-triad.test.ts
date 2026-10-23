@@ -219,6 +219,7 @@ describe("三类归因分流", () => {
     expect(report.next_action.kind).toBe("REWORK");
     expect(report.next_action.rework?.target_files).toEqual(["src/order.ts"]);
     expect(report.next_action.rework?.scope_subset_valid).toBe(true);
+    expect(report.next_action.rework?.requires_scope_expansion).toBe(false);
     expect(report.plain_summary).toContain("实现偏差");
   });
 
@@ -297,6 +298,8 @@ describe("返工边界：严格限制在原合同 Scope 子集", () => {
     const reportAction = buildReworkProposal(CONTRACT, facts, "cr_test_1");
     expect(reportAction.target_files).toEqual(["src/order.ts"]);
     expect(reportAction.rejected_paths).toEqual(["docs/spec.md", "../evil.ts"]);
+    expect(reportAction.requires_scope_expansion).toBe(true);
+    expect(reportAction.instructions).toContain("EXPANDED_SCOPE_REQUIRED");
     expect(
       assertReworkScopeSubset(CONTRACT, reportAction.target_files),
     ).toEqual([]);

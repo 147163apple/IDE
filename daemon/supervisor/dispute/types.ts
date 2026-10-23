@@ -83,6 +83,8 @@ export interface ReworkProposal {
   target_files: string[];
   /** 被拒绝的越界候选（只记录，绝不扩权） */
   rejected_paths: string[];
+  /** 存在越界候选时为 true：必须先走合同升版审批，不能自动返工 */
+  requires_scope_expansion: boolean;
   scope_subset_valid: true;
   instructions: string;
 }

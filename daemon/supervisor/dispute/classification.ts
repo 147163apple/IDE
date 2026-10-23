@@ -222,7 +222,8 @@ export function buildReworkProposal(
 
   const scopeNote =
     rejected.length > 0
-      ? `；${rejected.length} 个越界文件已排除（严禁扩权）`
+      ? `；${rejected.length} 个越界文件已排除（严禁扩权），` +
+        "如需改动这些文件，必须先发起合同升版审批（EXPANDED_SCOPE_REQUIRED）"
       : "";
   return {
     proposal_id: `rework_${randomUUID().slice(0, 8)}`,
@@ -230,6 +231,7 @@ export function buildReworkProposal(
     change_request_id: changeRequestId,
     target_files: target,
     rejected_paths: rejected,
+    requires_scope_expansion: rejected.length > 0,
     scope_subset_valid: true,
     instructions:
       `仅在下列已授权文件内做定向修复：${target.join("、") || "（无可用文件）"}` +
