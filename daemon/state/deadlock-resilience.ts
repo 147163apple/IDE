@@ -266,6 +266,18 @@ export class DeadlockResilience {
     this.commands.delete(id);
   }
 
+  /**
+   * 子进程 spawn 后回填 pid。
+   *
+   * 登记时还不知道 pid（spawn 发生在 runCommand 内部），但超时回收必须能
+   * 精确杀掉**这一棵**进程树，而不是整个 Daemon 的进程组。因此留一个回填口。
+   */
+  updateCommandPid(id: string, pid: number): void {
+    const record = this.commands.get(id);
+    if (!record) return;
+    this.commands.set(id, { ...record, pid });
+  }
+
   // --- D-4：合并前目标分支仲裁 ---
 
   /**

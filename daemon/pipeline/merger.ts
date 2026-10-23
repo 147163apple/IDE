@@ -59,6 +59,66 @@ export class MergeGateError extends Error {
   }
 }
 
+/** TASK-D.3 / D-4：目标分支在施工期间前进 */
+export const E_TARGET_BRANCH_ADVANCED = "E_TARGET_BRANCH_ADVANCED";
+
+/** D-4 的二选一选项：前端据此渲染两个按钮，无需自己拼文案 */
+export const TARGET_ADVANCED_OPTIONS = [
+  "REPLAY_ON_CURRENT_BASELINE",
+  "ABANDON_CANDIDATE",
+] as const;
+
+/**
+ * 目标分支已前进。
+ *
+ * 继承 `MergeGateError` 以便既有错误处理路径仍能识别；额外携带 `options`，
+ * 让 HTTP 层能原样透出"重演 / 放弃"两个可执行决策，而不是只给一句错误。
+ */
+export class TargetBranchAdvancedError extends MergeGateError {
+  readonly options = TARGET_ADVANCED_OPTIONS;
+  readonly targetHead: string;
+  readonly baseHead: string;
+
+  constructor(targetHead: string, baseHead: string) {
+    super(
+      E_TARGET_BRANCH_ADVANCED,
+      `Target branch advanced since the task branched: ${baseHead} -> ${targetHead}. ` +
+        `Choose REPLAY_ON_CURRENT_BASELINE or ABANDON_CANDIDATE.`,
+    );
+    this.name = "TargetBranchAdvancedError";
+    this.targetHead = targetHead;
+    this.baseHead = baseHead;
+  }
+}
+
+/**
+ * 合并前检查目标分支是否仍在证据记录的基线上。
+ *
+ * 只做"是否前进"这一个判断：不自动 rebase、不自动放弃。
+ * 传入的 `baseCommitSha` 来自证据快照，而不是合同——证据才是"这份结论对应
+ * 哪次基线"的事实来源，合同里的分支名只用于定位当前 tip。
+ */
+export async function assertTargetBranchNotAdvanced(options: {
+  repoRoot: string;
+  baseBranch: string;
+  baseCommitSha: string;
+}): Promise<void> {
+  const tip = await execGit(
+    ["rev-parse", options.baseBranch],
+    options.repoRoot,
+  );
+  if (tip.exitCode !== 0) {
+    throw new MergeGateError(
+      "E_TARGET_BRANCH_MISSING",
+      `Cannot resolve target branch ${options.baseBranch}: ${tip.stderr.trim()}`,
+    );
+  }
+  const targetHead = tip.stdout.trim();
+  if (options.baseCommitSha && targetHead !== options.baseCommitSha) {
+    throw new TargetBranchAdvancedError(targetHead, options.baseCommitSha);
+  }
+}
+
 /**
  * 合并前置检查：主工作区必须干净（E_MAIN_TREE_DIRTY）。
  *
@@ -387,6 +447,15 @@ async function mergeInternal(
 
   // 3.5 主工作区脏状态门禁：脏树会污染审计提交，直接阻断
   await assertMainTreeClean(repoRoot);
+
+  // 3.8 TASK-D.3 / D-4：目标分支前进门禁。
+  // 证据描述的是"基于哪个基线验证通过"；基线一旦前进，结论就不再等价，
+  // 必须由用户二选一，禁止 daemon 自行 rebase 或静默放弃。
+  await assertTargetBranchNotAdvanced({
+    repoRoot,
+    baseBranch: contract.authorization.git.base_branch,
+    baseCommitSha: snapshot.git_info.base_commit_sha,
+  });
 
   // 4. Squash merge（-X ours 兜底用户优先；冲突清场用 reset --merge）
   let merge = await execGit(["merge", "--squash", branch], repoRoot);

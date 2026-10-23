@@ -72,7 +72,13 @@ import {
   loadEvidenceSnapshot,
   loadLatestEvidenceSnapshot,
   squashMerge,
+  TargetBranchAdvancedError,
 } from "./pipeline/merger";
+import {
+  isContractLockResource,
+  setContractLockLeaseObserver,
+} from "./core/contract-mutex";
+import { killProcessTree } from "./runner/process-tree";
 import {
   addProtectionEntry,
   closeRound,
@@ -221,6 +227,12 @@ export class StagentDaemon {
   private readonly deadlock: DeadlockResilience;
   /** 已发起停止、尚在回收中的合同（投影层据此呈现 STOPPING） */
   private readonly stoppingContracts: Set<string> = new Set();
+  /**
+   * TASK-D.3 / D-4：合并时检测到目标分支已前进的合同。
+   * 投影层据此填 `target_branch_ahead`，前端呈现 CONFLICT 与二选一。
+   * 在用户做出 merge-decision 之前一直保留；做出后清除。
+   */
+  private readonly targetAdvancedContracts: Set<string> = new Set();
   private stopSweepFn: (() => void) | null = null;
 
   constructor(options: DaemonServerOptions) {
@@ -286,6 +298,22 @@ export class StagentDaemon {
       writeTimeoutEvidence: async (contractId, info) => {
         await this.orchestrator.recordCommandTimeout(contractId, info);
       },
+      // D-1 / D-5 共用同一条进程树回收路径（SIGTERM → 宽限 → SIGKILL）
+      killProcessTree: async (_contractId, pid) => {
+        if (pid === null) return;
+        await killProcessTree(pid, { graceMs: 3_000 });
+      },
+      // D-2 回收只删锁文件本身：绝不触碰合同、证据或工作树。
+      // 白名单式的路径判定（必须在 <repoRoot>/.stagent/locks/ 下且以 .lock 结尾），
+      // 避免看门狗被任何一条异常记录"带偏"去删业务文件。
+      releaseResource: (resource) => {
+        if (!isContractLockResource(this.repoRoot, resource)) return;
+        try {
+          fs.rmSync(path.resolve(resource), { force: true });
+        } catch {
+          // 锁文件可能已被持有者释放
+        }
+      },
       onEvent: (event) => {
         // 死锁处置属安全事件：复用既有告警帧，控制台无需新增订阅
         this.broadcast("GATEWAY_VIOLATION", {
@@ -298,6 +326,11 @@ export class StagentDaemon {
         });
       },
     });
+
+    // D-2：把同一张租约表交给互斥锁层（全局注册，避免每个调用点各自持表）
+    setContractLockLeaseObserver(this.deadlock);
+    // D-5：命令执行在 Gateway 内，需由编排层把看门狗透传进去
+    this.orchestrator.setDeadlock(this.deadlock);
   }
 
   /** 最近一次启动时的崩溃自愈报告（便于状态端点与测试观测） */
@@ -559,6 +592,7 @@ export class StagentDaemon {
       signals ?? {
         stopping_requested: this.stoppingContracts.has(contractId),
         evidence: readLatestEvidenceSignal(this.repoRoot, contractId),
+        target_branch_ahead: this.targetAdvancedContracts.has(contractId),
       },
     );
     if (!record) return 0;
@@ -853,7 +887,8 @@ export class StagentDaemon {
       error?.code === "E_INVALID_STATE_TRANSITION" ||
       error?.code === "E_CONCURRENT_OPERATION" ||
       error?.code === "E_ILLEGAL_NODE_TRANSITION" ||
-      error?.code === "E_UPSTREAM_NOT_ILLUMINATED";
+      error?.code === "E_UPSTREAM_NOT_ILLUMINATED" ||
+      error?.code === "E_REPLAY_CONFLICT";
     this.sendJson(res, conflict ? 409 : 400, {
       error: error?.message ?? String(err),
       ...(error?.code === undefined ? {} : { code: error.code }),
@@ -2125,7 +2160,7 @@ export class StagentDaemon {
       }
 
       const match = pathname.match(
-        /^\/api\/contracts\/([^/]+)(?:\/(admit|approve|execute|run-worker|open-editor|diff-files|diff|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
+        /^\/api\/contracts\/([^/]+)(?:\/(admit|approve|execute|run-worker|open-editor|diff-files|diff|merge-decision|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
       if (match) {
         // W.3：非法百分号编码（如 %E0%A4%A）会让 decodeURIComponent 抛 URIError，
@@ -2245,9 +2280,67 @@ export class StagentDaemon {
             if (!result.nothingToMerge) {
               closeRound(this.repoRoot, "MERGED");
               clearCheckpoint(this.repoRoot);
+              this.targetAdvancedContracts.delete(contractId);
               this.emitContractUpdate(result.contract);
             }
             this.sendJson(res, 200, { result });
+          } catch (err) {
+            // D-4：目标分支已前进 → 409 + 二选一，绝不静默 rebase 或强行合并
+            if (err instanceof TargetBranchAdvancedError) {
+              this.targetAdvancedContracts.add(contractId);
+              const contract = store.get(contractId);
+              if (contract) this.emitContractUpdate(contract);
+              this.sendJson(res, 409, {
+                error: "Target branch has advanced",
+                code: err.code,
+                options: [...err.options],
+                target_head: err.targetHead,
+                base_head: err.baseHead,
+                message:
+                  "目标分支在施工期间有新的改动，请选择重演本轮改动或放弃候选成果。",
+              });
+              return;
+            }
+            this.sendActionError(res, err);
+          }
+          return;
+        }
+
+        if (method === "POST" && action === "merge-decision") {
+          try {
+            const body = (await this.readJsonBody(req)) as {
+              decision?: string;
+              reviewer?: string;
+            };
+            const decision = body.decision;
+            if (
+              decision !== "REPLAY_ON_CURRENT_BASELINE" &&
+              decision !== "ABANDON_CANDIDATE"
+            ) {
+              this.sendJson(res, 400, {
+                error:
+                  "decision must be REPLAY_ON_CURRENT_BASELINE or ABANDON_CANDIDATE",
+              });
+              return;
+            }
+
+            if (decision === "ABANDON_CANDIDATE") {
+              const contract = await this.orchestrator.abort(contractId, {
+                reviewer: body.reviewer ?? "local-user",
+                reason: "TARGET_BRANCH_ADVANCED_ABANDON",
+              });
+              this.targetAdvancedContracts.delete(contractId);
+              this.emitContractUpdate(contract);
+              this.sendJson(res, 200, { decision, contract });
+              return;
+            }
+
+            // REPLAY：合入最新基线 → 走既有验证管道 → 产出新证据
+            const outcome =
+              await this.orchestrator.replayOnCurrentBaseline(contractId);
+            this.targetAdvancedContracts.delete(contractId);
+            this.emitContractUpdate(outcome.contract);
+            this.sendJson(res, 200, { decision, outcome });
           } catch (err) {
             this.sendActionError(res, err);
           }
@@ -2362,6 +2455,7 @@ export class StagentDaemon {
             if (this.armedContractId === contractId) {
               await this.stopEvidenceWatcher();
             }
+            this.targetAdvancedContracts.delete(contractId);
             this.emitContractUpdate(contract);
             this.sendJson(res, 200, { contract });
           } catch (err) {

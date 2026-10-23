@@ -442,16 +442,22 @@ describe("E2E / Protected 保护模式全链路（1 张卡 + Gate 0~4 + Trailer 
         content: "export const session = 'AI';\n",
       },
     ]);
-    const outcome = await orchestrator.execute(contract.contract_id);
-    expect(outcome.evidence.verdict.status).toBe("PASSED");
 
-    // 用户在验证通过后自己改了同一个文件并提交——用户永远是对的
+    // 用户在验证前自己改了同一个文件并提交——用户永远是对的。
+    //
+    // 顺序说明（TASK-D.3 / D-4）：主干一旦在**证据落盘之后**前进，合并会被
+    // `E_TARGET_BRANCH_ADVANCED` 拦下并要求用户二选一（重演 / 放弃），
+    // 这是刻意为之的防死锁语义。本用例验证的是 P.1 冲突仲裁本身，
+    // 因此把用户改动放在验证之前：证据基线与主干一致，冲突交由 P.1 裁决。
     fs.writeFileSync(
       path.join(repo, "src", "auth", "login.ts"),
       "export const login = () => 'USER';\n",
     );
     git(repo, ["add", "."]);
     git(repo, ["commit", "-q", "-m", "user: 我自己改了登录"]);
+
+    const outcome = await orchestrator.execute(contract.contract_id);
+    expect(outcome.evidence.verdict.status).toBe("PASSED");
 
     // 核销：不向用户抛 Git 冲突界面，直接按「用户优先」仲裁
     const merged = await squashMerge({

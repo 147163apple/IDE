@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { isProcessRunning } from "./pid-lock";
+import { LEASE_HEARTBEAT_INTERVAL_MS } from "../state/deadlock-resilience";
 
 /**
  * 合同级排他锁（Chaos 场景 3：双开并发抢占）。
@@ -42,6 +43,28 @@ export class InvalidStateTransitionError extends Error {
 
 /** 进程内串行链：key → 当前持锁者的 release Promise */
 const chains = new Map<string, Promise<void>>();
+
+/**
+ * TASK-D.3 / D-2：租约观察者。
+ *
+ * 用"注册一次、全局复用"的注入方式，而不是给每个 `withContractLock` 调用点加参数：
+ * 调用点有十余处（execute / runWorker / abort / merge…），逐个透传既啰嗦又容易漏；
+ * 而这里必须保证**同一个 Daemon 只有一张租约表**，否则 D-2 会各自判各自的。
+ * 观察者为 null 时（单测、CLI 薄调用）退化为原有的 60s TTL 行为。
+ */
+export interface ContractLockLeaseObserver {
+  acquireLease(resource: string, owner: string): unknown;
+  renewLease(resource: string, owner: string): boolean;
+  releaseLease(resource: string, owner?: string): boolean;
+}
+
+let leaseObserver: ContractLockLeaseObserver | null = null;
+
+export function setContractLockLeaseObserver(
+  observer: ContractLockLeaseObserver | null,
+): void {
+  leaseObserver = observer;
+}
 
 interface DiskLockPayload {
   pid: number;
@@ -120,9 +143,10 @@ function acquireDiskLock(lockPath: string, ttlMs: number): boolean {
 export async function withContractLock<T>(
   lockKey: string,
   fn: () => Promise<T>,
-  options: { ttlMs?: number } = {},
+  options: { ttlMs?: number; heartbeatMs?: number } = {},
 ): Promise<T> {
   const ttlMs = options.ttlMs ?? CONTRACT_LOCK_TTL_MS;
+  const heartbeatMs = options.heartbeatMs ?? LEASE_HEARTBEAT_INTERVAL_MS;
   const previous = chains.get(lockKey) ?? Promise.resolve();
 
   let release!: () => void;
@@ -136,6 +160,8 @@ export async function withContractLock<T>(
   await previous;
 
   let acquired = false;
+  let heartbeat: NodeJS.Timeout | null = null;
+  const leaseOwner = `pid:${process.pid}`;
   try {
     acquired = acquireDiskLock(lockKey, ttlMs);
     if (!acquired) {
@@ -143,8 +169,19 @@ export async function withContractLock<T>(
         `Contract operation is already in progress (lock: ${lockKey})`,
       );
     }
+
+    // D-2：持有期间 15s 续租一次。租约只影响"崩溃后能否被回收"，
+    // 不参与授权判定——回收锁绝不等于批准合同或推进状态。
+    leaseObserver?.acquireLease(lockKey, leaseOwner);
+    heartbeat = setInterval(() => {
+      leaseObserver?.renewLease(lockKey, leaseOwner);
+    }, heartbeatMs);
+    heartbeat.unref?.();
+
     return await fn();
   } finally {
+    if (heartbeat) clearInterval(heartbeat);
+    leaseObserver?.releaseLease(lockKey, leaseOwner);
     if (acquired) {
       try {
         fs.unlinkSync(lockKey);
@@ -159,6 +196,22 @@ export async function withContractLock<T>(
 }
 
 /** 合同锁文件路径：`<repoRoot>/.stagent/locks/<contractId>.lock` */
+/**
+ * TASK-D.3 / D-2：看门狗回收锁文件的白名单判定。
+ *
+ * 为什么单独成一个纯函数：D-2 的处置是"删文件"，是五类看门狗里唯一带破坏性的
+ * 动作。判定必须与 `contractLockPath` 同源、且可被单测直接覆盖，绝不允许因为
+ * 一条异常记录就把合同、证据或 Worktree 当成"陈旧资源"删掉。
+ */
+export function isContractLockResource(
+  repoRoot: string,
+  resource: string,
+): boolean {
+  const locksDir = path.join(path.resolve(repoRoot), ".stagent", "locks");
+  const target = path.resolve(resource);
+  return path.dirname(target) === locksDir && target.endsWith(".lock");
+}
+
 export function contractLockPath(repoRoot: string, contractId: string): string {
   return path.join(
     path.resolve(repoRoot),

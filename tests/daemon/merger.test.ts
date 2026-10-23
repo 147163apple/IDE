@@ -7,7 +7,10 @@ import { createHash } from "node:crypto";
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
 import {
+  E_TARGET_BRANCH_ADVANCED,
   MergeGateError,
+  TARGET_ADVANCED_OPTIONS,
+  TargetBranchAdvancedError,
   buildMergeCommitMessage,
   squashMerge,
 } from "../../daemon/pipeline/merger";
@@ -16,6 +19,15 @@ import {
   softwareContractSchema,
 } from "../../src/lib/contract.schema";
 import { git } from "../helpers/git";
+
+/** 主工作区非 `.stagent/` 运行态的改动（`.stagent/` 不参与业务审计） */
+function dirtyOutsideStagent(repo: string): string[] {
+  return git(repo, ["status", "--porcelain", "-uall"])
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.includes(".stagent"));
+}
 
 describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
   let repo: string;
@@ -450,9 +462,18 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
    * 必然失败（fatal: There is no merge to abort），冲突标记会留在 main。
    * 修复后必须用 `reset --merge` 清场，并保证最终文件是用户版本、无冲突标记。
    */
+  /**
+   * @param beforeExecute 在**证据落盘之前**推进主分支的钩子。
+   *
+   * P.1 的冲突场景需要主干与任务分支真正分叉。D-4 落地后，「证据已落盘、
+   * 主干才前进」属于必须停下来让用户二选一的情形（见下方 D-4 用例），
+   * 因此 P.1 回归改为在验证前推进主干：证据记录的基线即当时的 main tip，
+   * 合并时基线一致，冲突交由 P.1 仲裁。
+   */
   async function setupWorkerChange(
     title: string,
     writeWorker: (worktree: string) => void,
+    beforeExecute?: () => void,
   ) {
     const contract = makeContract(title);
     store.save(contract);
@@ -464,6 +485,7 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
       `task-${contract.contract_id}`,
     );
     writeWorker(worktree);
+    beforeExecute?.();
     const outcome = await orchestrator.execute(contract.contract_id);
     expect(outcome.contract.lifecycle_state).toBe("AUDITED");
     return { contract, worktree, evidence: outcome.evidence };
@@ -483,14 +505,15 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
           "export const b = 2;\n",
         );
       },
+      // 用户在验证前于主分支提交了同一行的新版本（真实冲突，基线与证据一致）
+      () => {
+        fs.writeFileSync(
+          path.join(repo, "src", "a.ts"),
+          "export const a = 3; // user\n",
+        );
+        git(repo, ["commit", "-q", "-am", "user change"]);
+      },
     );
-
-    // 用户在主分支提交了同一行的新版本（真实冲突）
-    fs.writeFileSync(
-      path.join(repo, "src", "a.ts"),
-      "export const a = 3; // user\n",
-    );
-    git(repo, ["commit", "-q", "-am", "user change"]);
 
     const result = await squashMerge({
       repoRoot: repo,
@@ -522,13 +545,15 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
           "export const a = 2; // worker\n",
         );
       },
+      () => {
+        fs.writeFileSync(
+          path.join(repo, "src", "a.ts"),
+          "export const a = 3; // user\n",
+        );
+        git(repo, ["commit", "-q", "-am", "user change"]);
+      },
     );
 
-    fs.writeFileSync(
-      path.join(repo, "src", "a.ts"),
-      "export const a = 3; // user\n",
-    );
-    git(repo, ["commit", "-q", "-am", "user change"]);
     const headBefore = git(repo, ["rev-parse", "HEAD"]).trim();
 
     const result = await squashMerge({
@@ -551,5 +576,64 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
     // 合同仍在 AUDITED，Worktree 保留供 AI 基于最新代码重做
     expect(store.get(contract.contract_id)?.lifecycle_state).toBe("AUDITED");
     expect(fs.existsSync(worktree)).toBe(true);
+  });
+
+  /**
+   * TASK-D.3 / D-4：证据描述的是「基于哪条基线验证通过」。基线一旦前进，
+   * 结论不再等价——必须停下来让用户二选一，禁止 daemon 自行 rebase、
+   * 也禁止复用了 P.1 的「冲突一律以用户为准」悄悄合掉。
+   */
+  it("证据落盘后目标分支前进：阻断合并并给出二选一，主树与合同都不动", async () => {
+    const { contract, evidence } = await setupWorkerChange(
+      "主干前进后合并",
+      (wt) => {
+        fs.writeFileSync(path.join(wt, "src", "b.ts"), "export const b = 2;\n");
+      },
+    );
+
+    // 用户在验证通过后往主分支推了新改动
+    fs.writeFileSync(path.join(repo, "src", "a.ts"), "export const a = 9;\n");
+    git(repo, ["commit", "-q", "-am", "user change"]);
+    const headBefore = git(repo, ["rev-parse", "HEAD"]).trim();
+
+    const mergeArgs = {
+      repoRoot: repo,
+      contractId: contract.contract_id,
+      evidence,
+      reviewer: "tina",
+    } as const;
+
+    const failure = await squashMerge(mergeArgs).catch((err: unknown) => err);
+    expect(failure).toBeInstanceOf(TargetBranchAdvancedError);
+    const advanced = failure as TargetBranchAdvancedError;
+    expect(advanced.code).toBe(E_TARGET_BRANCH_ADVANCED);
+    expect(advanced.options).toEqual([...TARGET_ADVANCED_OPTIONS]);
+    expect(advanced.baseHead).toBe(evidence.git_info.base_commit_sha);
+    expect(advanced.targetHead).toBe(headBefore);
+
+    // 未决策前主树不动：没有新提交、没有冲突标记、工作区干净
+    expect(git(repo, ["rev-parse", "HEAD"]).trim()).toBe(headBefore);
+    expect(
+      fs.readFileSync(path.join(repo, "src", "a.ts"), "utf8"),
+    ).not.toContain("<<<<<<<");
+    expect(dirtyOutsideStagent(repo)).toEqual([]);
+    // 合同停在 AUDITED、Worktree 保留，等用户做决定
+    expect(store.get(contract.contract_id)?.lifecycle_state).toBe("AUDITED");
+    expect(
+      fs.existsSync(
+        path.join(
+          repo,
+          ".stagent",
+          "worktrees",
+          `task-${contract.contract_id}`,
+        ),
+      ),
+    ).toBe(true);
+
+    // 未做决定就再点一次合并：仍然被阻断，不存在「第二次放行」
+    await expect(squashMerge(mergeArgs)).rejects.toBeInstanceOf(
+      TargetBranchAdvancedError,
+    );
+    expect(dirtyOutsideStagent(repo)).toEqual([]);
   });
 });
