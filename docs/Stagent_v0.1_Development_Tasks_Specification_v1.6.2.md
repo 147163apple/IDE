@@ -17,12 +17,13 @@
 > 14. **状态回写（2026-10-24 · D.1b 立卡）**：新增 **`TASK-D.1b` 一键打开项目（Daemon 托管控制台 + open CLI）**（`[NEW_TASK]`）。前置 `TASK-D.1`；目标 `stagent open <路径>` → 单浏览器窗口工作台已连上，无需第二终端/手拷 Token。**不改**架构规范 v1.6.1、不改产品代码；不推翻 D.1 鉴权；不含 Electron/Tauri/系统协议。
 > 15. **状态回写（2026-10-24 · D.1b 合入）**：`TASK-D.1b` 由 `[NEW_TASK]` 更新为 `[COMPLETED]`（merge `d5b35e0`，功能 `946e9fc`；合后四件套 **1188 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：`stagent open <路径>` 复用/启动 Daemon、同源托管 `dist/public`、自动打开 `#token=&base=` 单窗口；无钥匙拒连；`E_WORKSPACE_LOCKED` 白话；Demo 仍独立 Origin。不改架构规范；不含 Electron/Tauri/系统协议。
 > 16. **状态回写（2026-10-24 · D.1c 立卡）**：新增 **`TASK-D.1c` 最近项目一键重开**（`[NEW_TASK]`）。前置 `TASK-D.1b`；目标：控制台「打开项目」展示最近列表，一点即复用/唤起带 token 会话，无需再敲 `stagent open`；**不含**真·任意路径文件夹选择器（留给本机助手/Electron）。**不改**架构规范 v1.6.1、不改产品代码；不推翻 D.1/D.1b 鉴权。
+> 17. **状态回写（2026-10-24 · D.1c 合入）**：`TASK-D.1c` 由 `[NEW_TASK]` 更新为 `[COMPLETED]`（合入 main tip `f3e371e`，分支 `feat/task-d1c-recent-projects` 快进；合后四件套 **1204 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：本机 `~/.stagent/recent-projects.json` 最近列表；`stagent open` 成功写入；控制台「打开项目」一点重开带 `#token=`；`GET/POST /api/recent-projects`；不含任意路径选择器。不改架构规范；不推翻 D.1/D.1b 鉴权。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`d5b35e0`（含 D.1b merge）。测试基线以合后四件套为准（1188 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理 HEAD 为 `main`@`f3e371e`（含 D.1c 合入）。测试基线以合后四件套为准（1204 passed / 6 skipped）；后续实施前应在实际工作树重跑并归档结果。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -31,7 +32,7 @@
 | **TASK-0.2c** | Schema v1.3.0 增量演进、Fast Path 与自愈迁移边实现 | 数据模型与状态机 | **[COMPLETED]**（提交 `fb2cc67`，经 `cd7e7e0` 合入 main；tsc 0 错 / eslint 0 错；新增 48 项单测、迁移矩阵 +7，全量 903 例） | P0.2c 契约与状态机演进 (C-01) | • 认领 C-01 整改项，代码落地第一优先级<br>• 升级 `SoftwareContractV13` 与 Zod Schema，增设 `approval` 与 `authorization.git`<br>• 补齐 Fast Path 严格流转边 (`DRAFT -> PREPARING -> EXECUTING`，严禁直跳)<br>• 补齐外部改码级联降级边 (`AUDITED -> VERIFYING`，使 Evidence 失效并回退重验)<br>• 补齐恢复探测自愈边 (`PENDING_RESUME -> PREPARING`，探测 Worktree 丢失自愈重建)<br>• 升级 `migrateContractToV13`，执行态族白名单回填 (`user:legacy`)，草案/待审安全保持，零静默授权<br>• 新增 `tests/unit/contract-schema-v13.test.ts`、9 态 lifecycle 迁移矩阵覆盖及 15 态展示投影测试 |
 | **TASK-D.1** | CLI 引导入口与安全 WebSocket 通信桥 | 通信核销 | **[COMPLETED]**（2026-10-20；48 文件 / 377 用例全绿，含首帧 50ms 切断、Token 轮换、Origin/Host/2MB/速率/心跳断言） | P1 通信鉴权 | • 提前至 Sprint 1 解除 DAG 死锁<br>• CLI `stagent start`、动态端口 (3001~3010)、PID 锁与 Token 轮换 (G-13)<br>• 检测到存活 PID 锁时抛出 `E_WORKSPACE_LOCKED` 拒绝重复绑定工作区<br>• 首帧 AUTH 握手鉴权、非法以 `4401` 关闭<br>• 规范帧字典（同时保留 `EVIDENCE_READY`、`EVIDENCE_STATUS_CHANGED`、`TERMINAL_STREAM`）<br>• 补齐 Origin 校验、帧大小（≤2MB）与速率限制、失联 3 次心跳遮罩 |
 | **TASK-D.1b** | 一键打开项目（Daemon 托管控制台 + open CLI） | 通信核销 / DX | **[COMPLETED]**（2026-10-24 合入 main，merge `d5b35e0`；功能 `946e9fc`；合后四件套 1188 passed / 6 skipped） | P1 通信鉴权（DX 增量） | • `stagent open <路径>` → 单浏览器窗口工作台已连上，无需第二终端/手拷 Token<br>• Daemon 托管 `dist/public` 同源控制台；自动 open `#token=` fragment；`#base=` 避免死认 3001<br>• Demo 仍独立 Origin（4100~4110）；不推翻 D.1 鉴权；不含 Electron/Tauri/系统协议 |
-| **TASK-D.1c** | 最近项目一键重开（控制台「打开项目」） | 通信核销 / DX | **[NEW_TASK]**（2026-10-24 立卡；前置 D.1b） | P1 通信鉴权（DX 增量） | • 控制台「打开项目」展示最近工作区列表；一点即复用/唤起带 `#token=` 会话，无需再敲 `stagent open`<br>• 复用 D.1b Daemon 托管与 fragment 钥匙；锁冲突白话<br>• **不含**真·任意路径文件夹选择器（留给本机助手/Electron）；不推翻 D.1/D.1b 鉴权 |
+| **TASK-D.1c** | 最近项目一键重开（控制台「打开项目」） | 通信核销 / DX | **[COMPLETED]**（2026-10-24 合入 main，tip `f3e371e`；合后四件套 1204 passed / 6 skipped） | P1 通信鉴权（DX 增量） | • 控制台「打开项目」展示最近工作区列表；一点即复用/唤起带 `#token=` 会话，无需再敲 `stagent open`<br>• 本机 `~/.stagent/recent-projects.json`（非业务仓保护区）；`stagent open` 成功写入；`GET/POST /api/recent-projects`<br>• **不含**真·任意路径文件夹选择器；不推翻 D.1/D.1b 鉴权；锁冲突白话 |
 | **TASK-D.3** | 15 状态确定性投影持久化与防死锁自愈引擎 | 通信与控制面 | **[COMPLETED]**（2026-10-23 合入 main，merge `9a19f4d`；含 `c2fcb8a` + `83ec516`；合后四件套 1084 passed / 6 skipped） | P3.7 状态投影与防死锁 | • `presentation_state` 落盘 `.stagent/state.json`（与 contracts 并列，不写回合同）+ Daemon `STATE_CHANGED` 广播与重连回放<br>• D-1~D-5 看门狗引擎（可注入时钟 + `sweep`）及生产接线：D-1 abort 超时、D-2 租约心跳、D-3 `PENDING_RESUME` 自愈、D-4 merge 409 二选一、D-5 Gateway 分层超时<br>• 新增/更新：`presentation-store` / `presentation-projector` / `deadlock-resilience` 与接线、集成测试 |
 | **TASK-A.1** | Git Worktree 物理隔离与生命周期管理 | 执行内核 | **[COMPLETED]** | P1 本地 Git | Worktree 创建、销毁、分支保护与 `.git/info/exclude` 隔离就绪。 |
 | **TASK-A.2** | Scoped MCP 工具网关与路径沙箱校验 | 执行内核 | **[COMPLETED]** | P2 安全网关 | 路径防逃逸、Scope 读写授权、禁区强拦截与环境脱敏就绪。 |
@@ -81,7 +82,7 @@
 TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ──► TASK-D.1 ──► TASK-D.3 (15状态投影 & 防死锁)
                                                                     │              │
                                                                     │              ├──► TASK-D.1b (一键打开项目) [COMPLETED]
-                                                                    │              │      └──► TASK-D.1c (最近项目一键重开) [NEW_TASK]
+                                                                    │              │      └──► TASK-D.1c (最近项目一键重开) [COMPLETED]
                                                                     │              │
                                                                     │              ├──► TASK-C.1 (三栏骨架)
                                                                     │              │      ├──► TASK-C.3 (Monaco 读写)
@@ -329,10 +330,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-#### 【Task D.1c】最近项目一键重开（控制台「打开项目」）`[NEW_TASK · 2026-10-24]`
+#### 【Task D.1c】最近项目一键重开（控制台「打开项目」）`[COMPLETED · 2026-10-24]`
 * **任务编号**：`TASK-D.1c`
 * **前置依赖**：`TASK-D.1b` (COMPLETED)
-* **任务状态**：**[NEW_TASK]**（2026-10-24 立卡。吸收 D.1b 残余「最近项目列表未做」。底座复用 D.1 / D.1b：端口/PID 锁/Token/AUTH/同源控制台/`stagent open` 能力；本卡只补控制台侧「最近列表 → 一点重开」粘合，不重砌鉴权、不引入桌面壳。）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，tip `f3e371e`；分支 `feat/task-d1c-recent-projects` 快进合入。门禁：合后四件套全绿（1204 passed / 6 skipped）；tsc 0 错、eslint 0 errors、build 通过。落地清单：`daemon/core/recent-projects.ts`（用户级 `~/.stagent/recent-projects.json` 0600，非业务仓保护区）、`daemon/core/open-workspace.ts`（复用健康 Daemon / spawn 本仓 `stagent start`）、`daemon/server.ts`（`GET/POST /api/recent-projects`）、`bin/stagent.ts`（open 成功写入最近）、`OpenProjectEntry` + `daemon-api`（列表渲染 / 一点重开带 `#token=`）、spawn 白名单登记。**口径说明**：① 不含任意路径文件夹选择器；新路径首次仍走 `stagent open`；② 不推翻 D.1/D.1b AUTH/fragment/Origin；③ 锁冲突白话 `E_WORKSPACE_LOCKED`。**残余口径差（不阻塞验收）**：真·任意路径选择器留给本机助手/Electron）
 * **对照痛点**：D.1b 后仍常要在终端敲 `stagent open <路径>`；用户期望在已打开的控制台里点「打开项目」看到最近列表，一点即进带钥匙会话（接近 Cursor「最近打开」）。
 * **v0.1 范围**：控制台「打开项目」入口展示最近工作区列表；点击某一项 → 复用健康 Daemon 或按 D.1b 路径唤起 → 打开/切换到带 `#token=`（及必要 `#base=`）的同源控制台会话，无需再敲 `stagent open`。最近列表由本机受控落盘（如用户级或 `.stagent` 旁的最近路径记录），在 `open` / 成功连接时更新。**明确不含**浏览器真·任意路径文件夹选择器（留给后续本机小助手 / Electron）。
 * **明确不包含**：
@@ -1257,7 +1258,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`a9066dd`；测试基线以合后四件套为准（1122 passed / 6 skipped）；已交付至 Contract Schema v1.3.0（TASK-0.2c）、TASK-D.3（投影持久化 + D-1~D-5）、TASK-C.2（Studio 四视口）与 TASK-S.1（3s 防抖节流器默认关闭）。本轮为文档状态回写。
-> - **当前首要编码任务**：Sprint 4 底座主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 等）已完成；**`TASK-S.6` 已合入（merge `6415fbd`）且 S.6b 已收口（merge `024d2b8`）**；**`TASK-D.1b` 已合入（merge `d5b35e0`）**；**下一实现卡：`TASK-D.1c` 最近项目一键重开（`[NEW_TASK]`，前置 D.1b）**；Sprint 5（`TASK-W.5b` / `TASK-W.5c`）仍按 DAG 其后推进。
+> - **当前首要编码任务**：Sprint 4 底座主链（含 `TASK-S.1` / `TASK-C.2` / `TASK-D.3` / `TASK-S.4` / `TASK-C.7` / `TASK-S.5` 等）已完成；**`TASK-S.6` 已合入（merge `6415fbd`）且 S.6b 已收口（merge `024d2b8`）**；**`TASK-D.1b` 已合入（merge `d5b35e0`）**；**`TASK-D.1c` 已合入（tip `f3e371e`）**；Sprint 5（`TASK-W.5b` / `TASK-W.5c`）仍按 DAG 其后推进。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
@@ -1331,6 +1332,7 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-23（立卡，2026-10-24）**：新增 `TASK-D.1b` 一键打开项目（Daemon 托管控制台 + open CLI）（`[NEW_TASK]`）。同步：版本头第 14 条、§1.1 矩阵新行、§2.1 ASCII/JSON 依赖边（`TASK-D.1` → `TASK-D.1b`）、§3.1 详细卡、Sprint「当前首要」指向 D.1b。**不改**架构规范与产品代码；不含 Electron/Tauri/系统协议；不推翻 D.1 鉴权。
 - **P-24（合入回写补记，2026-10-24）**：`TASK-D.1b` → `[COMPLETED]`（merge `d5b35e0` / `946e9fc`；1188 passed / 6 skipped）。对应版本头第 15 条；本条补 changelog 与矩阵/详细卡已 COMPLETED 口径一致。
 - **P-25（立卡，2026-10-24）**：新增 `TASK-D.1c` 最近项目一键重开（控制台「打开项目」）（`[NEW_TASK]`）。同步：版本头第 16 条、§1.1 矩阵新行、§2.1 ASCII/JSON 依赖边（`TASK-D.1b` → `TASK-D.1c`）、§3.1 详细卡（D.1b 后）、Sprint「当前首要」指向 D.1c；D.1b 残余「最近项目列表」转交本卡。**不改**架构规范与产品代码；不含真·任意路径文件夹选择器 / Electron/Tauri；不推翻 D.1/D.1b 鉴权。
+- **P-26（合入，2026-10-24）**：`TASK-D.1c` 标 `[COMPLETED]`（main tip `f3e371e` 快进合入；四件套 1204 passed / 6 skipped）。同步：版本头第 17 条、§1.1 矩阵/ASCII、§3.1 详细卡、Sprint「当前首要」。交付：本机最近列表 + 控制台一点重开带钥匙；不含任意路径选择器。
 
 
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
