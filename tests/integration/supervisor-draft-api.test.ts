@@ -30,8 +30,10 @@ describe("POST /api/supervisor/draft（Supervisor 草案控制面）", () => {
   ) => {
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3690,
-      endPort: 3695,
+      // 3600–3610：避开 resume-abort 的 3690–3695（同段在 8 并发下必 EADDRINUSE），
+      // 也与 ipc-stream 3660–3670、contract-api 3680–3685、worktree-files 3700–3709 不重叠。
+      startPort: 3600,
+      endPort: 3610,
       enableCrashRecovery: false,
       ...(enrich === undefined ? {} : { supervisorEnrich: enrich }),
     });
