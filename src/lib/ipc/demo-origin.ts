@@ -53,3 +53,26 @@ export function isDemoPreviewOrigin(origin: string | undefined): boolean {
     port <= DEMO_PREVIEW_PORT_END
   );
 }
+
+/**
+ * Demo iframe 沙箱属性（架构 §4.4 / TASK-S.4 / TASK-C.2）。
+ *
+ * 与 `daemon/supervisor/demo/types.ts` 的 `DEMO_IFRAME_SANDBOX` 保持一致，
+ * 前端独立一份以免跨层依赖。**禁止**追加 `allow-same-origin`。
+ */
+export const DEMO_IFRAME_SANDBOX = "allow-scripts" as const;
+
+/** 供 `<iframe {...demoIframeProps(url)} />` 直接展开；不得手写 sandbox 字面量。 */
+export function demoIframeProps(url: string): {
+  src: string;
+  sandbox: typeof DEMO_IFRAME_SANDBOX;
+  referrerPolicy: "no-referrer";
+  title: string;
+} {
+  return {
+    src: url,
+    sandbox: DEMO_IFRAME_SANDBOX,
+    referrerPolicy: "no-referrer",
+    title: "Demo 原型预览",
+  };
+}

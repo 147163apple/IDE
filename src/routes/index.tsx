@@ -42,6 +42,8 @@ import {
   fetchSettings,
   fetchTaskGraph,
   generateSupervisorDraft,
+  submitDisputeSelfCheck,
+  fetchPresentationSnapshot,
   listContracts,
   loadConnection,
   mergeContract,
@@ -81,6 +83,13 @@ import {
 } from "@/components/ProtectionCard";
 import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
+import { StudioViewportShell } from "@/components/studio/StudioViewportShell";
+import { DemoPreviewPane } from "@/components/studio/DemoPreviewPane";
+import { TaskGraphPane } from "@/components/studio/TaskGraphPane";
+import {
+  DisputeConsolePane,
+  type DisputeReportView,
+} from "@/components/studio/DisputeConsolePane";
 import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
 import { SettingsTab } from "@/components/settings/SettingsTab";
 import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
@@ -111,9 +120,13 @@ import {
 import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
+  DemoPreviewStatusPayload,
   EvidenceReadyPayload,
+  StateChangedPayload,
   TaskGraphUpdatedPayload,
 } from "@/lib/ipc/frames";
+import type { PresentationState } from "@/lib/state/presentation-state";
+import { PRESENTATION_STATES } from "@/lib/state/presentation-state";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -167,6 +180,18 @@ function Console() {
   const [taskGraphLoading, setTaskGraphLoading] = useState(false);
   const [taskGraphError, setTaskGraphError] = useState<string | null>(null);
   const [specsOpen, setSpecsOpen] = useState(true);
+
+  /** TASK-C.2：Daemon 权威展示态（STATE_CHANGED），驱动 Studio 默认视口 */
+  const [presentationByContract, setPresentationByContract] = useState<
+    Record<string, { state: PresentationState; message: string }>
+  >({});
+  const [demoPreview, setDemoPreview] =
+    useState<DemoPreviewStatusPayload | null>(null);
+  const [disputeReport, setDisputeReport] = useState<DisputeReportView | null>(
+    null,
+  );
+  const [disputeBusy, setDisputeBusy] = useState(false);
+  const [disputeError, setDisputeError] = useState<string | null>(null);
 
   const [diff, setDiff] = useState<{ patch: string; stat: string } | null>(
     null,
@@ -343,6 +368,30 @@ function Console() {
       } catch {
         // 保护接口异常不阻断主流程；门卫在后台仍按失败关闭运行
       }
+      // TASK-C.2：展示态快照与保护清单解耦——失败/挂起不得挡住 P.1 横幅
+      void fetchPresentationSnapshot(conn)
+        .then((snap) => {
+          const next: Record<
+            string,
+            { state: PresentationState; message: string }
+          > = {};
+          for (const [id, rec] of Object.entries(snap.contracts)) {
+            if (
+              (PRESENTATION_STATES as readonly string[]).includes(
+                rec.presentation_state,
+              )
+            ) {
+              next[id] = {
+                state: rec.presentation_state as PresentationState,
+                message: rec.message?.trim() || "",
+              };
+            }
+          }
+          setPresentationByContract(next);
+        })
+        .catch(() => {
+          // 投影文件缺失不阻断主流程；保持内存态或空
+        });
     } catch (err) {
       setConnected(false);
       setDaemonPort(null);
@@ -550,6 +599,26 @@ function Console() {
       setTaskGraph((prev) => applyTaskGraphFrame(prev, p));
       setTaskGraphError(null);
       setTaskGraphLoading(false);
+    },
+    onStateChanged: (p: StateChangedPayload) => {
+      const state = p.presentation_state;
+      if (!(PRESENTATION_STATES as readonly string[]).includes(state)) {
+        return;
+      }
+      setPresentationByContract((prev) => ({
+        ...prev,
+        [p.contract_id]: {
+          state: state as PresentationState,
+          message: p.message?.trim() || "",
+        },
+      }));
+    },
+    onDemoPreviewStatus: (p: DemoPreviewStatusPayload) => {
+      setDemoPreview(p);
+    },
+    onDisputeReportReady: (p) => {
+      // 完整报告仍以 HTTP 响应为准；这里只在切合同后避免错挂摘要
+      if (selectedId !== null && p.contract_id !== selectedId) return;
     },
   });
 
@@ -1081,6 +1150,8 @@ function Console() {
                   setAdmission(null);
                   // 同上：未提交草案是"另一个意图"的产物，选中真实合同后必须让位
                   setDraft(null);
+                  setDisputeReport(null);
+                  setDisputeError(null);
                   // 首屏不再默认打开操作台，点需求才把它拉起来（否则点了没反应）
                   setStudioNonce((n) => n + 1);
                 }}
@@ -1097,320 +1168,430 @@ function Console() {
           </div>
         }
         studioContent={
-          <div className="flex min-w-0 flex-1 flex-col">
-            <SupervisorStudioPane
-              runMode={
-                protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
-              }
-              protectedEntries={protection?.entries ?? []}
-              draft={
-                draft
-                  ? // 未提交草案优先：`toStudioDraft` 读的就是 `supervisor_metadata`，
-                    // 所以白话理由 / 未决问题在这里同样不再是「（无）」
-                    toStudioDraft(draft.contract)
-                  : selected
-                    ? toStudioDraft(selected)
-                    : null
-              }
-              execution={
-                selected
-                  ? {
-                      contractId: selected.contract_id,
-                      status: toExecutionStatus(selected.lifecycle_state),
-                      workerControl: selected.worker_spec.control_mode,
-                    }
-                  : null
-              }
-              busy={busy !== null || protectionBusy}
-              onEmergencyPause={() => {
-                if (!selected) return;
-                void runAction("abort", async () => {
-                  await abortContract(
-                    conn,
-                    selected.contract_id,
-                    "local-user",
-                    "Studio 紧急暂停",
-                  );
-                  setAdmission(null);
-                });
-              }}
-              onUnlockEntry={(id) => void onUnlockProtection(id)}
-            />
-            {showForm && (
-              <ContractForm
-                busy={busy === "create"}
-                initialPaths={scopeDraft}
-                draft={draft}
-                draftBusy={busy === "draft"}
-                onRequestDraft={requestDraft}
-                onCreate={(contract) =>
-                  runAction("create", async () => {
-                    const saved = await createContractWithAdmission(
-                      conn,
-                      contract,
-                    );
-                    setSelectedId(saved.contract.contract_id);
-                    setShowForm(false);
-                    // 草案已落盘成合同：清掉内存草案，避免与真实合同双份显示
-                    setDraft(null);
-                    applyAdmission(saved.admission);
-                  })
-                }
+          <StudioViewportShell
+            presentationState={
+              selectedId
+                ? (presentationByContract[selectedId]?.state ?? null)
+                : null
+            }
+            presentationMessage={
+              selectedId
+                ? presentationByContract[selectedId]?.message || null
+                : null
+            }
+            demo={
+              <DemoPreviewPane
+                previewUrl={demoPreview?.url ?? null}
+                status={demoPreview?.status ?? null}
+                errorMessage={demoPreview?.message ?? null}
+                onRevise={() => {
+                  // 回到右栏继续聊原型——不关 Studio，用户能对照着改
+                }}
+                onConfirm={() => {
+                  // 旅程推进（建图/施工）由 Supervisor 会话承担；此处仅确认入口可见
+                  setStudioNonce((n) => n + 1);
+                }}
               />
-            )}
-
-            {!selected ? (
-              <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-                选择左侧合同查看详情，或在雷达中圈选文件后新建合同
-              </div>
-            ) : (
-              <div className="space-y-4 p-4">
-                <ContractCard
-                  contract={selected}
-                  busy={busy === "approve"}
-                  onApprove={(id) =>
-                    void runAction("approve", async () => {
-                      await approveContract(conn, id, "local-user");
-                    })
+            }
+            graph={
+              <TaskGraphPane
+                graph={taskGraph}
+                loading={taskGraphLoading}
+                error={taskGraphError}
+                onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
+              />
+            }
+            dispute={
+              <DisputeConsolePane
+                contractId={selected?.contract_id ?? null}
+                report={disputeReport}
+                busy={disputeBusy}
+                error={disputeError}
+                onSubmit={async (challenge) => {
+                  if (!selected) return;
+                  setDisputeBusy(true);
+                  setDisputeError(null);
+                  try {
+                    const result = await submitDisputeSelfCheck(conn, {
+                      contract_id: selected.contract_id,
+                      challenge,
+                    });
+                    const report = result.report;
+                    setDisputeReport({
+                      report_id: report.report_id,
+                      contract_id: report.contract_id,
+                      challenge: report.challenge,
+                      classification: report.classification,
+                      suggested_classification: report.suggested_classification,
+                      confidence: report.confidence,
+                      degraded: report.degraded || result.degraded === true,
+                      plain_summary: report.plain_summary,
+                      rationale: report.rationale,
+                      facts: {
+                        prompt: {
+                          original_request:
+                            report.facts.prompt.original_request,
+                          matched_messages:
+                            report.facts.prompt.matched_messages.length,
+                          confirmations:
+                            report.facts.prompt.confirmations.length,
+                        },
+                        spec: report.facts.spec
+                          ? {
+                              matched_entries:
+                                report.facts.spec.matched_entries,
+                              version: report.facts.spec.version,
+                            }
+                          : null,
+                        code: {
+                          worktree_available: report.facts.code.available,
+                          changed_files: report.facts.code.changed_files,
+                          evidence_id: report.facts.code.evidence_id,
+                        },
+                      },
+                      next_action: report.next_action
+                        ? {
+                            kind: report.next_action.kind,
+                            message: report.next_action.message,
+                          }
+                        : undefined,
+                    });
+                  } catch (err) {
+                    setDisputeError((err as Error).message);
+                  } finally {
+                    setDisputeBusy(false);
                   }
-                />
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <ScopeList scope={selected.authorization.file_system_scope} />
-                  <BudgetVisualizer
-                    costLimits={selected.authorization.cost_limits}
-                    budgetLimits={selected.authorization.budget_limits}
-                  />
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    disabled={
-                      busy !== null || selected.lifecycle_state !== "EXECUTING"
-                    }
-                    onClick={() =>
-                      runAction("worker", async () => {
-                        const result = await runWorker(
-                          conn,
-                          selected.contract_id,
-                        );
-                        setWorkerResult(result);
-                      })
-                    }
-                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                  >
-                    {busy === "worker" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <ShieldCheck className="h-3.5 w-3.5" />
-                    )}
-                    运行 Worker
-                  </button>
-                  <button
-                    disabled={
-                      busy !== null || selected.lifecycle_state !== "EXECUTING"
-                    }
-                    onClick={() =>
-                      runAction("execute", async () => {
-                        const outcome = await executeContract(
-                          conn,
-                          selected.contract_id,
-                        );
-                        setEvidence(outcome.evidence);
-                      })
-                    }
-                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                  >
-                    {busy === "execute" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Play className="h-3.5 w-3.5" />
-                    )}
-                    执行验证
-                  </button>
-                  <button
-                    disabled={
-                      busy !== null ||
-                      selected.lifecycle_state !== "PENDING_RESUME"
-                    }
-                    onClick={() =>
-                      void runAction("resume", async () => {
-                        await resumeContract(conn, selected.contract_id);
-                      })
-                    }
-                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                  >
-                    {busy === "resume" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3.5 w-3.5" />
-                    )}
-                    恢复执行
-                  </button>
-                  <button
-                    disabled={
-                      busy !== null ||
-                      selected.lifecycle_state === "MERGED" ||
-                      selected.lifecycle_state === "ABORTED"
-                    }
-                    onClick={() => {
-                      const confirmed = window.confirm(
-                        `确认中止合同 ${selected.contract_id}？\n` +
-                          "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
+                }}
+              />
+            }
+            contract={
+              <div className="flex min-w-0 flex-1 flex-col">
+                <SupervisorStudioPane
+                  runMode={
+                    protection && protection.mode !== "VIBE"
+                      ? "PROTECTED"
+                      : "VIBE"
+                  }
+                  protectedEntries={protection?.entries ?? []}
+                  draft={
+                    draft
+                      ? // 未提交草案优先：`toStudioDraft` 读的就是 `supervisor_metadata`，
+                        // 所以白话理由 / 未决问题在这里同样不再是「（无）」
+                        toStudioDraft(draft.contract)
+                      : selected
+                        ? toStudioDraft(selected)
+                        : null
+                  }
+                  execution={
+                    selected
+                      ? {
+                          contractId: selected.contract_id,
+                          status: toExecutionStatus(selected.lifecycle_state),
+                          workerControl: selected.worker_spec.control_mode,
+                        }
+                      : null
+                  }
+                  busy={busy !== null || protectionBusy}
+                  onEmergencyPause={() => {
+                    if (!selected) return;
+                    void runAction("abort", async () => {
+                      await abortContract(
+                        conn,
+                        selected.contract_id,
+                        "local-user",
+                        "Studio 紧急暂停",
                       );
-                      if (!confirmed) return;
-                      void runAction("abort", async () => {
-                        await abortContract(
+                      setAdmission(null);
+                    });
+                  }}
+                  onUnlockEntry={(id) => void onUnlockProtection(id)}
+                />
+                {showForm && (
+                  <ContractForm
+                    busy={busy === "create"}
+                    initialPaths={scopeDraft}
+                    draft={draft}
+                    draftBusy={busy === "draft"}
+                    onRequestDraft={requestDraft}
+                    onCreate={(contract) =>
+                      runAction("create", async () => {
+                        const saved = await createContractWithAdmission(
                           conn,
-                          selected.contract_id,
-                          "local-user",
+                          contract,
                         );
-                        setEvidence(null);
-                      });
-                    }}
-                    className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                  >
-                    {busy === "abort" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <XCircle className="h-3.5 w-3.5" />
-                    )}
-                    {selected.lifecycle_state === "PENDING_APPROVAL"
-                      ? "驳回合同"
-                      : "中止任务"}
-                  </button>
-                  <button
-                    onClick={() =>
-                      void runAction("diff", async () => {
-                        const [patch, files] = await Promise.all([
-                          fetchDiff(conn, selected.contract_id),
-                          fetchDiffFiles(conn, selected.contract_id).catch(
-                            () => null,
-                          ),
-                        ]);
-                        setDiff(patch);
-                        setDiffFiles(files);
+                        setSelectedId(saved.contract.contract_id);
+                        setShowForm(false);
+                        // 草案已落盘成合同：清掉内存草案，避免与真实合同双份显示
+                        setDraft(null);
+                        applyAdmission(saved.admission);
                       })
                     }
-                    className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
-                  >
-                    <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
-                  </button>
-                  <EditorOpener conn={conn} contractId={selected.contract_id} />
-                  {busy && (
-                    <span className="text-[10px] text-muted-foreground">
-                      正在{busy}…
-                    </span>
-                  )}
-                </div>
-
-                {workerResult && (
-                  <section className="rounded border border-border bg-card p-3">
-                    <h3 className="text-sm font-semibold">Worker 执行记录</h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      应用 {workerResult.changes.length} 个文件 · tokens{" "}
-                      {workerResult.usage.inputTokens}↑ /{" "}
-                      {workerResult.usage.outputTokens}↓
-                    </p>
-                    <ul className="mt-2 space-y-0.5 text-[11px]">
-                      {workerResult.log.map((line) => (
-                        <li key={line} className="text-chart-2">
-                          {line}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                )}
-
-                {selectedLogs.length > 0 && (
-                  <section
-                    data-testid="live-log"
-                    className="rounded border border-border bg-card p-3"
-                  >
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-semibold">实时日志</h3>
-                      <span className="text-[10px] text-muted-foreground">
-                        {selectedLogs.length} 行 · WebSocket 推送（保留最近 500
-                        行）
-                      </span>
-                      <button
-                        onClick={stream.clearLogs}
-                        className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                      >
-                        清空
-                      </button>
-                    </div>
-                    <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
-                      {selectedLogs.map((line, i) => (
-                        <div key={`${line.at}-${i}`}>
-                          <span className="text-zinc-500">
-                            {line.at.slice(11, 19)}{" "}
-                          </span>
-                          {line.line}
-                        </div>
-                      ))}
-                    </pre>
-                  </section>
-                )}
-
-                {diff && (
-                  <DiffViewer
-                    patch={diff.patch}
-                    files={diffFiles?.files}
-                    truncatedList={diffFiles?.truncatedList}
                   />
                 )}
-                {selected && (
-                  <StructuredTerminal
-                    lines={stream.terminal
-                      .filter((t) => t.contractId === selected.contract_id)
-                      .map((t) => ({
-                        stream: t.stream,
-                        line: t.line,
-                        at: t.at,
-                      }))}
-                  />
-                )}
-                {evidence && (
-                  <>
-                    <EvidenceChecklist
-                      evidence={evidence}
-                      busy={busy === "merge"}
-                      onMerge={() =>
-                        void runAction("merge", async () => {
-                          const result = await mergeContract(
-                            conn,
-                            selected.contract_id,
-                            evidence.evidence_id,
-                            "local-user",
-                          );
-                          setMergeInfo(
-                            result.nothingToMerge
-                              ? (result.message ??
-                                  "本轮改动与你的修改冲突，已全部以你为准")
-                              : `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
-                                  result.worktreeRemoved ? "已清理" : "保留"
-                                }${
-                                  result.conflictResolution ===
-                                  "USER_FIRST_DISCARD"
-                                    ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
-                                    : ""
-                                }`,
-                          );
+
+                {!selected ? (
+                  <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+                    选择左侧合同查看详情，或在雷达中圈选文件后新建合同
+                  </div>
+                ) : (
+                  <div className="space-y-4 p-4">
+                    <ContractCard
+                      contract={selected}
+                      busy={busy === "approve"}
+                      onApprove={(id) =>
+                        void runAction("approve", async () => {
+                          await approveContract(conn, id, "local-user");
                         })
                       }
                     />
-                    {mergeInfo && (
-                      <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
-                        {mergeInfo}
-                      </div>
+
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <ScopeList
+                        scope={selected.authorization.file_system_scope}
+                      />
+                      <BudgetVisualizer
+                        costLimits={selected.authorization.cost_limits}
+                        budgetLimits={selected.authorization.budget_limits}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        disabled={
+                          busy !== null ||
+                          selected.lifecycle_state !== "EXECUTING"
+                        }
+                        onClick={() =>
+                          runAction("worker", async () => {
+                            const result = await runWorker(
+                              conn,
+                              selected.contract_id,
+                            );
+                            setWorkerResult(result);
+                          })
+                        }
+                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                      >
+                        {busy === "worker" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ShieldCheck className="h-3.5 w-3.5" />
+                        )}
+                        运行 Worker
+                      </button>
+                      <button
+                        disabled={
+                          busy !== null ||
+                          selected.lifecycle_state !== "EXECUTING"
+                        }
+                        onClick={() =>
+                          runAction("execute", async () => {
+                            const outcome = await executeContract(
+                              conn,
+                              selected.contract_id,
+                            );
+                            setEvidence(outcome.evidence);
+                          })
+                        }
+                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                      >
+                        {busy === "execute" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Play className="h-3.5 w-3.5" />
+                        )}
+                        执行验证
+                      </button>
+                      <button
+                        disabled={
+                          busy !== null ||
+                          selected.lifecycle_state !== "PENDING_RESUME"
+                        }
+                        onClick={() =>
+                          void runAction("resume", async () => {
+                            await resumeContract(conn, selected.contract_id);
+                          })
+                        }
+                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+                      >
+                        {busy === "resume" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-3.5 w-3.5" />
+                        )}
+                        恢复执行
+                      </button>
+                      <button
+                        disabled={
+                          busy !== null ||
+                          selected.lifecycle_state === "MERGED" ||
+                          selected.lifecycle_state === "ABORTED"
+                        }
+                        onClick={() => {
+                          const confirmed = window.confirm(
+                            `确认中止合同 ${selected.contract_id}？\n` +
+                              "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
+                          );
+                          if (!confirmed) return;
+                          void runAction("abort", async () => {
+                            await abortContract(
+                              conn,
+                              selected.contract_id,
+                              "local-user",
+                            );
+                            setEvidence(null);
+                          });
+                        }}
+                        className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
+                      >
+                        {busy === "abort" ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <XCircle className="h-3.5 w-3.5" />
+                        )}
+                        {selected.lifecycle_state === "PENDING_APPROVAL"
+                          ? "驳回合同"
+                          : "中止任务"}
+                      </button>
+                      <button
+                        onClick={() =>
+                          void runAction("diff", async () => {
+                            const [patch, files] = await Promise.all([
+                              fetchDiff(conn, selected.contract_id),
+                              fetchDiffFiles(conn, selected.contract_id).catch(
+                                () => null,
+                              ),
+                            ]);
+                            setDiff(patch);
+                            setDiffFiles(files);
+                          })
+                        }
+                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
+                      >
+                        <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
+                      </button>
+                      <EditorOpener
+                        conn={conn}
+                        contractId={selected.contract_id}
+                      />
+                      {busy && (
+                        <span className="text-[10px] text-muted-foreground">
+                          正在{busy}…
+                        </span>
+                      )}
+                    </div>
+
+                    {workerResult && (
+                      <section className="rounded border border-border bg-card p-3">
+                        <h3 className="text-sm font-semibold">
+                          Worker 执行记录
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          应用 {workerResult.changes.length} 个文件 · tokens{" "}
+                          {workerResult.usage.inputTokens}↑ /{" "}
+                          {workerResult.usage.outputTokens}↓
+                        </p>
+                        <ul className="mt-2 space-y-0.5 text-[11px]">
+                          {workerResult.log.map((line) => (
+                            <li key={line} className="text-chart-2">
+                              {line}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
                     )}
-                    <EvidenceView evidence={evidence} />
-                  </>
+
+                    {selectedLogs.length > 0 && (
+                      <section
+                        data-testid="live-log"
+                        className="rounded border border-border bg-card p-3"
+                      >
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-semibold">实时日志</h3>
+                          <span className="text-[10px] text-muted-foreground">
+                            {selectedLogs.length} 行 · WebSocket 推送（保留最近
+                            500 行）
+                          </span>
+                          <button
+                            onClick={stream.clearLogs}
+                            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                          >
+                            清空
+                          </button>
+                        </div>
+                        <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
+                          {selectedLogs.map((line, i) => (
+                            <div key={`${line.at}-${i}`}>
+                              <span className="text-zinc-500">
+                                {line.at.slice(11, 19)}{" "}
+                              </span>
+                              {line.line}
+                            </div>
+                          ))}
+                        </pre>
+                      </section>
+                    )}
+
+                    {diff && (
+                      <DiffViewer
+                        patch={diff.patch}
+                        files={diffFiles?.files}
+                        truncatedList={diffFiles?.truncatedList}
+                      />
+                    )}
+                    {selected && (
+                      <StructuredTerminal
+                        lines={stream.terminal
+                          .filter((t) => t.contractId === selected.contract_id)
+                          .map((t) => ({
+                            stream: t.stream,
+                            line: t.line,
+                            at: t.at,
+                          }))}
+                      />
+                    )}
+                    {evidence && (
+                      <>
+                        <EvidenceChecklist
+                          evidence={evidence}
+                          busy={busy === "merge"}
+                          onMerge={() =>
+                            void runAction("merge", async () => {
+                              const result = await mergeContract(
+                                conn,
+                                selected.contract_id,
+                                evidence.evidence_id,
+                                "local-user",
+                              );
+                              setMergeInfo(
+                                result.nothingToMerge
+                                  ? (result.message ??
+                                      "本轮改动与你的修改冲突，已全部以你为准")
+                                  : `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
+                                      result.worktreeRemoved ? "已清理" : "保留"
+                                    }${
+                                      result.conflictResolution ===
+                                      "USER_FIRST_DISCARD"
+                                        ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
+                                        : ""
+                                    }`,
+                              );
+                            })
+                          }
+                        />
+                        {mergeInfo && (
+                          <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
+                            {mergeInfo}
+                          </div>
+                        )}
+                        <EvidenceView evidence={evidence} />
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
-            )}
-          </div>
+            }
+          />
         }
         footer={
           <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">

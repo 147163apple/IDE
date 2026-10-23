@@ -53,6 +53,11 @@ vi.mock("@/lib/daemon-api", async (orig) => {
     })),
     fetchProtectionRecommendations: vi.fn(async () => []),
     listContracts: vi.fn(async () => [contract]),
+    fetchPresentationSnapshot: vi.fn(async () => ({
+      version: 1,
+      updated_at: null,
+      contracts: {},
+    })),
     fetchArchGraph: vi.fn(async () => {
       throw new Error("no graph in test");
     }),

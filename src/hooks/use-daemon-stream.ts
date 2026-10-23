@@ -2,16 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { StagentIpcClient, type IpcClientStatus } from "@/lib/ipc/client";
 import type {
   ContractUpdatePayload,
+  DemoPreviewStatusPayload,
+  DisputeReportReadyPayload,
   ErrorPayload,
   EvidenceStatusChangedPayload,
   EvidenceReadyPayload,
   IpcFrame,
   ScopeAlertPayload,
+  StateChangedPayload,
   TerminalStreamPayload,
   WorkerLogPayload,
+  TaskGraphUpdatedPayload,
 } from "@/lib/ipc/frames";
 import type { ChatEvent } from "@/lib/chat-events";
-import type { TaskGraphUpdatedPayload } from "@/lib/ipc/frames";
 
 /**
  * Daemon WebSocket 实时流（Track C）。
@@ -66,6 +69,12 @@ export interface UseDaemonStreamOptions {
    * Daemon 是唯一权威，前端只按帧覆盖本地视图，不自行推导节点状态。
    */
   onTaskGraphUpdate?: (payload: TaskGraphUpdatedPayload) => void;
+  /** TASK-D.3 / C.2：15 态展示状态权威帧 */
+  onStateChanged?: (payload: StateChangedPayload) => void;
+  /** TASK-S.4 / C.2：Demo 预览生命周期 */
+  onDemoPreviewStatus?: (payload: DemoPreviewStatusPayload) => void;
+  /** TASK-S.5 / C.2：质疑报告摘要就绪（完整报告仍走 HTTP 响应） */
+  onDisputeReportReady?: (payload: DisputeReportReadyPayload) => void;
 }
 
 export interface DaemonStreamState {
@@ -184,6 +193,27 @@ export function useDaemonStream(
           // 乱序保护由消费方按 revision 判断；这里只做形状守卫
           if (payload?.graph) {
             handlersRef.current.onTaskGraphUpdate?.(payload);
+          }
+          return;
+        }
+        case "STATE_CHANGED": {
+          const payload = asPayload<StateChangedPayload>(frame);
+          if (payload?.presentation_state) {
+            handlersRef.current.onStateChanged?.(payload);
+          }
+          return;
+        }
+        case "DEMO_PREVIEW_STATUS": {
+          const payload = asPayload<DemoPreviewStatusPayload>(frame);
+          if (payload?.status) {
+            handlersRef.current.onDemoPreviewStatus?.(payload);
+          }
+          return;
+        }
+        case "DISPUTE_REPORT_READY": {
+          const payload = asPayload<DisputeReportReadyPayload>(frame);
+          if (payload?.report_id) {
+            handlersRef.current.onDisputeReportReady?.(payload);
           }
           return;
         }

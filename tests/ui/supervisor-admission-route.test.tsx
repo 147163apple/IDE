@@ -84,6 +84,11 @@ vi.mock("@/lib/daemon-api", async (orig) => {
       throw new Error("no graph in test");
     }),
     listContracts: vi.fn(async () => []),
+    fetchPresentationSnapshot: vi.fn(async () => ({
+      version: 1,
+      updated_at: null,
+      contracts: {},
+    })),
     readWorktreeFile: vi.fn(async (_c: unknown, p: string) => ({
       path: p,
       root: "/r",
