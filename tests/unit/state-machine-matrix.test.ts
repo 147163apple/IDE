@@ -8,6 +8,7 @@ import type {
 import {
   ALL_APPROVAL_STATUSES,
   ALL_LIFECYCLE_STATES,
+  FAST_PATH_APPROVER,
   LIFECYCLE_TRANSITIONS,
   STATE_MATRIX,
   TERMINAL_STATES,
@@ -271,6 +272,143 @@ describe("跃迁表：合法边与非法边", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe("ILLEGAL_STATE_PAIR");
+    }
+  });
+});
+
+describe("§9.1.1.1 v1.3.0 受控边（TASK-0.2c）", () => {
+  const DRAFT_PAIR: ContractStatePair = {
+    lifecycle_state: "DRAFT",
+    approval_status: "DRAFT",
+  };
+  const PREPARING_PAIR: ContractStatePair = {
+    lifecycle_state: "PREPARING",
+    approval_status: "APPROVED",
+  };
+  const AUDITED_PAIR: ContractStatePair = {
+    lifecycle_state: "AUDITED",
+    approval_status: "APPROVED",
+  };
+  const VERIFYING_PAIR: ContractStatePair = {
+    lifecycle_state: "VERIFYING",
+    approval_status: "APPROVED",
+  };
+  const RESUME_PAIR: ContractStatePair = {
+    lifecycle_state: "PENDING_RESUME",
+    approval_status: "APPROVED",
+  };
+  const FAST_PATH_CONTEXT = {
+    approval: { approved_by: FAST_PATH_APPROVER },
+    intent: { risk_level: "LOW" as const },
+  };
+
+  it("Fast Path 正例：system:fast-path + LOW 风险时 DRAFT → PREPARING 合法", () => {
+    const result = validateTransition(
+      DRAFT_PAIR,
+      PREPARING_PAIR,
+      FAST_PATH_CONTEXT,
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("Fast Path 负例：缺上下文 / 非系统凭证 / 非 LOW 风险一律拒绝", () => {
+    const cases: Array<
+      [string, Parameters<typeof validateTransition>[2] | undefined]
+    > = [
+      ["缺上下文", undefined],
+      [
+        "人工审批",
+        { approval: { approved_by: "tina" }, intent: { risk_level: "LOW" } },
+      ],
+      [
+        "中风险",
+        {
+          approval: { approved_by: FAST_PATH_APPROVER },
+          intent: { risk_level: "MEDIUM" },
+        },
+      ],
+      ["仅凭证无风险等级", { approval: { approved_by: FAST_PATH_APPROVER } }],
+    ];
+
+    for (const [label, context] of cases) {
+      const result =
+        context === undefined
+          ? validateTransition(DRAFT_PAIR, PREPARING_PAIR)
+          : validateTransition(DRAFT_PAIR, PREPARING_PAIR, context);
+      expect(result.ok, `${label} 必须被拒绝`).toBe(false);
+      if (!result.ok) {
+        expect(result.code).toBe("ILLEGAL_TRANSITION");
+      }
+    }
+  });
+
+  it("Fast Path 铁律：DRAFT → EXECUTING 在任何上下文下都非法（不得跳过 PREPARING）", () => {
+    const executing: ContractStatePair = {
+      lifecycle_state: "EXECUTING",
+      approval_status: "APPROVED",
+    };
+    const result = validateTransition(DRAFT_PAIR, executing, FAST_PATH_CONTEXT);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("ILLEGAL_TRANSITION");
+      expect(result.message).toContain("DRAFT -> EXECUTING");
+    }
+  });
+
+  it("外部改码降级：AUDITED → VERIFYING 必须携带 EXTERNAL_MUTATION", () => {
+    expect(
+      validateTransition(AUDITED_PAIR, VERIFYING_PAIR, {
+        reason: "EXTERNAL_MUTATION",
+      }).ok,
+    ).toBe(true);
+
+    const missing = validateTransition(AUDITED_PAIR, VERIFYING_PAIR);
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.code).toBe("ILLEGAL_TRANSITION");
+      expect(missing.message).toContain("EXTERNAL_MUTATION");
+    }
+
+    const wrongReason = validateTransition(AUDITED_PAIR, VERIFYING_PAIR, {
+      reason: "WORKTREE_MISSING_HEAL",
+    });
+    expect(wrongReason.ok).toBe(false);
+  });
+
+  it("恢复自愈：PENDING_RESUME → PREPARING 必须携带 WORKTREE_MISSING_HEAL", () => {
+    expect(
+      validateTransition(RESUME_PAIR, PREPARING_PAIR, {
+        reason: "WORKTREE_MISSING_HEAL",
+      }).ok,
+    ).toBe(true);
+
+    const missing = validateTransition(RESUME_PAIR, PREPARING_PAIR);
+    expect(missing.ok).toBe(false);
+    if (!missing.ok) {
+      expect(missing.code).toBe("ILLEGAL_TRANSITION");
+      expect(missing.message).toContain("WORKTREE_MISSING_HEAL");
+    }
+  });
+
+  it("熔断挂起后严禁跳回 PENDING_APPROVAL（只能续跑、自愈或放弃）", () => {
+    expect(canTransition("PENDING_RESUME", "PENDING_APPROVAL")).toBe(false);
+    const result = validateTransition(RESUME_PAIR, {
+      lifecycle_state: "PENDING_APPROVAL",
+      approval_status: "PENDING_REVIEW",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("ILLEGAL_TRANSITION");
+    }
+  });
+
+  it("新增边不拓宽其它跨越式跃迁（AUDITED → PREPARING 仍非法）", () => {
+    const result = validateTransition(AUDITED_PAIR, PREPARING_PAIR, {
+      reason: "EXTERNAL_MUTATION",
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.code).toBe("ILLEGAL_TRANSITION");
     }
   });
 });

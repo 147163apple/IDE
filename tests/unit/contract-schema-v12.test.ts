@@ -55,9 +55,20 @@ function asRaw(contract: SoftwareContractV12): Record<string, unknown> {
 }
 
 describe("Schema 版本与字段集合", () => {
-  it("schema_version 锁定 1.2.0，拒绝 1.1.3 / 1.2.1", () => {
-    expect(SOFTWARE_CONTRACT_SCHEMA_VERSION).toBe("1.2.0");
-    expect(draft().schema_version).toBe("1.2.0");
+  it("签发版本为 1.3.0，存量 1.2.0 仍可解析，拒绝 1.1.3 / 1.2.1", () => {
+    // TASK-0.2c 期望变更 1/2：签发版本由 1.2.0 升至 1.3.0（架构 §9.1）。
+    // 断言从"锁定单值"改为"签发值 + 兼容白名单"，否则无法同时表达
+    // 「新合同一律 1.3.0」与「存量 1.2.0 继续可读」两个要求。
+    expect(SOFTWARE_CONTRACT_SCHEMA_VERSION).toBe("1.3.0");
+    expect(draft().schema_version).toBe("1.3.0");
+
+    expect(
+      softwareContractSchema.safeParse({
+        ...asRaw(draft()),
+        schema_version: "1.2.0",
+      }).success,
+      "v1.2.0 存量合同必须继续通过解析",
+    ).toBe(true);
 
     for (const legacy of ["1.1.3", "1.2.1", "1.0.0"]) {
       const raw = { ...asRaw(draft()), schema_version: legacy };
@@ -165,8 +176,14 @@ describe("contract_revision（v1.2.0 新增）", () => {
 });
 
 describe("creator 枚举对齐 ADR-007 双 Agent 术语", () => {
-  it("仅允许 user / supervisor", () => {
-    expect(creatorSchema.options).toEqual(["user", "supervisor"]);
+  it("允许 user / supervisor / system:fast-path", () => {
+    // TASK-0.2c 期望变更 2/2：§9.1 与 §0.2.3.1 要求支持 Fast Path 系统签发，
+    // 故枚举增加 system:fast-path；tech_lead 仍属废止项。
+    expect(creatorSchema.options).toEqual([
+      "user",
+      "supervisor",
+      "system:fast-path",
+    ]);
   });
 
   it("拒绝已废止的 tech_lead", () => {
