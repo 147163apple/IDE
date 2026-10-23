@@ -18,7 +18,8 @@ import {
  *
  * 判据：A §9.3 的 13 个基础 error_code + W.3 增补 E_PORT_CONFLICT
  * + W.2b 增补 E_OUT_OF_SCOPE_UNTRACKED
- * + S.4 增补 E_DEMO_PAYLOAD_TOO_LARGE = 16 个 → 9 个 reason_code，正反向均可闭环。
+ * + S.4 增补 E_DEMO_PAYLOAD_TOO_LARGE
+ * + S.5 增补 E_DISPUTE_TIMEOUT = 17 个 → 9 个 reason_code，正反向均可闭环。
  */
 
 /** A §9.3 表格的逐行期望值（手工登记，不以实现反推） */
@@ -40,12 +41,14 @@ const EXPECTED_MAPPING: Record<ErrorCode, string> = {
   E_PORT_CONFLICT: "UNSAFE_EXECUTION",
   // TASK-S.4：Demo 单文件 2MB 上限，归入资源耗尽类
   E_DEMO_PAYLOAD_TOO_LARGE: "BUDGET_EXHAUSTED",
+  // TASK-S.5：60s 质疑自查看门狗超时，归入时间预算耗尽
+  E_DISPUTE_TIMEOUT: "BUDGET_EXHAUSTED",
 };
 
-describe("目录基数：16 个 error_code → 9 个 reason_code", () => {
-  it("恰好 16 个错误码且无重复", () => {
-    expect(ERROR_CODES).toHaveLength(16);
-    expect(new Set(ERROR_CODES).size).toBe(16);
+describe("目录基数：17 个 error_code → 9 个 reason_code", () => {
+  it("恰好 17 个错误码且无重复", () => {
+    expect(ERROR_CODES).toHaveLength(17);
+    expect(new Set(ERROR_CODES).size).toBe(17);
   });
 
   it("恰好 9 个原因码，且与 evidence.schema 的 reasonCodeSchema 同集合", () => {
@@ -86,12 +89,14 @@ describe("正向映射：error_code → reason_code", () => {
     ]);
   });
 
-  it("多对一归并正确：BUDGET_EXHAUSTED 由 4 个错误码共同产出", () => {
+  it("多对一归并正确：BUDGET_EXHAUSTED 由 5 个错误码共同产出", () => {
     // TASK-S.4 增补 E_DEMO_PAYLOAD_TOO_LARGE：单文件 2MB 上限同属"资源上限"家族
+    // TASK-S.5 增补 E_DISPUTE_TIMEOUT：60s 看门狗同属"时间预算耗尽"
     expect(errorCodesForReasonCode("BUDGET_EXHAUSTED").sort()).toEqual([
       "E_BUDGET_EXCEEDED",
       "E_COMMAND_TIMEOUT",
       "E_DEMO_PAYLOAD_TOO_LARGE",
+      "E_DISPUTE_TIMEOUT",
       "E_TASK_TIMEOUT",
     ]);
   });
@@ -114,11 +119,11 @@ describe("反向映射：reason_code → error_code[]（一对多）", () => {
     }
   });
 
-  it("反向映射覆盖全部 16 个错误码，无遗漏", () => {
+  it("反向映射覆盖全部 17 个错误码，无遗漏", () => {
     const covered = new Set(
       REASON_CODES.flatMap((reason) => errorCodesForReasonCode(reason)),
     );
-    expect(covered.size).toBe(16);
+    expect(covered.size).toBe(17);
     for (const code of ERROR_CODES) {
       expect(covered.has(code), `uncovered error_code: ${code}`).toBe(true);
     }
