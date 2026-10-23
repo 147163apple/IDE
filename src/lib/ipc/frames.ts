@@ -46,6 +46,8 @@ export type IpcFrameType =
   | "STATE_CHANGED"
   // ---- v1.6.1 §6.1 Demo 预览生命周期广播（TASK-S.4） ----
   | "DEMO_PREVIEW_STATUS"
+  // ---- v1.6.1 §6.1 质疑自查报告广播（TASK-S.5） ----
+  | "DISPUTE_REPORT_READY"
   // ---- 历史扩展帧（v1.1 协议遗留，仅保留兼容，禁止再新增） ----
   | "WORKER_LOG"
   | "SCOPE_ALERT";
@@ -201,6 +203,44 @@ export interface ErrorPayload {
   message: string;
 }
 
+/**
+ * `DISPUTE_REPORT_READY` 载荷（TASK-S.5 / 架构 §6.1）。
+ *
+ * 只广播结论摘要，不把完整三方事实塞进帧：Diff 可能很大，
+ * 完整报告由 `POST /api/supervisor/dispute` 的响应体承载。
+ */
+export interface DisputeReportReadyPayload {
+  contract_id: string;
+  report_id: string;
+  change_request_id: string;
+  classification: "IMPLEMENTATION_BUG" | "REQUIREMENT_DRIFT" | "UNATTRIBUTED";
+  confidence: number;
+  /** 置信度不足或看门狗超时导致的降级 */
+  degraded: boolean;
+  summary: string;
+  /** 三方证据链摘要（完整报告由 POST 响应体返回，避免帧体过大） */
+  facts: {
+    prompt: {
+      session_id: string | null;
+      original_request: string | null;
+      matched_messages: number;
+      confirmations: number;
+    };
+    spec: {
+      snapshot_id: string;
+      version: number;
+      matched_entries: string[];
+    } | null;
+    code: {
+      worktree_available: boolean;
+      changed_files: string[];
+      verification: Array<{ alias: string; exit_code: number }>;
+      evidence_id: string | null;
+    };
+  };
+  generated_at: string;
+}
+
 export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "AUTH",
   "AUTH_OK",
@@ -217,6 +257,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "TERMINAL_STREAM",
   "STATE_CHANGED",
   "DEMO_PREVIEW_STATUS",
+  "DISPUTE_REPORT_READY",
   "WORKER_LOG",
   "SCOPE_ALERT",
 ] as const;
@@ -308,6 +349,15 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     maxPayloadBytes: MAX_FRAME_BYTES,
     description:
       "Demo 预览服务生命周期广播，含独立 Origin 的 url / port / status / updated_at（TASK-S.4）",
+  },
+  {
+    type: "DISPUTE_REPORT_READY",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.1",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "质疑自查报告广播，携带归因类别、置信度、降级标记与白话摘要（TASK-S.5 / §6.1）",
   },
   {
     type: "CHAT_EVENT",
