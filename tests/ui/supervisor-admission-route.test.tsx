@@ -119,7 +119,10 @@ const { Route } = await import("../../src/routes/index");
 const Console = Route.options.component as React.ComponentType;
 
 async function createViaForm() {
-  fireEvent.click(screen.getByRole("button", { name: /新建合同/ }));
+  // 顶栏文案已改为「新建需求」（底层对象仍是 SoftwareContract）；
+  // 点击会同时打开合同操作台，表单才不会渲染在看不见的标签里。
+  // 欢迎区也有同名入口，所以用顶栏的 testid 精确定位。
+  fireEvent.click(screen.getByTestId("new-requirement"));
   const title = screen.getByLabelText("标题");
   fireEvent.change(title, { target: { value: "给登录页加记住我" } });
   await act(async () => {

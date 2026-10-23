@@ -325,11 +325,14 @@ describe("TASK-C.2 结构化审阅与执行期控制", () => {
     expect(screen.getByTestId("studio-emergency-pause")).toBeDisabled();
   });
 
-  it("顶栏模式常驻指示：VIBE 无锁，PROTECTED 显示已锁 N 处并可点开 Studio", () => {
+  it("顶栏模式胶囊：VIBE 无锁，PROTECTED 带锁数并可点开 Studio", () => {
     render(<WorkspaceLayout {...layoutBase} protectedCount={3} />);
     const mode = screen.getByTestId("run-mode");
-    expect(mode).toHaveTextContent("🔒 保护模式 PROTECTED (已锁 3 处)");
+    // 顶栏收口：徽标压成紧凑胶囊，锁数只进 data 属性与 title
+    expect(mode).toHaveTextContent("🔒 PROTECTED");
+    expect(mode).not.toHaveTextContent("已锁 3 处");
     expect(mode).toHaveAttribute("data-locked-count", "3");
+    expect(mode).toHaveAttribute("title", expect.stringContaining("已锁 3 处"));
     fireEvent.click(mode);
     expect(
       screen.getByRole("tab", { name: "Supervisor Studio" }),
@@ -337,7 +340,7 @@ describe("TASK-C.2 结构化审阅与执行期控制", () => {
 
     render(<WorkspaceLayout {...layoutBase} runMode="VIBE" />);
     const vibe = screen.getAllByTestId("run-mode")[1]!;
-    expect(vibe).toHaveTextContent("🔓 自由模式 VIBE");
+    expect(vibe).toHaveTextContent("🔓 VIBE");
     expect(vibe).toHaveAttribute("data-locked-count", "0");
   });
 });

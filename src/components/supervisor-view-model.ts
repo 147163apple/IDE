@@ -1,5 +1,6 @@
 import type { SoftwareContract } from "@/lib/contract.schema";
 import type { AdmissionView } from "@/lib/daemon-api";
+import type { SupervisorContractView } from "./supervisor/SupervisorTab";
 import type { ExecutionStatus, WorkerControl } from "./workspace-types";
 
 /**
@@ -104,4 +105,90 @@ export function confirmSentence(entryNames: string[]): string {
     return "AI 想修改被保护的代码，同意吗？";
   }
   return `AI 想修改被保护的【${entryNames.join("、")}】代码，同意吗？`;
+}
+
+// ---------------------------------------------------------------------------
+// Supervisor Tab 的视图适配
+//
+// 同一套映射同时服务两种来源：
+// - 已落盘合同（左侧需求列表 / 合同操作台选中）；
+// - `POST /api/supervisor/draft` 刚返回的**未落盘草案**（`isDraft=true`）。
+// 两者字段完全同源（草案本身就是 `softwareContractSchema` 的解析结果），
+// 因此不需要第二套渲染分支——否则界面迟早会出现"草案能看到、合同看不到"的漂移。
+// ---------------------------------------------------------------------------
+
+/**
+ * 合同/草案 → Supervisor Tab 视图。
+ *
+ * 只搬字段，不做推断：健康度、成熟度分数、风险百分比一律不补（D4 边界）。
+ * `unresolved_questions` 原样透传，**不去重、不截断**（G-11 零丢失）。
+ */
+export function toSupervisorContractView(
+  contract: SoftwareContract,
+  options: { isDraft?: boolean } = {},
+): SupervisorContractView {
+  const scope = contract.authorization.file_system_scope;
+  const assessment = contract.supervisor_metadata?.maturity_assessment;
+  return {
+    id: contract.contract_id,
+    title: contract.intent.title,
+    description: contract.intent.description || "（该合同未填写描述）",
+    state: contract.lifecycle_state,
+    approval: contract.approval.status,
+    acceptance: [...contract.intent.acceptance_criteria],
+    writable: [...scope.writable_paths],
+    forbidden: [...(scope.strictly_forbidden_paths ?? [])],
+    commands: contract.verification_spec.commands.map((command) => ({
+      alias: command.alias,
+      argv: [command.executable, ...command.args].join(" "),
+    })),
+    rationale: [...(assessment?.rationale ?? [])],
+    unresolved: [...(assessment?.unresolved_questions ?? [])],
+    ...(options.isDraft === true ? { isDraft: true } : {}),
+  };
+}
+
+/** 名词→相对路径的默认值，与后端 L0 的 `DEFAULT_FORBIDDEN_PATHS` 不同源，这里只做兜底展示 */
+const FALLBACK_COMMAND = "npm test";
+
+export interface DraftFormSeed {
+  title: string;
+  description: string;
+  /** 逗号分隔，直接喂给表单输入框 */
+  paths: string;
+  command: string;
+  acceptance: string[];
+}
+
+/**
+ * 草案 → 「新建需求」表单预填。
+ *
+ * 关键点：可写路径取 **L0 推导结果**（`plan.writable_paths`），而不是草案合同里的
+ * 同名字段——两者本应相同，但用 plan 能让"涉及范围"在 UI 上指向推导来源，
+ * 一旦将来合同侧加了裁剪逻辑，界面仍然呈现 Supervisor 真实给出的范围。
+ *
+ * 参数只声明真正读到的字段（结构化最小集），这样 Daemon 侧的 `L0DraftPlan`
+ * 与 HTTP 视图 `SupervisorDraftPlanView` 都能直接传入，不必为类型做二次转换。
+ */
+export function seedDraftForm(draft: {
+  contract: SoftwareContract;
+  plan: {
+    writable_paths: string[];
+    commands: ReadonlyArray<{ executable: string; args: string[] }>;
+  };
+}): DraftFormSeed {
+  const command =
+    draft.plan.commands[0] ?? draft.contract.verification_spec.commands[0];
+  return {
+    title: draft.contract.intent.title,
+    description: draft.contract.intent.description,
+    paths: draft.plan.writable_paths.join(", "),
+    command: command
+      ? [command.executable, ...command.args].join(" ")
+      : FALLBACK_COMMAND,
+    acceptance:
+      draft.contract.intent.acceptance_criteria.length > 0
+        ? [...draft.contract.intent.acceptance_criteria]
+        : ["验证命令通过"],
+  };
 }

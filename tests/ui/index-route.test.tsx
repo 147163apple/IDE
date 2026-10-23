@@ -90,37 +90,68 @@ const { Route } = await import("../../src/routes/index");
 const Console = Route.options.component as React.ComponentType;
 
 describe("TASK-C.1 主页面接入三栏工作台", () => {
-  it("首页渲染 WorkspaceLayout，并保留旧控制台功能", async () => {
+  it("首屏是空编辑区：不自动打开 Studio，顶栏只留状态胶囊", async () => {
     render(<Console />);
     expect(screen.getByTestId("workspace-layout")).toBeInTheDocument();
     expect(screen.getByTestId("run-mode")).toHaveAttribute("data-mode", "VIBE");
-    // Studio 默认打开，旧的合同详情区在其中
-    expect(
-      screen.getByRole("tab", { name: "Supervisor Studio" }),
-    ).toBeInTheDocument();
-    // 旧 Header 按钮仍在
-    expect(screen.getByText("模型 Key")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /新建合同/ }),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("stream-status")).toBeInTheDocument();
+    // 新交互：首屏不再默认打开 Supervisor Studio，中央是欢迎/空编辑区
+    expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
+    expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
+    // 顶栏收口：右侧只有一个最小操作点（欢迎区另有自己的入口，故用 testid 定位）
+    expect(screen.getByTestId("new-requirement")).toHaveTextContent("新建需求");
+    // 原来挤在顶栏的运维读数，现在都不在顶栏里
+    const header = screen.getByTestId("workspace-header");
+    expect(header).not.toHaveTextContent("GATEWAY_ENFORCED");
+    expect(header).not.toHaveTextContent("实时流");
+    expect(screen.queryByTestId("worker-control")).toBeNull();
+    expect(screen.queryByTestId("stream-status")).toBeNull();
     // 真实数据：仓库名来自 Daemon health
     await waitFor(() =>
       expect(screen.getByTestId("repo-name")).toHaveTextContent("1020"),
     );
-    // 合同列表与合同详情 / 操作按钮
+  });
+
+  it("连接与诊断收进设置页：齿轮打开设置 Tab，模型 Key / 实时流都在里面", async () => {
+    render(<Console />);
+    fireEvent.click(screen.getByTestId("activity-settings"));
+    expect(
+      screen.getByRole("tab", { name: "设置" }).getAttribute("aria-selected"),
+    ).toBe("true");
+    expect(screen.getByTestId("settings-tab")).toBeInTheDocument();
+    // 原顶栏上的三样东西现在都在设置页
+    expect(screen.getByText("模型 Key")).toBeInTheDocument();
+    expect(screen.getByTestId("stream-status")).toBeInTheDocument();
+    expect(screen.getByTestId("worker-control")).toBeInTheDocument();
+    // 连接配置可编辑
+    expect(screen.getByTestId("daemon-url")).toBeInTheDocument();
+    expect(screen.getByTestId("session-token")).toBeInTheDocument();
+  });
+
+  it("点需求才打开合同操作台，旧控制台功能仍在", async () => {
+    render(<Console />);
     fireEvent.click(await screen.findByText("主页面接线测试"));
+    expect(
+      screen.getByRole("tab", { name: "Supervisor Studio" }),
+    ).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("运行 Worker")).toBeInTheDocument();
     expect(screen.getByText("执行验证")).toBeInTheDocument();
     expect(screen.getByText(/查看 Diff/)).toBeInTheDocument();
     // P.1 顺手修：顶栏分支改为显示主工作区真实分支（不再按合同拼 task/xxx）；
-    // 合同与 Worktree 绑定仍由 contract-info / workspace-binding 体现
+    // 合同与 Worktree 绑定仍由 workspace-binding 体现
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
     expect(screen.getByTestId("workspace-binding")).toHaveAttribute(
       "data-bound",
       "worktree",
     );
-    expect(screen.getByText("架构雷达", { exact: false })).toBeInTheDocument();
+  });
+
+  it("架构雷达移出左栏：Supervisor 的架构总览分段承载它", async () => {
+    render(<Console />);
+    // 左栏只剩资源管理器与需求列表
+    expect(screen.queryByText("架构雷达", { exact: false })).toBeNull();
+    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    expect(screen.getByTestId("supervisor-architecture")).toBeInTheDocument();
+    expect(screen.getByTestId("load-arch-graph")).toBeInTheDocument();
   });
   it("保护清单损坏：显示白话警告，顶栏不再假装自由模式", async () => {
     vi.mocked(fetchProtection).mockResolvedValueOnce({

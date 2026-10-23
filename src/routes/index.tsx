@@ -1,14 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Activity,
   AlertTriangle,
   CheckCircle2,
   GitCompare,
   Loader2,
   Play,
-  Plus,
-  Radio,
   RefreshCw,
   ShieldCheck,
   XCircle,
@@ -43,6 +40,7 @@ import {
   fetchEvidence,
   fetchHealth,
   fetchSettings,
+  generateSupervisorDraft,
   listContracts,
   loadConnection,
   mergeContract,
@@ -59,6 +57,7 @@ import {
   type ModelSettings,
   type ProtectionRecommendationView,
   type ProtectionStateView,
+  type SupervisorDraftResult,
   type WorkerRunResult,
 } from "@/lib/daemon-api";
 import { ContractCard } from "@/components/contract/ContractCard";
@@ -81,9 +80,13 @@ import {
 } from "@/components/ProtectionCard";
 import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
+import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
+import { SettingsTab } from "@/components/settings/SettingsTab";
 import {
   shouldConfirmAdmission,
+  seedDraftForm,
   toStudioDraft,
+  toSupervisorContractView,
 } from "@/components/supervisor-view-model";
 import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
 import type { AgentSessionTransport } from "@/hooks/use-agent-session";
@@ -93,7 +96,10 @@ import {
   buildFileTree,
   toExecutionStatus,
 } from "@/components/workspace-adapters";
-import type { ActiveContract } from "@/components/workspace-types";
+import {
+  EXECUTION_STATUS_LABEL,
+  type ActiveContract,
+} from "@/components/workspace-types";
 import { createProtectionPoller } from "@/lib/perf-guards";
 import type {
   ContractUpdatePayload,
@@ -129,6 +135,14 @@ function Console() {
   );
   const [showForm, setShowForm] = useState(false);
   const [scopeDraft, setScopeDraft] = useState<string[]>([]);
+  /**
+   * `POST /api/supervisor/draft` 刚返回的**未落盘草案**。
+   *
+   * 为什么要有这个状态：草案在用户点「提交给 Daemon」之前根本不存在于仓库里，
+   * 却又必须让 Supervisor Tab / Studio 显示它的白话理由与未决问题——
+   * 不能伪造一个假合同塞进 contracts 列表，那会让"已落盘"和"未提交"混为一谈。
+   */
+  const [draft, setDraft] = useState<SupervisorDraftResult | null>(null);
 
   const [graph, setGraph] = useState<ArchGraphPayload | null>(null);
   const [query, setQuery] = useState("");
@@ -141,7 +155,6 @@ function Console() {
   const [diffFiles, setDiffFiles] = useState<DiffFilesView | null>(null);
   const [mergeInfo, setMergeInfo] = useState<string | null>(null);
   const [settings, setSettings] = useState<ModelSettings | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [currentBranch, setCurrentBranch] = useState("main");
   const [protection, setProtection] = useState<ProtectionStateView | null>(
     null,
@@ -157,6 +170,22 @@ function Console() {
    * AUTO_APPROVED / SKIPPED 一律置 null → 确认卡结构性不渲染（无交集 0 弹窗）。
    */
   const [admission, setAdmission] = useState<AdmissionView | null>(null);
+  /**
+   * 布局持有 Tab 状态，「打开合同操作台」这类外部跳转用递增信号驱动
+   * （与 openRequest 的 nonce 同一套路，避免把 Tab 状态提到页面上）。
+   */
+  const [studioNonce, setStudioNonce] = useState(0);
+  /**
+   * 打开「新建需求」：带上草稿范围、展开创建表单、并切到合同操作台。
+   * 必须一起做——首屏不再默认打开 Studio，只 setShowForm 会让表单渲染在看不见的标签里。
+   * 同时丢弃上一份未提交草案：换需求就该重新生成，不能让旧理由挂在新意图上。
+   */
+  const openNewRequirement = useCallback((paths: string[]) => {
+    setScopeDraft(paths);
+    setDraft(null);
+    setShowForm(true);
+    setStudioNonce((n) => n + 1);
+  }, []);
 
   const fileTree = useMemo(
     () =>
@@ -561,6 +590,34 @@ function Console() {
       }
     : null;
 
+  /**
+   * 提意图 → 草案：只调 `POST /api/supervisor/draft`（Zero-Tool 只读），
+   * 不创建合同、不写入 `.stagent/contracts`。失败（402 预算耗尽 / 409 未配模型）
+   * 由 `runAction` 统一落到页面 error 条，不做静默降级。
+   */
+  const requestDraft = (intent: string) => {
+    void runAction("draft", async () => {
+      const outcome = await generateSupervisorDraft(conn, {
+        intent,
+        context_paths: scopeDraft,
+      });
+      setDraft(outcome.draft);
+    });
+  };
+
+  /**
+   * Supervisor Tab 的视图数据：只做字段搬运，不做推断。
+   * 合同里没有的东西（健康度 / 成熟度 / 风险分 / 用例通过率）这里一律不补。
+   *
+   * 草案优先于选中合同：草案代表"刚刚这个意图"的最新推导结果；
+   * 用户点左侧合同列表时会清掉 draft，因此两者不会互相遮挡。
+   */
+  const supervisorContract = draft
+    ? toSupervisorContractView(draft.contract, { isDraft: true })
+    : selected
+      ? toSupervisorContractView(selected)
+      : null;
+
   return (
     <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
       <WorkspaceLayout
@@ -570,12 +627,9 @@ function Console() {
         runMode={
           protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
         }
-        workerControl={selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"}
-        daemonConnected={connected}
         contract={workspaceContract}
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
-        defaultOpenStudio
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard
@@ -585,7 +639,103 @@ function Console() {
             onDeny={onDenyAdmission}
           />
         }
-        rightPanel={<AgentChatPane transport={chatTransport} />}
+        rightPanel={
+          // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
+          <AgentChatPane transport={chatTransport} />
+        }
+        supervisorContent={
+          // 左下角 Supervisor 图标 → 中央可关闭 Tab；数据全部来自合同/保护清单
+          <SupervisorTab
+            repoName={repoName}
+            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+            baseBranch={currentBranch}
+            contractCount={contracts.length}
+            contract={supervisorContract}
+            architecture={
+              // 架构总览：原来挤在左栏 260px 里，现在在中央宽屏铺开
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="opacity-60">
+                    {graph
+                      ? `${graph.stats.nodes} 节点 · ${graph.stats.edges} 条依赖 · ${graph.cycles.length} 处环`
+                      : "尚未加载依赖拓扑"}
+                  </span>
+                  <button
+                    type="button"
+                    data-testid="load-arch-graph"
+                    onClick={() => void loadArchGraph()}
+                    className="shrink-0 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                  >
+                    {graph ? "刷新依赖拓扑" : "加载架构图"}
+                  </button>
+                </div>
+                {graph ? (
+                  <div className="flex h-[520px] flex-col overflow-hidden rounded border border-border">
+                    <FilterToolbar
+                      query={query}
+                      onQueryChange={setQuery}
+                      showCycles={showCycles}
+                      onToggleCycles={setShowCycles}
+                      nodeCount={graph.stats.nodes}
+                      edgeCount={graph.stats.edges}
+                      selectedCount={selectedPaths.length}
+                      matches={matches}
+                    />
+                    <RadarGraph
+                      nodes={graph.graph.nodes}
+                      edges={graph.graph.edges}
+                      cycles={graph.cycles}
+                      selected={selectedPaths}
+                      onSelectionChange={setSelectedPaths}
+                      focusPath={focusPath}
+                      showCycles={showCycles}
+                      className="min-h-0 flex-1"
+                    />
+                    <ScopeSelector
+                      selected={selectedPaths}
+                      onApply={(paths) => openNewRequirement(paths)}
+                      onClear={() => setSelectedPaths([])}
+                    />
+                  </div>
+                ) : (
+                  <p className="opacity-70">
+                    连接 Daemon
+                    后可加载依赖拓扑；圈选出的文件会直接带进新建需求的范围。
+                  </p>
+                )}
+              </div>
+            }
+            protection={{
+              mode: protection?.mode ?? "VIBE",
+              entries: protection?.entries.length ?? 0,
+              checkpoint: protection?.checkpoint?.at ?? null,
+            }}
+            admission={
+              admission
+                ? {
+                    decision: admission.decision,
+                    reason: admission.reason ?? null,
+                    cardId: admission.cardId ?? null,
+                  }
+                : null
+            }
+            busy={busy === "admit" || busy === "deny-admission"}
+            onApprove={
+              admission ? () => onApproveAdmission(admission) : undefined
+            }
+            onDeny={admission ? () => onDenyAdmission(admission) : undefined}
+            onOpenConsole={() => setStudioNonce((n) => n + 1)}
+          />
+        }
+        openStudioRequest={studioNonce}
+        terminalPanel={
+          // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
+          <StructuredTerminal
+            lines={stream.terminal
+              .filter((t) => !selected || t.contractId === selected.contract_id)
+              .map((t) => ({ stream: t.stream, line: t.line, at: t.at }))}
+          />
+        }
         openRequest={openRequest}
         renderFile={(filePath, bound) => {
           const contractId = bound
@@ -613,69 +763,54 @@ function Console() {
             </div>
           ) : null
         }
-        headerExtra={
-          <>
-            {protection?.checkpoint && (
-              <button
-                type="button"
-                data-testid="undo-round"
-                disabled={protectionBusy}
-                onClick={() => void onUndoRound()}
-                className="ml-2 flex items-center gap-1 rounded border border-amber-500/50 px-2 py-1 text-xs text-amber-700 hover:bg-amber-500/10 disabled:opacity-50"
-              >
-                ↶ 撤销本轮改动
-              </button>
-            )}
-            <span
-              className={`ml-2 flex items-center gap-1 text-xs ${connected ? "text-emerald-500" : "text-destructive"}`}
-            >
-              <Activity className="h-3 w-3" />
-              {connected ? "Daemon 已连接" : "未连接"}
-            </span>
-            <span
-              data-testid="stream-status"
-              className={`flex items-center gap-1 text-xs ${
-                stream.status === "connected"
-                  ? "text-emerald-500"
-                  : stream.status === "closed"
-                    ? "text-muted-foreground"
-                    : "text-amber-500"
-              }`}
-            >
-              <Radio className="h-3 w-3" />
-              {stream.status === "connected"
-                ? "实时流已通"
-                : stream.status === "connecting"
-                  ? "实时流连接中"
-                  : stream.status === "reconnecting"
-                    ? "实时流重连中"
-                    : "实时流未开"}
-            </span>
-            <button
-              onClick={() => setShowSettings((v) => !v)}
-              className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${settings?.configured ? "bg-emerald-500" : "bg-amber-500"}`}
+        onNewRequirement={() => openNewRequirement(selectedPaths)}
+        settingsContent={
+          /*
+            设置 Tab：连接地址、Session Token、实时流、网关受控、模型 Key、
+            Worktree 绝对路径、撤销本轮——原来全堆在顶栏，现在只在这里。
+          */
+          <SettingsTab
+            conn={conn}
+            onConnChange={(next) => {
+              // 先落盘（saveConnection 会归一 Token/地址），再回读进内存：
+              // 界面上看到的连接，必须与实际发出去的 header 完全一致
+              saveConnection(next);
+              setConn(loadConnection());
+            }}
+            connected={connected}
+            daemonPort={daemonPort}
+            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+            baseBranch={currentBranch}
+            runMode={
+              protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+            }
+            protectedCount={protection?.entries.length ?? 0}
+            workerControl={
+              selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"
+            }
+            streamStatus={stream.status}
+            worktreePath={workspaceContract?.worktreePath ?? null}
+            executionStatus={
+              selected
+                ? EXECUTION_STATUS_LABEL[
+                    toExecutionStatus(selected.lifecycle_state)
+                  ]
+                : null
+            }
+            modelKeySlot={
+              <ModelKeyPanel
+                conn={conn}
+                settings={settings}
+                onSaved={(next) => setSettings(next)}
               />
-              模型 Key
-            </button>
-            <button
-              onClick={() => void refresh()}
-              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <RefreshCw className="h-3 w-3" /> 刷新
-            </button>
-            <button
-              onClick={() => {
-                setScopeDraft(selectedPaths);
-                setShowForm((v) => !v);
-              }}
-              className="flex items-center gap-1 rounded border border-border px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <Plus className="h-3 w-3" /> 新建合同
-            </button>
-          </>
+            }
+            checkpoint={protection?.checkpoint?.roundId ?? null}
+            onUndoRound={
+              protection?.checkpoint ? () => void onUndoRound() : undefined
+            }
+            undoBusy={protectionBusy}
+            onRefresh={() => void refresh()}
+          />
         }
         banner={
           <>
@@ -717,22 +852,6 @@ function Console() {
                 {undoInfo}
               </div>
             )}
-            <ConnectionBar
-              conn={conn}
-              onChange={(next) => {
-                setConn(next);
-                saveConnection(next);
-              }}
-            />
-
-            {showSettings && (
-              <ModelKeyPanel
-                conn={conn}
-                settings={settings}
-                onSaved={(next) => setSettings(next)}
-              />
-            )}
-
             {error && (
               <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
                 {error}
@@ -767,96 +886,47 @@ function Console() {
           </>
         }
         leftExtra={
-          <>
-            <div className="min-h-[180px] flex-1 overflow-auto">
-              <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
-                Contracts ({contracts.length})
-              </div>
-              {contracts.length === 0 && (
-                <div className="px-3 py-4 text-xs text-muted-foreground">
-                  暂无合同。点击「新建合同」由 Daemon 持久化。
-                </div>
-              )}
-              {contracts.map((contract) => (
-                <button
-                  key={contract.contract_id}
-                  onClick={() => {
-                    setSelectedId(contract.contract_id);
-                    setEvidence(null);
-                    setWorkerResult(null);
-                    setDiff(null);
-                    setDiffFiles(null);
-                    // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
-                    setAdmission(null);
-                  }}
-                  className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
-                    selectedId === contract.contract_id
-                      ? "bg-sidebar-accent"
-                      : ""
-                  }`}
-                >
-                  <div className="truncate text-xs">
-                    {contract.intent.title}
-                  </div>
-                  <div className="mt-1 text-[10px] text-muted-foreground">
-                    {contract.lifecycle_state} ·{" "}
-                    {contract.contract_id.slice(-8)}
-                  </div>
-                </button>
-              ))}
+          /*
+            左栏只做资源管理器：文件树（布局自带）+ 需求/合同列表。
+            架构雷达已挪到 Supervisor 的「项目全景解读 · 架构总览」——260px 的
+            窄栏根本放不下拓扑图，圈选和筛选都被挤变形。
+          */
+          <div className="min-h-[120px]">
+            <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
+              需求（合同 {contracts.length}）
             </div>
-
-            <div className="flex h-[320px] flex-col border-t border-border">
-              <div className="flex items-center justify-between px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                <span>
-                  架构雷达 {graph ? `· ${graph.stats.nodes} 节点` : ""}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => void loadArchGraph()}
-                  className="rounded border border-border px-1.5 py-0.5 text-[9px] normal-case tracking-normal hover:bg-accent"
-                >
-                  {graph ? "刷新依赖拓扑" : "查看架构图"}
-                </button>
+            {contracts.length === 0 && (
+              <div className="px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
               </div>
-              {graph ? (
-                <>
-                  <FilterToolbar
-                    query={query}
-                    onQueryChange={setQuery}
-                    showCycles={showCycles}
-                    onToggleCycles={setShowCycles}
-                    nodeCount={graph.stats.nodes}
-                    edgeCount={graph.stats.edges}
-                    selectedCount={selectedPaths.length}
-                    matches={matches}
-                  />
-                  <RadarGraph
-                    nodes={graph.graph.nodes}
-                    edges={graph.graph.edges}
-                    cycles={graph.cycles}
-                    selected={selectedPaths}
-                    onSelectionChange={setSelectedPaths}
-                    focusPath={focusPath}
-                    showCycles={showCycles}
-                    className="min-h-0 flex-1"
-                  />
-                  <ScopeSelector
-                    selected={selectedPaths}
-                    onApply={(paths) => {
-                      setScopeDraft(paths);
-                      setShowForm(true);
-                    }}
-                    onClear={() => setSelectedPaths([])}
-                  />
-                </>
-              ) : (
-                <div className="px-2 py-4 text-[11px] text-muted-foreground">
-                  连接 Daemon 后加载依赖图
+            )}
+            {contracts.map((contract) => (
+              <button
+                key={contract.contract_id}
+                onClick={() => {
+                  setSelectedId(contract.contract_id);
+                  setEvidence(null);
+                  setWorkerResult(null);
+                  setDiff(null);
+                  setDiffFiles(null);
+                  // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
+                  setAdmission(null);
+                  // 同上：未提交草案是"另一个意图"的产物，选中真实合同后必须让位
+                  setDraft(null);
+                  // 首屏不再默认打开操作台，点需求才把它拉起来（否则点了没反应）
+                  setStudioNonce((n) => n + 1);
+                }}
+                className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
+                  selectedId === contract.contract_id ? "bg-sidebar-accent" : ""
+                }`}
+              >
+                <div className="truncate text-xs">{contract.intent.title}</div>
+                <div className="mt-1 text-[10px] text-muted-foreground">
+                  {contract.lifecycle_state} · {contract.contract_id.slice(-8)}
                 </div>
-              )}
-            </div>
-          </>
+              </button>
+            ))}
+          </div>
         }
         studioContent={
           <div className="flex min-w-0 flex-1 flex-col">
@@ -865,7 +935,15 @@ function Console() {
                 protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
               }
               protectedEntries={protection?.entries ?? []}
-              draft={selected ? toStudioDraft(selected) : null}
+              draft={
+                draft
+                  ? // 未提交草案优先：`toStudioDraft` 读的就是 `supervisor_metadata`，
+                    // 所以白话理由 / 未决问题在这里同样不再是「（无）」
+                    toStudioDraft(draft.contract)
+                  : selected
+                    ? toStudioDraft(selected)
+                    : null
+              }
               execution={
                 selected
                   ? {
@@ -894,6 +972,9 @@ function Console() {
               <ContractForm
                 busy={busy === "create"}
                 initialPaths={scopeDraft}
+                draft={draft}
+                draftBusy={busy === "draft"}
+                onRequestDraft={requestDraft}
                 onCreate={(contract) =>
                   runAction("create", async () => {
                     const saved = await createContractWithAdmission(
@@ -902,6 +983,8 @@ function Console() {
                     );
                     setSelectedId(saved.contract.contract_id);
                     setShowForm(false);
+                    // 草案已落盘成合同：清掉内存草案，避免与真实合同双份显示
+                    setDraft(null);
                     applyAdmission(saved.admission);
                   })
                 }
@@ -1245,40 +1328,6 @@ function ModelKeyPanel({
   );
 }
 
-function ConnectionBar({
-  conn,
-  onChange,
-}: {
-  conn: DaemonConnection;
-  onChange: (next: DaemonConnection) => void;
-}) {
-  const [draft, setDraft] = useState(conn);
-  return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-1.5 text-[11px]">
-      <span className="text-muted-foreground">Daemon</span>
-      <input
-        value={draft.baseUrl}
-        onChange={(e) => setDraft({ ...draft, baseUrl: e.target.value })}
-        className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <span className="text-muted-foreground">Session Token</span>
-      <input
-        type="password"
-        value={draft.token}
-        onChange={(e) => setDraft({ ...draft, token: e.target.value })}
-        placeholder=".stagent/session-token"
-        className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <button
-        onClick={() => onChange(draft)}
-        className="rounded border border-border px-2 py-1 text-muted-foreground hover:text-foreground"
-      >
-        应用
-      </button>
-    </div>
-  );
-}
-
 function EvidenceView({ evidence }: { evidence: EvidenceBundle }) {
   const passed =
     evidence.verdict.status === "PASSED" && evidence.verdict.can_merge;
@@ -1331,37 +1380,83 @@ function EvidenceView({ evidence }: { evidence: EvidenceBundle }) {
   );
 }
 
+function splitPaths(raw: string): string[] {
+  return raw
+    .split(",")
+    .map((p) => p.trim())
+    .filter(Boolean);
+}
+
+/**
+ * 新建需求表单。
+ *
+ * 两步：① 用一句白话提意图 → `POST /api/supervisor/draft` 拿**未落盘草案**；
+ * ② 在草案预填的基础上微调，再「提交给 Daemon」真正落盘成合同。
+ *
+ * 为什么不让 Daemon 一步到位直接落盘：草案是给人审的，人有权在落盘前改标题/范围/
+ * 命令；直接落盘等于把"AI 的建议"变成"既成事实"，违反 §9.1.1 的 DRAFT 阶段语义。
+ */
 function ContractForm({
   busy,
   initialPaths,
+  draft,
+  draftBusy,
   onCreate,
+  onRequestDraft,
 }: {
   busy: boolean;
   initialPaths: string[];
+  draft: SupervisorDraftResult | null;
+  draftBusy: boolean;
   onCreate: (contract: SoftwareContract) => void;
+  onRequestDraft: (intent: string) => void;
 }) {
+  const [intent, setIntent] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [paths, setPaths] = useState(initialPaths.join(", ") || "src/**");
   const [command, setCommand] = useState("npm test");
+  const [acceptance, setAcceptance] = useState<string[]>([]);
   const [formError, setFormError] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialPaths.length > 0) setPaths(initialPaths.join(", "));
   }, [initialPaths]);
 
+  // 草案返回 → 预填全部字段；之后用户仍可自由修改，改完再提交
+  useEffect(() => {
+    if (!draft) return;
+    const seed = seedDraftForm(draft);
+    setTitle(seed.title);
+    setDescription(seed.description);
+    setPaths(seed.paths || initialPaths.join(", ") || "src/**");
+    setCommand(seed.command);
+    setAcceptance(seed.acceptance);
+  }, [draft, initialPaths]);
+
   const submit = () => {
     setFormError(null);
     try {
       const parts = command.trim().split(/\s+/);
-      const draft = createContractDraft({
+      const draftContract = draft?.contract;
+      // 草案的只读/禁区/白话元数据必须原样带入，否则落盘后的合同会丢掉
+      // `supervisor_metadata`，Supervisor Tab 与 Studio 又退回「（无）」
+      const fromDraft = draftContract
+        ? {
+            readonlyPaths:
+              draftContract.authorization.file_system_scope.readonly_paths,
+            strictlyForbiddenPaths:
+              draftContract.authorization.file_system_scope
+                .strictly_forbidden_paths,
+            supervisorMetadata: draftContract.supervisor_metadata,
+          }
+        : {};
+      const built = createContractDraft({
         title: title.trim() || "未命名任务",
         description: description.trim() || "（无描述）",
-        acceptanceCriteria: ["验证命令通过"],
-        writablePaths: paths
-          .split(",")
-          .map((p) => p.trim())
-          .filter(Boolean),
+        acceptanceCriteria:
+          acceptance.length > 0 ? acceptance : ["验证命令通过"],
+        writablePaths: splitPaths(paths),
         commands: [
           {
             alias: "verify",
@@ -1371,10 +1466,11 @@ function ContractForm({
             timeout_seconds: 60,
           },
         ],
+        ...fromDraft,
       });
       onCreate(
         softwareContractSchema.parse({
-          ...draft,
+          ...built,
           lifecycle_state: "PENDING_APPROVAL",
           approval: { status: "PENDING_REVIEW" },
         }),
@@ -1384,12 +1480,58 @@ function ContractForm({
     }
   };
 
+  const canRequestDraft = !draftBusy && intent.trim().length > 0;
+
   return (
     <section className="border-b border-border bg-card p-3">
+      <div className="mb-2 rounded border border-border/70 p-2">
+        <label className="text-[11px]">
+          用一句话说清要改什么（先出草案，不落盘）
+          <textarea
+            data-testid="intent-input"
+            value={intent}
+            onChange={(e) => setIntent(e.target.value)}
+            rows={2}
+            placeholder="例如：把登录页的按钮换成圆角，顺便补一个空状态提示"
+            className="mt-0.5 w-full resize-y rounded border border-border bg-background px-2 py-1 outline-none"
+          />
+        </label>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-testid="request-draft"
+            onClick={() => onRequestDraft(intent.trim())}
+            disabled={!canRequestDraft}
+            className="rounded border border-border px-2.5 py-1 text-xs hover:bg-accent disabled:opacity-40"
+          >
+            {draftBusy ? "推导中…" : "让 Supervisor 出草案"}
+          </button>
+          {draft ? (
+            <span
+              data-testid="draft-ready"
+              className="text-[10px] text-muted-foreground"
+            >
+              草案就绪：白话理由 {draft.rationale.length} 条 · 未决问题{" "}
+              {draft.unresolved_questions.length} 条 · 涉及{" "}
+              {draft.plan.writable_paths.length} 处 · 模型调用{" "}
+              {draft.model_calls} 次
+              {draft.plan.needs_protection_approval
+                ? " · 命中保护清单，提交后会再问一次"
+                : ""}
+            </span>
+          ) : (
+            <span className="text-[10px] text-muted-foreground">
+              纯规则推导（零模型调用、零费用），不会写任何文件
+            </span>
+          )}
+        </div>
+      </div>
+
       <div className="grid gap-2 md:grid-cols-2">
         <label className="text-[11px]">
           标题
           <input
+            data-testid="intent-title"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="mt-0.5 w-full rounded border border-border bg-background px-2 py-1 outline-none"
@@ -1398,6 +1540,7 @@ function ContractForm({
         <label className="text-[11px]">
           可写路径（逗号分隔）
           <input
+            data-testid="intent-paths"
             value={paths}
             onChange={(e) => setPaths(e.target.value)}
             className="mt-0.5 w-full rounded border border-border bg-background px-2 py-1 outline-none"
@@ -1406,6 +1549,7 @@ function ContractForm({
         <label className="text-[11px] md:col-span-2">
           描述
           <input
+            data-testid="intent-description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             className="mt-0.5 w-full rounded border border-border bg-background px-2 py-1 outline-none"

@@ -1,98 +1,84 @@
-import type { ReactNode } from "react";
-import {
-  EXECUTION_STATUS_LABEL,
-  type ActiveContract,
-  type RunMode,
-  type WorkerControl,
-} from "./workspace-types";
+import { GitBranch, Plus } from "lucide-react";
+import type { RunMode } from "./workspace-types";
 
+/**
+ * 顶栏（极简）。
+ *
+ * 只回答三个问题：**在哪个项目 / 哪个分支 / 什么模式**，外加一个最小操作点。
+ * 其余一切（连接地址、Token、实时流、网关受控、Worktree 绝对路径、刷新、
+ * 模型 Key）都是「调试/控制项」，一律下沉到 ⚙️ 设置页 —— 那些东西常驻顶栏
+ * 会把 IDE 变成运维后台，也会把 Token 输入框摆在视野里。
+ *
+ * 保留 `run-mode` 的点击行为：点模式徽标 = 打开合同操作台（模式真正按条目
+ * 粒度调整在那边做，避免"点一下顶栏就全解锁"）。
+ */
 export interface WorkspaceHeaderProps {
   repoName: string;
   baseBranch: string;
   runMode: RunMode;
-  contract?: ActiveContract | null | undefined;
-  workerControl: WorkerControl;
-  /** 与 Daemon 的连接状态；false 时受控徽章变暗（P.1 顺手修） */
-  daemonConnected?: boolean;
-  /** 已锁定的保护条目数（C.2 顶栏「已锁 N 处」） */
+  /** 已锁定的保护条目数；只进 title 提示，不占顶栏文字 */
   protectedCount?: number | undefined;
   onOpenStudio: () => void;
-  extra?: ReactNode;
+  /** 右侧唯一操作点：新建需求（走真实合同创建流程） */
+  onNewRequirement?: (() => void) | undefined;
 }
 
-/** TASK-C.1 Header：仓库 / 分支 / 模式 / 合同+Worktree / 受控徽标 / Supervisor 入口 */
 export function WorkspaceHeader({
   repoName,
   baseBranch,
   runMode,
-  contract,
-  workerControl,
-  daemonConnected = true,
   protectedCount = 0,
   onOpenStudio,
-  extra,
+  onNewRequirement,
 }: WorkspaceHeaderProps) {
-  // P.1 顺手修：显示主工作区真实分支（由 Daemon 读取），不再按合同拼字符串
-  const branch = baseBranch;
-  const enforced = workerControl === "GATEWAY_ENFORCED";
-  const badgeClass = !daemonConnected
-    ? "rounded bg-muted px-2 text-muted-foreground opacity-60"
-    : enforced
-      ? "rounded bg-green-100 px-2 text-green-800"
-      : "rounded bg-yellow-100 px-2 text-yellow-800";
+  const protectedMode = runMode === "PROTECTED";
   return (
     <header
       data-testid="workspace-header"
-      className="flex flex-wrap items-center gap-3 border-b px-3 py-2 text-sm"
+      className="flex items-center gap-2 border-b px-3 py-1.5 text-xs"
     >
       <span data-testid="repo-name" className="font-semibold">
         {repoName}
       </span>
-      <span data-testid="current-branch">分支：{branch}</span>
-      {/*
-        C.2 模式常驻指示：永远在顶栏，不藏在菜单里。
-        点击 = 打开中栏的 Supervisor Studio（真实模式切换在那里按条目粒度做，
-        避免"点一下顶栏就全解锁"这种误操作）。
-      */}
+
+      <span
+        data-testid="current-branch"
+        className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5"
+      >
+        <GitBranch className="h-3 w-3" />
+        {baseBranch}
+      </span>
+
       <button
         type="button"
         data-testid="run-mode"
         data-mode={runMode}
-        data-locked-count={runMode === "PROTECTED" ? protectedCount : 0}
+        data-locked-count={protectedMode ? protectedCount : 0}
         onClick={onOpenStudio}
-        title="打开 Supervisor Studio 查看/调整"
-        className="rounded border border-border px-2 hover:bg-accent"
+        title={
+          protectedMode
+            ? `保护模式：已锁 ${protectedCount} 处，点击打开合同操作台`
+            : "自由模式，点击打开合同操作台"
+        }
+        className={`rounded-full border px-2 py-0.5 ${
+          protectedMode
+            ? "border-amber-500/50 bg-amber-500/10 text-amber-700"
+            : "border-border text-muted-foreground"
+        }`}
       >
-        {runMode === "PROTECTED"
-          ? `🔒 保护模式 PROTECTED (已锁 ${protectedCount} 处)`
-          : "🔓 自由模式 VIBE"}
+        {protectedMode ? "🔒 PROTECTED" : "🔓 VIBE"}
       </button>
-      {contract && (
-        <span data-testid="contract-info">
-          合同 {contract.contractId} · {contract.worktreePath} ·{" "}
-          {EXECUTION_STATUS_LABEL[contract.status]}
-        </span>
-      )}
-      <span
-        data-testid="worker-control"
-        data-control={daemonConnected ? workerControl : "OFFLINE"}
-        className={badgeClass}
-      >
-        {!daemonConnected
-          ? "未连上后台 · 受控状态未知"
-          : enforced
-            ? "GATEWAY_ENFORCED 受控"
-            : "UNCONTROLLED_EXTERNAL 非受控"}
-      </span>
-      {extra}
-      <button
-        type="button"
-        data-testid="open-studio"
-        onClick={onOpenStudio}
-        className="ml-auto rounded border px-2"
-      >
-        Supervisor
-      </button>
+
+      {onNewRequirement ? (
+        <button
+          type="button"
+          data-testid="new-requirement"
+          onClick={onNewRequirement}
+          className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <Plus className="h-3 w-3" /> 新建需求
+        </button>
+      ) : null}
     </header>
   );
 }
