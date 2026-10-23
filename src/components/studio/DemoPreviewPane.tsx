@@ -18,6 +18,8 @@ export interface DemoPreviewPaneProps {
   /** 【确认原型并实施真实工程】——由上层推进旅程 */
   onConfirm?: (() => void) | undefined;
   busy?: boolean | undefined;
+  /** Fast Path / 无预览时仍允许确认开工（TASK-S.6） */
+  allowConfirmWithoutRunning?: boolean | undefined;
 }
 
 export function DemoPreviewPane(props: DemoPreviewPaneProps) {
@@ -55,7 +57,10 @@ export function DemoPreviewPane(props: DemoPreviewPaneProps) {
           <button
             type="button"
             data-testid="demo-confirm"
-            disabled={props.busy === true || !running}
+            disabled={
+              props.busy === true ||
+              (!running && props.allowConfirmWithoutRunning !== true)
+            }
             onClick={() => props.onConfirm?.()}
             className="rounded border border-emerald-600/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-800 disabled:opacity-40"
           >

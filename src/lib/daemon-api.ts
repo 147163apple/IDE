@@ -1053,3 +1053,53 @@ export async function markTaskGraphStale(
     },
   );
 }
+
+// ---------------------------------------------------------------------------
+// TASK-S.6：非技术旅程右侧唯一入口分流
+// ---------------------------------------------------------------------------
+
+export type JourneyRouteKind = "DISPUTE" | "FAST_PATH" | "MAJOR_DRAFT" | "CHAT";
+
+export interface JourneyIntentView {
+  kind: JourneyRouteKind;
+  confidence: number;
+  reasons: string[];
+  skip_demo: boolean;
+}
+
+export interface JourneyResponse {
+  intent: JourneyIntentView;
+  route: JourneyRouteKind;
+  plain_summary: string;
+  skip_demo: boolean;
+  requirements_updated: boolean;
+  requirements_hint: string | null;
+  suggest_viewport: "dispute" | "demo" | "graph" | "contract" | null;
+  code: string | null;
+  draft: SupervisorDraftResult | null;
+  dispute_report: DisputeReportApiView | null;
+  budget: SupervisorBudgetSnapshotView;
+}
+
+/** POST /api/supervisor/journey —— 右侧一句话分流 */
+export async function submitJourneyMessage(
+  conn: DaemonConnection,
+  input: {
+    message: string;
+    contract_id?: string | undefined;
+    session_id?: string | undefined;
+  },
+): Promise<JourneyResponse> {
+  return request<JourneyResponse>(conn, "/api/supervisor/journey", {
+    method: "POST",
+    body: JSON.stringify({
+      message: input.message,
+      ...(input.contract_id === undefined
+        ? {}
+        : { contract_id: input.contract_id }),
+      ...(input.session_id === undefined
+        ? {}
+        : { session_id: input.session_id }),
+    }),
+  });
+}

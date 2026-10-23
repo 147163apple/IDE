@@ -4,15 +4,37 @@ import {
   type AgentSessionTransport,
 } from "@/hooks/use-agent-session";
 
+export interface JourneyChatCard {
+  id: string;
+  /** DISPUTE / FAST_PATH / MAJOR_DRAFT / SYSTEM */
+  kind: string;
+  text: string;
+}
+
 export interface AgentChatPaneProps {
   transport: AgentSessionTransport | null;
+  /**
+   * TASK-S.6：发送前分流。返回 `handled` 则不再发给 Worker；
+   * 返回 `passthrough`（或未提供）则走原会话。
+   */
+  onBeforeSend?:
+    ((text: string) => Promise<"handled" | "passthrough">) | undefined;
+  /** 旅程系统卡（质疑白话摘要 / Fast Path 说明 / 草案就绪） */
+  journeyCards?: JourneyChatCard[] | undefined;
+  journeyBusy?: boolean | undefined;
 }
 
 /** TASK-C.6 右栏 Coding Agent 会话：流式输出、工具卡片、停止、排队、会话续接 */
-export function AgentChatPane({ transport }: AgentChatPaneProps) {
+export function AgentChatPane({
+  transport,
+  onBeforeSend,
+  journeyCards,
+  journeyBusy,
+}: AgentChatPaneProps) {
   const chat = useAgentSession(transport);
   const [draft, setDraft] = useState("");
   const [adapterId, setAdapterId] = useState<string>("");
+  const [routing, setRouting] = useState(false);
   const current = chat.sessions.find((s) => s.id === chat.sessionId);
   // 下拉框默认跟随「当前打开的会话」所用的助手，避免显示 Claude Code、实际却在演示会话里聊天
   const currentAdapterAvailable = chat.adapters.some(
@@ -56,9 +78,24 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
   const submit = () => {
     const text = draft.trim();
     if (!text) return;
+    if (routing || journeyBusy) return;
     setDraft("");
+    if (onBeforeSend) {
+      setRouting(true);
+      void onBeforeSend(text)
+        .then((decision) => {
+          if (decision === "passthrough") {
+            void chat.send(text);
+          }
+        })
+        .finally(() => setRouting(false));
+      return;
+    }
     void chat.send(text);
   };
+
+  const sendDisabled =
+    routing || journeyBusy === true || (!onBeforeSend && !chat.sessionId);
 
   return (
     <div
@@ -104,6 +141,12 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
           ))}
         </select>
       </div>
+      <p
+        data-testid="journey-entry-hint"
+        className="rounded border border-border/60 bg-muted/30 px-2 py-1 text-[10px] leading-relaxed text-muted-foreground"
+      >
+        你只跟这里说话就行：质疑「做错了」、提新功能、或说「标题字号大一点」这类小事——系统会在背后分流，不必自己找别的对话框。
+      </p>
       {current && (
         <div
           data-testid="current-agent"
@@ -166,6 +209,25 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
             </div>
           ),
         )}
+        {(journeyCards ?? []).map((card) => (
+          <div
+            key={card.id}
+            data-testid="journey-card"
+            data-journey-kind={card.kind}
+            className="rounded border border-sky-600/40 bg-sky-500/10 p-2 text-[11px] leading-relaxed"
+          >
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-sky-900/80">
+              {card.kind === "DISPUTE"
+                ? "质疑自查"
+                : card.kind === "FAST_PATH"
+                  ? "小事快通道"
+                  : card.kind === "MAJOR_DRAFT"
+                    ? "需求草案"
+                    : "系统"}
+            </div>
+            <div className="whitespace-pre-wrap">{card.text}</div>
+          </div>
+        ))}
       </div>
       {chat.error && <div className="text-destructive">{chat.error}</div>}
       <div className="flex gap-1">
@@ -180,16 +242,20 @@ export function AgentChatPane({ transport }: AgentChatPaneProps) {
             }
           }}
           placeholder={
-            chat.busy ? "Agent 正在回答，可继续输入排队" : "输入消息，回车发送"
+            routing || journeyBusy
+              ? "正在分流处理…"
+              : chat.busy
+                ? "Agent 正在回答，可继续输入排队"
+                : "输入消息，回车发送（质疑 / 需求 / 小改都从这里说）"
           }
-          disabled={!chat.sessionId}
+          disabled={sendDisabled}
           className="min-h-[48px] flex-1 rounded border p-1"
         />
         <div className="flex flex-col gap-1">
           <button
             type="button"
             onClick={submit}
-            disabled={!chat.sessionId}
+            disabled={sendDisabled}
             className="rounded border px-2"
           >
             发送
