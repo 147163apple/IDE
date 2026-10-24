@@ -126,4 +126,31 @@ describe("TASK-C.1 三栏工作台", () => {
     );
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
   });
+
+  it("打开文件后可点 × 关闭标签（回到欢迎页）", () => {
+    render(<WorkspaceLayout {...base} />);
+    fireEvent.click(screen.getByText("a.ts"));
+    expect(screen.getByRole("tab", { name: "a.ts" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    const close = screen.getByTestId("close-tab-src/a.ts");
+    expect(close).toHaveAttribute("aria-label", "关闭 a.ts");
+    fireEvent.click(close);
+    expect(screen.queryByRole("tab", { name: "a.ts" })).toBeNull();
+    expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
+  });
+
+  it("openRequest 打开的文件标签也可关闭", () => {
+    const { rerender } = render(<WorkspaceLayout {...base} />);
+    rerender(
+      <WorkspaceLayout
+        {...base}
+        openRequest={{ path: "README.md", nonce: 1 }}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "README.md" })).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("close-tab-README.md"));
+    expect(screen.queryByRole("tab", { name: "README.md" })).toBeNull();
+  });
 });

@@ -41,6 +41,15 @@ interface Tab {
   closable?: boolean;
 }
 
+/** 普通文件标签：默认可关闭（系统 Tab 须显式 closable） */
+function fileTab(path: string): Tab {
+  return {
+    id: path,
+    title: path.split("/").pop() ?? path,
+    closable: true,
+  };
+}
+
 export interface WorkspaceLayoutProps {
   repoName: string;
   repoPath: string;
@@ -212,11 +221,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   useEffect(() => {
     if (!req) return;
     const p = req.path;
-    setTabs((t) =>
-      t.some((x) => x.id === p)
-        ? t
-        : [...t, { id: p, title: p.split("/").pop() ?? p }],
-    );
+    setTabs((t) => (t.some((x) => x.id === p) ? t : [...t, fileTab(p)]));
     setForceProjectWelcome(false);
     setActiveTab(p);
   }, [req?.path, req?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -511,9 +516,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                     nodes={props.files}
                     rootLabel={root}
                     loading={props.filesLoading}
-                    onOpen={(p) =>
-                      openTab({ id: p, title: p.split("/").pop() ?? p })
-                    }
+                    onOpen={(p) => openTab(fileTab(p))}
                     onDelete={
                       props.onDeletePath
                         ? async (p) => {
@@ -528,10 +531,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                         ? async ({ from, to }) => {
                             await props.onRenamePath!({ from, to });
                             closeTab(from);
-                            openTab({
-                              id: to,
-                              title: to.split("/").pop() ?? to,
-                            });
+                            openTab(fileTab(to));
                           }
                         : undefined
                     }
@@ -577,7 +577,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                 >
                   {t.title}
                 </button>
-                {t.closable ? (
+                {(t.closable ?? !t.system) ? (
                   <button
                     type="button"
                     data-testid={`close-tab-${t.id}`}
