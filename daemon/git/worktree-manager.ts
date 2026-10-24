@@ -481,6 +481,119 @@ export async function listWorktrees(
 }
 
 /**
+ * Resolve a base ref that actually exists (TASK-C.10p).
+ *
+ * Graph start/verify may run long after approve/merge: the contract's
+ * `authorization.git.base_branch` can already be deleted. Prefer the
+ * preferred ref when present, else `main` / `master` / `HEAD`.
+ */
+export async function resolveExistingBaseBranch(
+  repoRoot: string,
+  preferred?: string | null,
+): Promise<string> {
+  const resolvedRoot = path.resolve(repoRoot);
+  const candidates = [
+    ...(typeof preferred === "string" && preferred.trim() !== ""
+      ? [preferred.trim()]
+      : []),
+    "main",
+    "master",
+    "HEAD",
+  ];
+  const seen = new Set<string>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) continue;
+    seen.add(candidate);
+    const check = await execGit(
+      ["rev-parse", "--verify", candidate],
+      resolvedRoot,
+    );
+    if (check.exitCode === 0) return candidate;
+  }
+  return "HEAD";
+}
+
+export interface EnsureTaskWorktreeResult {
+  worktreePath: string;
+  /** true = 本次新建或 force 重建；false = 路径已存在直接复用 */
+  created: boolean;
+  baseBranch: string;
+  warnings: string[];
+}
+
+/**
+ * Ensure the task worktree directory exists for graph start/verify (TASK-C.10p).
+ *
+ * Approve normally creates the worktree; after MERGED / cleanup / crash it may
+ * be gone while the task graph still points at the contract. Graph UX must
+ * rebuild rather than 409 "Worktree 不存在".
+ *
+ * - Path already present → reuse (no force).
+ * - Missing → `createTaskWorktree` with `acknowledgeDirty: true` (main dirty
+ *   files are never copied into the task tree; graph must not block on them).
+ * - Create fails because a stale path/lock remains → one `force: true` retry.
+ */
+export async function ensureTaskWorktree(options: {
+  repoRoot: string;
+  contractId: string;
+  preferredBaseBranch?: string | null;
+}): Promise<EnsureTaskWorktreeResult> {
+  const { repoRoot, contractId, preferredBaseBranch } = options;
+  const worktreePath = getWorktreePath(repoRoot, contractId);
+  if (fs.existsSync(worktreePath)) {
+    const baseBranch = await resolveExistingBaseBranch(
+      repoRoot,
+      preferredBaseBranch,
+    );
+    return {
+      worktreePath,
+      created: false,
+      baseBranch,
+      warnings: [],
+    };
+  }
+
+  const baseBranch = await resolveExistingBaseBranch(
+    repoRoot,
+    preferredBaseBranch,
+  );
+
+  try {
+    const info = await createTaskWorktree({
+      repoRoot,
+      contractId,
+      baseBranch,
+      acknowledgeDirty: true,
+    });
+    return {
+      worktreePath: info.worktreePath,
+      created: true,
+      baseBranch: info.baseBranch,
+      warnings: info.warnings ?? [],
+    };
+  } catch (err) {
+    // Stale registration / half-removed directory: rebuild once.
+    const message = err instanceof Error ? err.message : String(err);
+    if (!/already exists|not a working tree|locked/i.test(message)) {
+      throw err;
+    }
+    const info = await createTaskWorktree({
+      repoRoot,
+      contractId,
+      baseBranch,
+      force: true,
+      acknowledgeDirty: true,
+    });
+    return {
+      worktreePath: info.worktreePath,
+      created: true,
+      baseBranch: info.baseBranch,
+      warnings: info.warnings ?? [],
+    };
+  }
+}
+
+/**
  * Run git worktree prune to discard stale administrative data.
  */
 export async function pruneWorktrees(repoRoot: string): Promise<void> {

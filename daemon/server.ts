@@ -161,6 +161,9 @@ import {
   assertSafeContractId,
   getWorktreePath,
   execGit,
+  ensureTaskWorktree,
+  DirtyWorktreeConfirmationRequiredError,
+  WorktreeError,
 } from "./git/worktree-manager";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
@@ -1653,6 +1656,97 @@ export class StagentDaemon {
   }
 
   /**
+   * C.10p：图谱开工/核销前确保合同任务 Worktree 物理存在。
+   *
+   * 批准时会建树；MERGED / 清理 / 崩溃后图仍可能挂着合同。这里自愈重建，
+   * 基线优先合同 base_branch，缺失则回退 main/master/HEAD。
+   */
+  private async ensureGraphTaskWorktree(contractIdHint?: string): Promise<
+    | { ok: true; worktreePath: string; created: boolean }
+    | {
+        ok: false;
+        status: number;
+        body: Record<string, unknown>;
+      }
+  > {
+    const snapshot = this.graphEngine.getGraph();
+    if (!snapshot) {
+      return {
+        ok: false,
+        status: 404,
+        body: {
+          error: "TASK_GRAPH_NOT_FOUND",
+          code: "E_GRAPH_NOT_FOUND",
+          message: "尚未生成任务图谱",
+        },
+      };
+    }
+    const contractId = contractIdHint ?? snapshot.contract_id;
+    if (contractIdHint && contractIdHint !== snapshot.contract_id) {
+      return {
+        ok: false,
+        status: 409,
+        body: {
+          error: "contract_mismatch",
+          code: "E_GRAPH_NOT_FOUND",
+          message: `图谱所属合同为 ${snapshot.contract_id}，与请求不一致`,
+        },
+      };
+    }
+    const contract = this.orchestrator.getStore().get(contractId);
+    if (!contract) {
+      return {
+        ok: false,
+        status: 409,
+        body: {
+          error: "contract_not_found",
+          code: "E_GRAPH_NOT_FOUND",
+          message: `图谱所属合同 ${contractId} 不存在`,
+        },
+      };
+    }
+    try {
+      const ensured = await ensureTaskWorktree({
+        repoRoot: this.repoRoot,
+        contractId,
+        preferredBaseBranch: contract.authorization.git.base_branch,
+      });
+      return {
+        ok: true,
+        worktreePath: ensured.worktreePath,
+        created: ensured.created,
+      };
+    } catch (err) {
+      if (err instanceof DirtyWorktreeConfirmationRequiredError) {
+        return {
+          ok: false,
+          status: 409,
+          body: {
+            error: "worktree_dirty_confirmation_required",
+            code: "E_WORKTREE_DIRTY",
+            message: err.message,
+          },
+        };
+      }
+      const message =
+        err instanceof WorktreeError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : String(err);
+      return {
+        ok: false,
+        status: 409,
+        body: {
+          error: "worktree_ensure_failed",
+          code: "E_WORKTREE_UNAVAILABLE",
+          message: `无法准备任务 Worktree：${message}`,
+        },
+      };
+    }
+  }
+
+  /**
    * Task Graph 控制面（架构 §3.3 / §3.4，TASK-C.7）。
    *
    * 四个端点都只碰 `TaskGraphEngine`，没有任何一处直接写
@@ -1715,6 +1809,12 @@ export class StagentDaemon {
           });
           return;
         }
+        // C.10p：开工前确保任务 Worktree 存在（合入后清理 / 历史图仍可施工）
+        const ensured = await this.ensureGraphTaskWorktree();
+        if (!ensured.ok) {
+          this.sendJson(res, ensured.status, ensured.body);
+          return;
+        }
         const graph = this.graphEngine.startNode(body.node_id);
         this.sendJson(res, 200, { graph });
         return;
@@ -1760,6 +1860,15 @@ export class StagentDaemon {
             code: "E_GRAPH_NOT_FOUND",
             message: `图谱所属合同 ${snapshot.contract_id} 不存在`,
           });
+          return;
+        }
+
+        // C.10p：核销采证前若 Worktree 缺失则重建（避免合入清理后 409）
+        const ensured = await this.ensureGraphTaskWorktree(
+          snapshot.contract_id,
+        );
+        if (!ensured.ok) {
+          this.sendJson(res, ensured.status, ensured.body);
           return;
         }
 

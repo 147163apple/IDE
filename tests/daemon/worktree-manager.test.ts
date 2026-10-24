@@ -11,6 +11,8 @@ import {
   isRepoClean,
   execGit,
   WorktreeError,
+  ensureTaskWorktree,
+  resolveExistingBaseBranch,
 } from "../../daemon/git/worktree-manager";
 import { assertIsolatedGitCwd } from "../../daemon/git/test-isolation";
 
@@ -167,5 +169,97 @@ describe("Task 1.2: Git Worktree Manager Lifecycle", () => {
       force: true,
     });
     expect(rebuilt.contractId).toBe(contractId);
+  });
+});
+
+describe("TASK-C.10p: ensureTaskWorktree for graph start/verify", () => {
+  let tempRepo: string;
+
+  beforeEach(async () => {
+    tempRepo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-wt-ensure-"));
+    assertIsolatedGitCwd(tempRepo);
+    await execGit(["init", "-b", "main"], tempRepo);
+    await execGit(["config", "user.name", "Stagent Test"], tempRepo);
+    await execGit(["config", "user.email", "test@stagent.local"], tempRepo);
+    fs.writeFileSync(path.join(tempRepo, "README.md"), "# Root\n");
+    await execGit(["add", "README.md"], tempRepo);
+    await execGit(["commit", "-m", "chore: initial"], tempRepo);
+  });
+
+  afterEach(() => {
+    try {
+      fs.rmSync(tempRepo, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  });
+
+  it("reuses an existing worktree without recreating", async () => {
+    const contractId = "contract_ensure_reuse";
+    const created = await createTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+    });
+    const ensured = await ensureTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+    });
+    expect(ensured.created).toBe(false);
+    expect(ensured.worktreePath).toBe(created.worktreePath);
+    expect(fs.existsSync(ensured.worktreePath)).toBe(true);
+  });
+
+  it("recreates after remove (simulates MERGED cleanup)", async () => {
+    const contractId = "contract_ensure_rebuild";
+    await createTaskWorktree({ repoRoot: tempRepo, contractId });
+    await removeTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+      deleteBranch: true,
+    });
+    expect(fs.existsSync(getWorktreePath(tempRepo, contractId))).toBe(false);
+
+    const ensured = await ensureTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+      preferredBaseBranch: "main",
+    });
+    expect(ensured.created).toBe(true);
+    expect(fs.existsSync(ensured.worktreePath)).toBe(true);
+    expect(ensured.baseBranch).toBe("main");
+  });
+
+  it("falls back when preferred base branch is gone", async () => {
+    const contractId = "contract_ensure_fallback";
+    const resolved = await resolveExistingBaseBranch(
+      tempRepo,
+      "feat/deleted-base-branch",
+    );
+    expect(resolved).toBe("main");
+
+    const ensured = await ensureTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+      preferredBaseBranch: "feat/deleted-base-branch",
+    });
+    expect(ensured.created).toBe(true);
+    expect(ensured.baseBranch).toBe("main");
+    expect(fs.existsSync(ensured.worktreePath)).toBe(true);
+  });
+
+  it("does not block on dirty main (acknowledgeDirty)", async () => {
+    const contractId = "contract_ensure_dirty";
+    fs.writeFileSync(path.join(tempRepo, "dirty-note.txt"), "uncommitted\n");
+    const ensured = await ensureTaskWorktree({
+      repoRoot: tempRepo,
+      contractId,
+      preferredBaseBranch: "main",
+    });
+    expect(ensured.created).toBe(true);
+    expect(fs.existsSync(ensured.worktreePath)).toBe(true);
+    // dirty file stays on main, not copied into task tree
+    expect(
+      fs.existsSync(path.join(ensured.worktreePath, "dirty-note.txt")),
+    ).toBe(false);
   });
 });
