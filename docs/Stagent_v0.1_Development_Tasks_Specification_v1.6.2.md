@@ -1,4 +1,5 @@
 
+- **P-61（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10n`**（任务图谱空态可感知：无图禁用视图切换、刷新有 loading、白话「当前合同还没有图」+ 确认原型建图 CTA；有图只读提示 + 选中节点高亮/滚到详情）。同步：版本头第 51 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10m→C.10n`）、§3.4 详细卡、Sprint「当前首要」→ **C.10n**；走查报告 §6.23；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不接** start/verify；**不抢** D.1e。
 - **P-60（立卡+实现+合入，2026-10-24）**：工作区先恢复干净 tip（`8dd039d` / C.10l）后新增 **`TASK-C.10m`**（质疑自查「按缺陷修复 / 按新需求演进」空接线：UI 回调 → `user_choice` → Daemon 强制分类）。同步：版本头第 50 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10l→C.10m`）、§3.4 详细卡、Sprint「当前首要」→ **C.10m**；走查报告 §6.22；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-59（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10l`**（设置「高级」加回可选会话/适配器：助手下拉、新会话、历史会话；**不**回潮右栏主视线；会话元信息/工具 JSON 仍不展示）。同步：版本头第 49 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10k→C.10l`）、§3.4 详细卡、Sprint「当前首要」→ **C.10l**；走查报告 §6.21；架构规范 §11 注记 9 轻量续写；v0.2 附录 B 标注本项已落地高级。**不改**鉴权；**不抢** D.1e。
 - **P-58（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10k`**（右栏 AI 对话老板主视线：删除多余信息，只留双方对话；Cursor 右侧对话对齐能力写入 v0.2+ RFC 附录 B，**不实施整页复刻**）。同步：版本头第 48 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10j→C.10k`）、§3.4 详细卡、Sprint「当前首要」→ **C.10k**；走查报告 §6.20；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
@@ -76,7 +77,9 @@
 
 > 50. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10m · 质疑裁决按钮接线）**：Tina 授权（t673u）——先恢复干净 tip，再修质疑自查两按钮空接线。新增 **`TASK-C.10m`** 并收口为 **`[COMPLETED]`**（合入 tip `0d65890`；四件套 **1319 passed / 6 skipped**）。交付：降级/UNATTRIBUTED 时「按缺陷修复」「按新需求演进」调用 `submitDisputeSelfCheck(..., user_choice)`；引擎 `outcomeFromUserChoice` 强制 BUG→REWORK / 需求→REQUIREMENT_CHANGE；需求演进切合同视口。前置：`TASK-C.10l` COMPLETED；工作区恢复 `8dd039d`。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.22。架构规范仅 §11 注记 9 轻量锚定延续。
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1319 passed / 6 skipped**；C.10m 合入后回写）。
+> 51. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10n · 任务图谱空态可感知）**：Tina 授权（t675u）——任务图谱顶栏按钮像没反应。根因：无图时正文永远空态，切视图画面不变。新增 **`TASK-C.10n`** 并收口为 **`[COMPLETED]`**（合入 tip `bcad27f`；四件套 **1322 passed / 6 skipped**）。交付：无图禁用「业务功能导图/执行拓扑」、刷新「刷新中…」、白话「当前合同还没有图」+「确认原型并建图」CTA；有图只读提示；选中节点高亮并滚到详情。前置：`TASK-C.10m` COMPLETED。**不改**鉴权；**不接** start/verify；**不抢** D.1e。对照走查报告 §6.23。架构规范仅 §11 注记 9 轻量锚定延续。
+>
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1322 passed / 6 skipped**；C.10n 合入后回写）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -138,6 +141,7 @@
 | **TASK-C.10k** | 右栏只留双方对话（去工程师噪声；Cursor 右栏进 v0.2） | 工作台 UX | **[COMPLETED]**（tip `0da870c`；**1313 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10j` COMPLETED<br>• 去掉适配器/历史/元信息/说明书条/工具 JSON<br>• 保留对话+旅程卡+门禁提示；自动开会话<br>• Cursor 右栏对齐 → v0.2 附录 B（不实施）<br>• **不含**整页复刻 Cursor；不改鉴权；不抢 D.1e |
 | **TASK-C.10l** | 设置「高级」可选会话/适配器（不回潮右栏） | 工作台 UX | **[COMPLETED]**（tip `d407b5c`；**1316 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10k` COMPLETED<br>• 高级内：助手下拉 / 新会话 / 历史会话；与右栏共享会话实例<br>• 右栏保持 C.10k 只留对话；元信息/工具 JSON 仍不展示<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10m** | 质疑自查裁决按钮接线（缺陷修复 / 新需求演进） | 工作台 UX | **[COMPLETED]**（tip `0d65890`；**1319 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10l` COMPLETED；工作区恢复干净 tip<br>• 两按钮 → `user_choice` → Daemon 强制分类<br>• 需求演进切合同视口；缺陷修复留质疑<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
+| **TASK-C.10n** | 任务图谱空态可感知（禁用无效切换 / 刷新反馈 / 建图 CTA） | 工作台 UX | **[COMPLETED]**（tip `bcad27f`；**1322 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10m` COMPLETED<br>• 无图：禁用视图切换；刷新 loading；白话空态 + 确认原型建图 CTA<br>• 有图：只读提示；选中节点高亮并滚到详情<br>• **不含** start/verify；不改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -208,11 +212,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k ──► TASK-C.10l ──► TASK-C.10m
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k ──► TASK-C.10l ──► TASK-C.10m ──► TASK-C.10n
               │                │                             │              │              │              │
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
-              建议序：C.10m 已合 · **质疑裁决按钮接线收口**
+              建议序：C.10n 已合 · **任务图谱空态可感知收口**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -303,7 +307,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10i", "to": "TASK-C.10j" },
   { "from": "TASK-C.10j", "to": "TASK-C.10k" },
   { "from": "TASK-C.10k", "to": "TASK-C.10l" },
-  { "from": "TASK-C.10l", "to": "TASK-C.10m" }
+  { "from": "TASK-C.10l", "to": "TASK-C.10m" },
+  { "from": "TASK-C.10m", "to": "TASK-C.10n" }
 ]
 ```
 
@@ -1662,6 +1667,32 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   5. 四件套全绿；不打印 token。
 * **FAIL**：按钮仍空接线；或借机改鉴权/绕过保护清单。
 
+
+#### 【Task C.10n】任务图谱空态可感知（禁用无效切换 / 刷新反馈 / 建图 CTA）`[COMPLETED]`
+* **任务编号**：`TASK-C.10n`
+* **前置依赖**：`TASK-C.10m` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `bcad27f`；Tina 授权 t675u「立卡开做」；四件套 **1322 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）
+* **对照痛点**：非 IDE 走查点「任务图谱」顶栏「业务功能导图 / 执行拓扑 / 刷新」像没反应；根因是当前合同无图时正文永远空态，切视图画面不变。
+* **v0.1 范围（施工合同）**：
+  1. **无图**：禁用（或等效不可用）「业务功能导图 / 执行拓扑」；刷新按钮可见 loading（「刷新中…」/ aria-busy）。
+  2. **空态文案**：白话「当前合同还没有图」+ 说明须先确认原型；CTA「确认原型并建图」接到既有 `handleConfirmPrototype` 主路径。
+  3. **有图**：顶栏一句只读预期「这里只看进度…不会开工」；选中执行拓扑节点后高亮，并滚到 NodeDetail。
+  4. **纪律**：不改鉴权；不接 start/verify；不抢 D.1e；不改架构大方向。
+* **明确不包含**：节点开工/验证接线；重做点亮引擎；拆多路由。
+* **涉及核心文件（预期）**：
+  - `src/components/graph/TaskGraphPanel.tsx`
+  - `src/components/graph/ExecutionDag.tsx`
+  - `src/components/studio/TaskGraphPane.tsx`
+  - `src/routes/index.tsx`
+  - UI：`tests/ui/task-graph-illumination.test.tsx`
+* **Pass/Fail 验收判定**（≤5）：
+  1. 无图时视图切换按钮 disabled，点击不改变空态。
+  2. loading 时刷新按钮文案/aria-busy 可见；空态非 loading 显示「当前合同还没有图」与 CTA（有回调时）。
+  3. 有图时只读提示存在；点 DAG 节点出现详情且 `data-selected=true`。
+  4. 四件套全绿；不打印 token。
+  5. 不引入 start/verify 接线。
+* **FAIL**：无图切视图仍「像没反应」且无任何反馈；或借机改鉴权/接开工。
+
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
@@ -1987,7 +2018,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：C.10m 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.22。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
+> - **当前首要编码任务**：C.10n 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.23。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
