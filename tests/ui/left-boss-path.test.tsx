@@ -56,12 +56,20 @@ function renderWorkbench(
             repoName="1020"
             repoPath="/Users/tina/Desktop/1020"
             baseBranch="main"
-            contractCount={0}
+            contractCount={1}
             contract={null}
             protection={{ mode: "VIBE", entries: 0, checkpoint: null }}
             admission={null}
             onOpenConsole={() => {}}
             specsSection={specs}
+            requirementList={
+              <div data-testid="requirement-list">
+                <div>需求（合同 1）</div>
+                <button type="button" data-testid="requirement-list-item">
+                  示例需求
+                </button>
+              </div>
+            }
           />
         ) : undefined
       }
@@ -94,6 +102,15 @@ describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅
       "文件",
     );
     expect(screen.getByTestId("file-tree")).toBeInTheDocument();
+    // C.10f 漏接线修复：左栏不得再出现合同/需求列表或开项目
+    expect(screen.getByTestId("left-column").textContent).not.toMatch(
+      /需求（合同/,
+    );
+    expect(
+      screen
+        .getByTestId("left-column")
+        .querySelector('[data-testid="requirement-list"]'),
+    ).toBeNull();
     fireEvent.click(screen.getByText("a.ts"));
     expect(screen.getByRole("tab", { name: "a.ts" })).toBeInTheDocument();
     // 开文件后欢迎让路；顶栏切换项目可回欢迎
@@ -113,6 +130,23 @@ describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅
       screen
         .getByTestId("left-column")
         .querySelector('[data-testid="file-tree-specs"]'),
+    ).toBeNull();
+  });
+
+  it("需求（合同）列表在项目审阅，不在左栏", () => {
+    renderWorkbench({ supervisor: true });
+    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    expect(
+      screen.getByTestId("supervisor-requirement-list"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("requirement-list")).toBeInTheDocument();
+    expect(screen.getByTestId("requirement-list-item")).toHaveTextContent(
+      "示例需求",
+    );
+    expect(
+      screen
+        .getByTestId("left-column")
+        .querySelector('[data-testid="requirement-list"]'),
     ).toBeNull();
   });
 });

@@ -94,6 +94,13 @@ vi.mock("@/hooks/use-daemon-stream", () => ({
 const { Route } = await import("../../src/routes/index");
 const Console = Route.options.component as React.ComponentType;
 
+/** C.10f：需求列表在项目审阅，不再在左栏；测试先开审阅再点需求。 */
+async function openRequirement(title: string) {
+  fireEvent.click(screen.getByTestId("activity-supervisor"));
+  const item = await screen.findByRole("button", { name: new RegExp(title) });
+  fireEvent.click(item);
+}
+
 describe("TASK-C.1 主页面接入三栏工作台", () => {
   it("首屏是空编辑区：不自动打开 Studio，顶栏只留状态胶囊", async () => {
     render(<Console />);
@@ -135,7 +142,7 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
 
   it("点需求才打开合同操作台，旧控制台功能仍在", async () => {
     render(<Console />);
-    fireEvent.click(await screen.findByText("主页面接线测试"));
+    await openRequirement("主页面接线测试");
     expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -154,8 +161,11 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
 
   it("架构雷达移出左栏：Supervisor 的架构总览分段承载它", async () => {
     render(<Console />);
-    // 左栏只剩资源管理器与需求列表
+    // 左栏纯文件树；架构雷达在项目审阅
     expect(screen.queryByText("架构雷达", { exact: false })).toBeNull();
+    expect(screen.getByTestId("left-column").textContent).not.toMatch(
+      /需求（合同/,
+    );
     fireEvent.click(screen.getByTestId("activity-supervisor"));
     expect(screen.getByTestId("supervisor-architecture")).toBeInTheDocument();
     expect(screen.getByTestId("load-arch-graph")).toBeInTheDocument();
@@ -188,7 +198,7 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
 
   it("Sprint 1 门禁（假数据）：Agent 改文件 → 中栏自动打开 Monaco；Evidence STALE → 横幅", async () => {
     render(<Console />);
-    fireEvent.click(await screen.findByText("主页面接线测试"));
+    await openRequirement("主页面接线测试");
     const base = { session_id: "s", turn_id: "t", at: "" };
     act(() => {
       streamOpts.onChatEvent?.({

@@ -66,6 +66,11 @@ export interface SupervisorTabProps {
    * 审阅页是 Supervisor 产物的归宿；不再塞资源管理器。
    */
   specsSection?: React.ReactNode;
+  /**
+   * C.10f 漏接线修复：历史「需求（合同）」列表原塞在左栏 leftExtra。
+   * 迁入项目审阅，资源管理器只留纯文件树。
+   */
+  requirementList?: React.ReactNode;
   onApprove?: (() => void) | undefined;
   onDeny?: (() => void) | undefined;
   onOpenConsole: () => void;
@@ -120,6 +125,7 @@ export function SupervisorTab({
   busy = false,
   architecture,
   specsSection,
+  requirementList,
   onApprove,
   onDeny,
   onOpenConsole,
@@ -159,6 +165,19 @@ export function SupervisorTab({
           ]}
         />
       </Section>
+
+      {requirementList ? (
+        <Section
+          title="需求列表"
+          icon={<ListChecks className="h-4 w-4" />}
+          testId="supervisor-requirement-list"
+        >
+          <p className="opacity-70">
+            点一项打开合同操作台跟进；列表不再挤在左侧文件树里。
+          </p>
+          <div className="pt-1">{requirementList}</div>
+        </Section>
+      ) : null}
 
       {specsSection ? (
         <Section

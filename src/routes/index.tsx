@@ -1635,6 +1635,57 @@ function Console() {
                 generation={specsGeneration}
               />
             }
+            requirementList={
+              /*
+                C.10f 漏接线修复：原 leftExtra「需求（合同）」列表迁入项目审阅。
+                资源管理器只留纯文件树；点需求仍打开合同操作台。
+              */
+              <div data-testid="requirement-list" className="min-h-[80px]">
+                <div className="px-1 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  需求（合同 {contracts.length}）
+                </div>
+                {contracts.length === 0 && (
+                  <div className="px-1 py-2 text-xs leading-relaxed text-muted-foreground">
+                    暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
+                  </div>
+                )}
+                {contracts.map((contract) => (
+                  <button
+                    key={contract.contract_id}
+                    type="button"
+                    data-testid="requirement-list-item"
+                    onClick={() => {
+                      setSelectedId(contract.contract_id);
+                      setEvidence(null);
+                      setWorkerResult(null);
+                      setDiff(null);
+                      setDiffFiles(null);
+                      setAdmission(null);
+                      setDraft(null);
+                      setDisputeReport(null);
+                      setDisputeError(null);
+                      setStudioViewportOverride(null);
+                      setConfirmPrototypeError(null);
+                      setRequirementsHint(null);
+                      setStudioNonce((n) => n + 1);
+                    }}
+                    className={`block w-full border-b border-border/50 px-2 py-2 text-left hover:bg-sidebar-accent ${
+                      selectedId === contract.contract_id
+                        ? "bg-sidebar-accent"
+                        : ""
+                    }`}
+                  >
+                    <div className="truncate text-xs">
+                      {contract.intent.title}
+                    </div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">
+                      {contract.lifecycle_state} ·{" "}
+                      {contract.contract_id.slice(-8)}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            }
             protection={{
               mode: protection?.mode ?? "VIBE",
               entries: protection?.entries.length ?? 0,
@@ -1856,54 +1907,6 @@ function Console() {
               </div>
             )}
           </>
-        }
-        leftExtra={
-          /*
-            左栏只做资源管理器：文件树（布局自带）+ 需求/合同列表。
-            架构雷达已挪到 Supervisor 的「项目全景解读 · 架构总览」——260px 的
-            窄栏根本放不下拓扑图，圈选和筛选都被挤变形。
-          */
-          <div className="min-h-[120px]">
-            <div className="px-3 py-2 text-xs uppercase tracking-widest text-muted-foreground">
-              需求（合同 {contracts.length}）
-            </div>
-            {contracts.length === 0 && (
-              <div className="px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
-              </div>
-            )}
-            {contracts.map((contract) => (
-              <button
-                key={contract.contract_id}
-                onClick={() => {
-                  setSelectedId(contract.contract_id);
-                  setEvidence(null);
-                  setWorkerResult(null);
-                  setDiff(null);
-                  setDiffFiles(null);
-                  // 切换合同时丢弃上一份合同的准入裁决，避免把 A 的白话卡挂到 B 上
-                  setAdmission(null);
-                  // 同上：未提交草案是"另一个意图"的产物，选中真实合同后必须让位
-                  setDraft(null);
-                  setDisputeReport(null);
-                  setDisputeError(null);
-                  setStudioViewportOverride(null);
-                  setConfirmPrototypeError(null);
-                  setRequirementsHint(null);
-                  // 首屏不再默认打开操作台，点需求才把它拉起来（否则点了没反应）
-                  setStudioNonce((n) => n + 1);
-                }}
-                className={`block w-full border-b border-border/50 px-3 py-2 text-left hover:bg-sidebar-accent ${
-                  selectedId === contract.contract_id ? "bg-sidebar-accent" : ""
-                }`}
-              >
-                <div className="truncate text-xs">{contract.intent.title}</div>
-                <div className="mt-1 text-[10px] text-muted-foreground">
-                  {contract.lifecycle_state} · {contract.contract_id.slice(-8)}
-                </div>
-              </button>
-            ))}
-          </div>
         }
         studioContent={
           <StudioViewportShell

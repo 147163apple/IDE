@@ -50,6 +50,10 @@ export interface WorkspaceLayoutProps {
   files: FileNode[];
   /** 以下为接入主页面用的插槽，均可选 */
   banner?: ReactNode;
+  /**
+   * @deprecated C.10f 漏接线修复：勿再往左栏塞合同列表等。
+   * 需求列表请挂 SupervisorTab.requirementList；布局不再渲染此插槽。
+   */
   leftExtra?: ReactNode;
   studioContent?: ReactNode;
   /** Supervisor Tab 内容（由主页面注入，数据全部来自合同/保护清单） */
@@ -497,7 +501,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                       openTab({ id: p, title: p.split("/").pop() ?? p })
                     }
                   />
-                  {props.leftExtra}
+                  {/* C.10f：leftExtra 不再渲染——合同/需求列表已迁项目审阅 */}
                 </div>
               </div>
             </aside>
