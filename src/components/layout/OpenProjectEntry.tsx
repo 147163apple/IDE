@@ -7,12 +7,14 @@ import {
   relaunchCurrentSession,
   type RecentProjectItem,
 } from "../../lib/daemon-api";
+import { resolveOpenProjectEntryPresentation } from "../../lib/open-project-panel";
 
 /**
- * 「打开项目」入口（TASK-D.1c + C.8c）：
- * - 最近列表一点带钥匙重开
- * - 无钥匙：一键重开当前会话
+ * 「打开/切换项目」入口（TASK-D.1c + C.8c + C.9c）：
+ * - 最近列表一点带钥匙重开；成功即关面板
+ * - 无钥匙：一键重开当前会话；成功即关
  * - 粘贴绝对路径打开（C.8c；不含系统文件夹选择器 / D.1e）
+ * - 已连接降级为「切换项目」；默认收起（C.9a/C.9c）
  */
 export interface OpenProjectEntryProps {
   repoPath: string;
@@ -37,7 +39,9 @@ export function OpenProjectEntry({
   const [openingPath, setOpeningPath] = useState<string | null>(null);
   const [pastePath, setPastePath] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [hasToken, setHasToken] = useState(false);
+  const [hasToken, setHasToken] = useState(() =>
+    Boolean(loadConnection().token),
+  );
   const command = `npx tsx bin/stagent.ts open <新项目路径>`;
 
   const refreshTokenFlag = useCallback(() => {
@@ -62,6 +66,10 @@ export function OpenProjectEntry({
     } finally {
       setLoading(false);
     }
+  }, [refreshTokenFlag]);
+
+  useEffect(() => {
+    refreshTokenFlag();
   }, [refreshTokenFlag]);
 
   useEffect(() => {
@@ -96,6 +104,8 @@ export function OpenProjectEntry({
         return;
       }
       const result = await openWorkspaceByPath(conn, targetPath);
+      setOpen(false);
+      setOpeningPath(null);
       navigateLaunch(result.launchUrl);
     } catch (err) {
       setError((err as Error).message || "打开失败");
@@ -108,6 +118,8 @@ export function OpenProjectEntry({
     setError(null);
     try {
       const result = await relaunchCurrentSession();
+      setOpen(false);
+      setOpeningPath(null);
       navigateLaunch(result.launchUrl);
     } catch (err) {
       setError(
@@ -128,6 +140,9 @@ export function OpenProjectEntry({
   };
 
   const busy = openingPath !== null;
+  const presentation = resolveOpenProjectEntryPresentation({
+    hasSession: hasToken,
+  });
 
   return (
     <div className="border-b px-2 py-2 text-xs">
@@ -136,12 +151,13 @@ export function OpenProjectEntry({
         data-testid="open-project"
         data-command-role="secondary"
         data-command-phase={commandPhase}
+        data-entry-mode={presentation.mode}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center gap-1.5 rounded border border-border px-2 py-1 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <FolderOpen className="h-3.5 w-3.5" />
-        <span className="truncate">打开项目</span>
+        <span className="truncate">{presentation.label}</span>
         <span className="ml-auto truncate opacity-60">{repoName}</span>
       </button>
 
