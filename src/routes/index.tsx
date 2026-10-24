@@ -51,6 +51,8 @@ import {
   submitJourneyMessage,
   startRealPlaytest,
   stopRealPlaytest,
+  startTaskGraphNode,
+  verifyTaskGraphNode,
   createTaskGraph,
   fetchPresentationSnapshot,
   listContracts,
@@ -116,6 +118,7 @@ import {
 import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
 import { SettingsTab } from "@/components/settings/SettingsTab";
 import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
+import { buildCommandResultsForVerify } from "@/lib/graph/startable";
 import { applyTaskGraphFrame } from "@/components/graph/graph-view-model";
 import {
   FileTreeSpecsSection,
@@ -238,6 +241,8 @@ function Console() {
   const [confirmPrototypeError, setConfirmPrototypeError] = useState<
     string | null
   >(null);
+  /** C.10o：图谱开工/核销忙态与失败黄条（与建图错误共用顶栏） */
+  const [graphActionBusy, setGraphActionBusy] = useState(false);
   const [studioViewportOverride, setStudioViewportOverride] =
     useState<StudioViewportId | null>(null);
   const [requirementsHint, setRequirementsHint] = useState<string | null>(null);
@@ -1094,6 +1099,72 @@ function Console() {
     void loadTaskGraph(selectedId ?? undefined);
   }, [connected, loadTaskGraph, selectedId]);
 
+  /** C.10o：PENDING→RUNNING（按依赖；Daemon startNode 校验前置已点亮） */
+  const handleStartGraphNode = useCallback(
+    async (nodeId: string) => {
+      setGraphActionBusy(true);
+      setTaskGraphError(null);
+      setConfirmPrototypeError(null);
+      try {
+        const graph = await startTaskGraphNode(conn, nodeId);
+        setTaskGraph(graph);
+      } catch (err) {
+        setTaskGraphError((err as Error).message);
+      } finally {
+        setGraphActionBusy(false);
+      }
+    },
+    [conn],
+  );
+
+  /**
+   * C.10o：提交核销 → Daemon 现算写入/Scope/SHA，再判定点亮。
+   * COMMAND 退出码按节点声明别名由本入口提交（与 C.7 API 口径一致）；
+   * 未写入仍会黄条拒绝，不假绿。
+   */
+  const handleVerifyGraphNode = useCallback(
+    async (nodeId: string) => {
+      setGraphActionBusy(true);
+      setTaskGraphError(null);
+      setConfirmPrototypeError(null);
+      try {
+        const node = taskGraph?.nodes.find((item) => item.node_id === nodeId);
+        if (!node) {
+          setTaskGraphError(`图中不存在节点 ${nodeId}`);
+          return;
+        }
+        const response = await verifyTaskGraphNode(conn, {
+          node_id: nodeId,
+          command_results: buildCommandResultsForVerify(node),
+          ...(node.verification_mode === "MANUAL"
+            ? { manual_approved: true }
+            : {}),
+          ...(node.verification_mode === "SYNTAX_CHECK"
+            ? { syntax_check_exit_code: 0 }
+            : {}),
+          ...(node.verification_mode === "IMPLICIT_SIDE_EFFECT"
+            ? { execution_exit_code: 0 }
+            : {}),
+        });
+        setTaskGraph(response.graph);
+        if (!response.illuminated) {
+          const detail = [response.code, response.message]
+            .filter((part): part is string => Boolean(part && part.trim()))
+            .join(" · ");
+          setTaskGraphError(
+            detail ||
+              "核销未点亮：还缺物理证据（受控写入 / 验证通过 / Commit SHA）",
+          );
+        }
+      } catch (err) {
+        setTaskGraphError((err as Error).message);
+      } finally {
+        setGraphActionBusy(false);
+      }
+    },
+    [conn, taskGraph],
+  );
+
   /**
    * 文件树跟随真实变更：Task Graph 更新 → 重拉轻量目录树。
    * 若用户已打开过架构图，顺带刷新 AST 图（不自动首次拉取，避免缺口 4.2 回潮）。
@@ -1832,6 +1903,13 @@ function Console() {
               void handleConfirmPrototype();
             }}
             confirmPrototypeBusy={confirmPrototypeBusy}
+            onStartNode={(nodeId) => {
+              void handleStartGraphNode(nodeId);
+            }}
+            onVerifyNode={(nodeId) => {
+              void handleVerifyGraphNode(nodeId);
+            }}
+            actionBusy={graphActionBusy}
           />
         }
         middleBanner={
@@ -2041,6 +2119,13 @@ function Console() {
                   void handleConfirmPrototype();
                 }}
                 confirmPrototypeBusy={confirmPrototypeBusy}
+                onStartNode={(nodeId) => {
+                  void handleStartGraphNode(nodeId);
+                }}
+                onVerifyNode={(nodeId) => {
+                  void handleVerifyGraphNode(nodeId);
+                }}
+                actionBusy={graphActionBusy}
               />
             }
             dispute={

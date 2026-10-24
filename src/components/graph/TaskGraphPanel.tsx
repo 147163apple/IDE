@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { TaskGraph } from "@/lib/graph/task-graph";
 import { TASK_NODE_STATE_LABEL } from "@/lib/graph/task-graph";
+import {
+  isNodeStartable,
+  isNodeVerifiable,
+  nextStartableNode,
+  resolveVerifiableNode,
+} from "@/lib/graph/startable";
 import { ExecutionDag } from "./ExecutionDag";
 import { FunctionalTree } from "./FunctionalTree";
 import {
@@ -12,12 +18,13 @@ import {
 } from "./graph-view-model";
 
 /**
- * Task Graph 双视图面板（TASK-C.7；C.10n 空态可感知）。
+ * Task Graph 双视图面板（TASK-C.7；C.10n 空态；C.10o 开工/核销入口）。
  *
  * 数据边界：本组件**不取数**。权威快照由主页面通过 `graph` 注入
- * （首屏 GET + `TASK_GRAPH_UPDATED` 帧覆盖），这里只做两件事：
+ * （首屏 GET + `TASK_GRAPH_UPDATED` 帧覆盖），这里做：
  * 1. 视图映射（业务功能树 / 执行 DAG）；
- * 2. 前后快照差分，给新点亮节点加 100ms 翠绿过渡。
+ * 2. 前后快照差分，给新点亮节点加 100ms 翠绿过渡；
+ * 3. C.10o：有图时暴露开工/核销按钮，真正改态仍由页面回调 Daemon。
  *
  * 这样组件既能在页面里消费真实帧，也能在 jsdom 测试里用两份快照
  * 直接验证动效，不需要伪造 WebSocket。
@@ -31,6 +38,12 @@ export interface TaskGraphPanelProps {
   onConfirmPrototype?: (() => void) | undefined;
   /** C.10n：建图忙态（确认原型飞行中） */
   confirmPrototypeBusy?: boolean | undefined;
+  /** C.10o：开工指定节点（POST /api/graph/nodes/start） */
+  onStartNode?: ((nodeId: string) => void) | undefined;
+  /** C.10o：核销指定节点（POST /api/graph/verify） */
+  onVerifyNode?: ((nodeId: string) => void) | undefined;
+  /** C.10o：开工/核销飞行中 */
+  actionBusy?: boolean | undefined;
 }
 
 type GraphView = "functional" | "dag";
@@ -42,6 +55,9 @@ export function TaskGraphPanel({
   onRefresh,
   onConfirmPrototype,
   confirmPrototypeBusy = false,
+  onStartNode,
+  onVerifyNode,
+  actionBusy = false,
 }: TaskGraphPanelProps) {
   const [view, setView] = useState<GraphView>("functional");
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -90,6 +106,11 @@ export function TaskGraphPanel({
 
   const counts = graph ? stateCounts(graph) : [];
   const hasGraph = graph !== null;
+  const startable = graph ? nextStartableNode(graph) : null;
+  const verifiable = graph
+    ? resolveVerifiableNode(graph, selectedNodeId)
+    : null;
+  const actionsEnabled = Boolean(onStartNode || onVerifyNode);
 
   return (
     <div data-testid="task-graph-panel" className="flex min-h-0 flex-col">
@@ -185,12 +206,60 @@ export function TaskGraphPanel({
               </button>
             </>
           )}
+          {hasGraph && onStartNode ? (
+            <button
+              type="button"
+              data-testid="graph-start-next"
+              disabled={!startable || actionBusy}
+              aria-busy={actionBusy && Boolean(startable)}
+              title={
+                startable
+                  ? `按依赖开工：${startable.title}`
+                  : "没有可开工的节点（可能在等前置点亮，或已全部开工）"
+              }
+              onClick={() => {
+                if (!startable || actionBusy) return;
+                onStartNode(startable.node_id);
+              }}
+              className={`rounded border border-emerald-600/40 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900 ${
+                !startable || actionBusy
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-emerald-100"
+              }`}
+            >
+              {actionBusy && startable ? "开工中…" : "开工下一节点"}
+            </button>
+          ) : null}
+          {hasGraph && onVerifyNode ? (
+            <button
+              type="button"
+              data-testid="graph-verify-current"
+              disabled={!verifiable || actionBusy}
+              aria-busy={actionBusy && Boolean(verifiable)}
+              title={
+                verifiable
+                  ? `提交核销：${verifiable.title}（点亮只认物理证据）`
+                  : "请先开工节点，或点选一个执行中/待重验的节点"
+              }
+              onClick={() => {
+                if (!verifiable || actionBusy) return;
+                onVerifyNode(verifiable.node_id);
+              }}
+              className={`rounded border border-sky-600/40 bg-sky-50 px-2 py-0.5 text-xs font-medium text-sky-900 ${
+                !verifiable || actionBusy
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-sky-100"
+              }`}
+            >
+              {actionBusy && verifiable ? "核销中…" : "核销点亮"}
+            </button>
+          ) : null}
           {onRefresh ? (
             <button
               type="button"
               data-testid="graph-refresh"
               data-loading={loading ? "true" : "false"}
-              disabled={loading}
+              disabled={loading || actionBusy}
               aria-busy={loading}
               onClick={onRefresh}
               className={`rounded border px-2 py-0.5 text-xs ${
@@ -232,10 +301,12 @@ export function TaskGraphPanel({
 
       {hasGraph ? (
         <p
-          data-testid="graph-readonly-hint"
+          data-testid="graph-action-hint"
           className="border-b px-3 py-1 text-[11px] text-muted-foreground"
         >
-          这里只看进度。点节点可以看详情，不会开工。
+          {actionsEnabled
+            ? "可按依赖「开工下一节点」，施工有证据后再「核销点亮」。点亮只认三件物理证据；点节点可看详情。"
+            : "这里只看进度。点节点可以看详情，不会开工。"}
         </p>
       ) : null}
 
@@ -300,7 +371,13 @@ export function TaskGraphPanel({
               }
             />
             {selectedNode ? (
-              <NodeDetail graph={graph} nodeId={selectedNode.node_id} />
+              <NodeDetail
+                graph={graph}
+                nodeId={selectedNode.node_id}
+                actionBusy={actionBusy}
+                onStartNode={onStartNode}
+                onVerifyNode={onVerifyNode}
+              />
             ) : null}
           </>
         )}
@@ -309,22 +386,58 @@ export function TaskGraphPanel({
   );
 }
 
-function NodeDetail({ graph, nodeId }: { graph: TaskGraph; nodeId: string }) {
+function NodeDetail({
+  graph,
+  nodeId,
+  actionBusy = false,
+  onStartNode,
+  onVerifyNode,
+}: {
+  graph: TaskGraph;
+  nodeId: string;
+  actionBusy?: boolean;
+  onStartNode?: ((nodeId: string) => void) | undefined;
+  onVerifyNode?: ((nodeId: string) => void) | undefined;
+}) {
   const node = graph.nodes.find((item) => item.node_id === nodeId);
   if (!node) return null;
   const issue = issueForNode(graph, nodeId);
   const visual = visualForNode(node, issue);
+  const canStart = Boolean(onStartNode) && isNodeStartable(graph, node);
+  const canVerify = Boolean(onVerifyNode) && isNodeVerifiable(node);
   return (
     <section
       data-testid="graph-node-detail"
       className="m-3 space-y-1 rounded border-2 border-sky-400/70 bg-sky-50/40 p-2 text-xs shadow-sm ring-2 ring-sky-300/40"
     >
-      <header className="flex items-center gap-2">
+      <header className="flex flex-wrap items-center gap-2">
         <span className={`h-2 w-2 rounded-full ${visual.dot}`} aria-hidden />
         <span className="font-semibold">{node.title}</span>
         <span className={`rounded px-1.5 py-0.5 text-[10px] ${visual.badge}`}>
           {visual.label}
         </span>
+        {canStart ? (
+          <button
+            type="button"
+            data-testid="graph-node-start"
+            disabled={actionBusy}
+            onClick={() => onStartNode?.(node.node_id)}
+            className="ml-auto rounded border border-emerald-600/40 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-900 hover:bg-emerald-100 disabled:opacity-50"
+          >
+            {actionBusy ? "开工中…" : "开工此节点"}
+          </button>
+        ) : null}
+        {canVerify ? (
+          <button
+            type="button"
+            data-testid="graph-node-verify"
+            disabled={actionBusy}
+            onClick={() => onVerifyNode?.(node.node_id)}
+            className={`${canStart ? "" : "ml-auto "}rounded border border-sky-600/40 bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-900 hover:bg-sky-100 disabled:opacity-50`}
+          >
+            {actionBusy ? "核销中…" : "核销点亮"}
+          </button>
+        ) : null}
       </header>
       <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 text-[11px]">
         <dt className="text-muted-foreground">类型</dt>

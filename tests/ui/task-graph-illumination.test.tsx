@@ -154,9 +154,9 @@ describe("Task Graph 双视图", () => {
     expect(screen.getByTestId("graph-empty-confirm-cta")).toBeInTheDocument();
   });
 
-  it("C.10n：有图时显示只读提示；选中节点高亮并出详情", () => {
+  it("C.10n：无开工回调时仍显示只读提示；选中节点高亮并出详情", () => {
     render(<TaskGraphPanel graph={makeGraph()} />);
-    expect(screen.getByTestId("graph-readonly-hint")).toHaveTextContent(
+    expect(screen.getByTestId("graph-action-hint")).toHaveTextContent(
       "不会开工",
     );
     fireEvent.click(screen.getByTestId("graph-view-dag"));
@@ -167,6 +167,83 @@ describe("Task Graph 双视图", () => {
     );
     expect(screen.getByTestId("graph-node-detail")).toHaveTextContent(
       "数据表迁移",
+    );
+  });
+
+  it("C.10o：有图时可开工下一节点，并回调 node_id", () => {
+    const onStart = vi.fn();
+    const onVerify = vi.fn();
+    render(
+      <TaskGraphPanel
+        graph={makeGraph()}
+        onStartNode={onStart}
+        onVerifyNode={onVerify}
+      />,
+    );
+    expect(screen.getByTestId("graph-action-hint")).toHaveTextContent(
+      "开工下一节点",
+    );
+    const startBtn = screen.getByTestId("graph-start-next");
+    expect(startBtn).not.toBeDisabled();
+    fireEvent.click(startBtn);
+    expect(onStart).toHaveBeenCalledWith("n1");
+    // 全 PENDING 时没有可核销节点
+    expect(screen.getByTestId("graph-verify-current")).toBeDisabled();
+    expect(onVerify).not.toHaveBeenCalled();
+  });
+
+  it("C.10o：RUNNING 时可核销；详情里也能开工/核销", () => {
+    const onStart = vi.fn();
+    const onVerify = vi.fn();
+    const { unmount } = render(
+      <TaskGraphPanel
+        graph={makeGraph({
+          states: { n1: "RUNNING", n2: "PENDING", n3: "PENDING" },
+        })}
+        onStartNode={onStart}
+        onVerifyNode={onVerify}
+      />,
+    );
+    // n1 RUNNING → 下一可开工被挡住（n2 等 n1 点亮）
+    expect(screen.getByTestId("graph-start-next")).toBeDisabled();
+    const verifyBtn = screen.getByTestId("graph-verify-current");
+    expect(verifyBtn).not.toBeDisabled();
+    fireEvent.click(verifyBtn);
+    expect(onVerify).toHaveBeenCalledWith("n1");
+
+    fireEvent.click(screen.getByTestId("graph-view-dag"));
+    fireEvent.click(screen.getByTestId("dag-node-n1"));
+    fireEvent.click(screen.getByTestId("graph-node-verify"));
+    expect(onVerify).toHaveBeenCalledTimes(2);
+    unmount();
+
+    // 前置点亮后详情可开工下游
+    render(
+      <TaskGraphPanel
+        graph={makeGraph({
+          states: { n1: "ILLUMINATED", n2: "PENDING", n3: "PENDING" },
+        })}
+        onStartNode={onStart}
+        onVerifyNode={onVerify}
+      />,
+    );
+    fireEvent.click(screen.getByTestId("graph-view-dag"));
+    fireEvent.click(screen.getByTestId("dag-node-n2"));
+    fireEvent.click(screen.getByTestId("graph-node-start"));
+    expect(onStart).toHaveBeenCalledWith("n2");
+  });
+
+  it("C.10o：失败黄条仍走 graph-error", () => {
+    render(
+      <TaskGraphPanel
+        graph={makeGraph({ states: { n1: "RUNNING" } })}
+        error="E_FILES_NOT_WRITTEN · 目标文件尚未写入"
+        onStartNode={() => {}}
+        onVerifyNode={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("graph-error")).toHaveTextContent(
+      "E_FILES_NOT_WRITTEN",
     );
   });
 
