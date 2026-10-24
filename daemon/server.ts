@@ -153,6 +153,11 @@ import {
 } from "./editor/worktree-files";
 import { deleteRepoPath } from "./editor/repo-delete";
 import {
+  createRepoPath,
+  renameRepoPath,
+  revealRepoPath,
+} from "./editor/repo-fs-ops";
+import {
   assertSafeContractId,
   getWorktreePath,
   execGit,
@@ -2625,6 +2630,128 @@ export class StagentDaemon {
           deleted: true,
           path: outcome.path,
           method: outcome.method,
+          message: outcome.message,
+        });
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    // C.10i：新建文件 / 文件夹（鉴权 + P.1）
+    if (method === "POST" && pathname === "/api/repo/create") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      try {
+        const body = (await this.readJsonBody(req)) as {
+          parent?: string;
+          name?: string;
+          kind?: "file" | "dir";
+          contract_id?: string;
+        };
+        const kind = body.kind === "dir" ? "dir" : "file";
+        const ctx = this.fileContext(body.contract_id ?? null);
+        const fileRoot =
+          ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
+        const outcome = createRepoPath({
+          protectionRoot: ctx.repoRoot,
+          fileRoot,
+          parentRel: String(body.parent ?? ""),
+          name: String(body.name ?? ""),
+          kind,
+        });
+        if (!outcome.ok) {
+          this.sendJson(res, outcome.httpStatus, {
+            error: outcome.message,
+            code: outcome.code,
+            message: outcome.message,
+          });
+          return;
+        }
+        this.sendJson(res, 200, {
+          created: true,
+          path: outcome.path,
+          kind: outcome.kind,
+          message: outcome.message,
+        });
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    // C.10i：重命名（鉴权 + P.1）
+    if (method === "POST" && pathname === "/api/repo/rename") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      try {
+        const body = (await this.readJsonBody(req)) as {
+          from?: string;
+          to?: string;
+          contract_id?: string;
+        };
+        const ctx = this.fileContext(body.contract_id ?? null);
+        const fileRoot =
+          ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
+        const outcome = renameRepoPath({
+          protectionRoot: ctx.repoRoot,
+          fileRoot,
+          fromRel: String(body.from ?? ""),
+          toRel: String(body.to ?? ""),
+        });
+        if (!outcome.ok) {
+          this.sendJson(res, outcome.httpStatus, {
+            error: outcome.message,
+            code: outcome.code,
+            message: outcome.message,
+          });
+          return;
+        }
+        this.sendJson(res, 200, {
+          renamed: true,
+          from: outcome.from,
+          to: outcome.to,
+          message: outcome.message,
+        });
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    // C.10i：在 Finder / 文件管理器中显示（鉴权；只读）
+    if (method === "POST" && pathname === "/api/repo/reveal") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      try {
+        const body = (await this.readJsonBody(req)) as {
+          path?: string;
+          contract_id?: string;
+        };
+        const ctx = this.fileContext(body.contract_id ?? null);
+        const fileRoot =
+          ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
+        const outcome = revealRepoPath({
+          fileRoot,
+          relPath: String(body.path ?? ""),
+        });
+        if (!outcome.ok) {
+          this.sendJson(res, outcome.httpStatus, {
+            error: outcome.message,
+            code: outcome.code,
+            message: outcome.message,
+          });
+          return;
+        }
+        this.sendJson(res, 200, {
+          revealed: true,
+          path: outcome.path,
           message: outcome.message,
         });
       } catch (err) {

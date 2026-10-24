@@ -52,6 +52,19 @@ export interface WorkspaceLayoutProps {
   filesLoading?: boolean | undefined;
   /** C.10h：文件树确认后删除（父级调 API + 刷新树） */
   onDeletePath?: ((path: string) => void | Promise<void>) | undefined;
+  /** C.10i：新建文件/文件夹 */
+  onCreatePath?:
+    | ((args: {
+        parent: string;
+        name: string;
+        kind: "file" | "dir";
+      }) => void | Promise<string | void>)
+    | undefined;
+  /** C.10i：重命名 */
+  onRenamePath?:
+    ((args: { from: string; to: string }) => void | Promise<void>) | undefined;
+  /** C.10i：在 Finder / 文件管理器显示 */
+  onRevealPath?: ((path: string) => void | Promise<void>) | undefined;
   /** 以下为接入主页面用的插槽，均可选 */
   banner?: ReactNode;
   /**
@@ -509,6 +522,20 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                           }
                         : undefined
                     }
+                    onCreate={props.onCreatePath}
+                    onRename={
+                      props.onRenamePath
+                        ? async ({ from, to }) => {
+                            await props.onRenamePath!({ from, to });
+                            closeTab(from);
+                            openTab({
+                              id: to,
+                              title: to.split("/").pop() ?? to,
+                            });
+                          }
+                        : undefined
+                    }
+                    onReveal={props.onRevealPath}
                   />
                   {/* C.10f：leftExtra 不再渲染——合同/需求列表已迁项目审阅 */}
                 </div>

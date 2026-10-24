@@ -24,3 +24,8 @@ export function toggleExpandedPath(
   else next.add(path);
   return next;
 }
+
+/** C.10i：点顶栏路径 → 折叠整棵树 */
+export function collapseAllDirPaths(): Set<string> {
+  return new Set();
+}

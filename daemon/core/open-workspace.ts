@@ -40,6 +40,7 @@ export type FetchLike = (
 export const DAEMON_CODE_SKEW_PROBE_FILES = [
   "daemon/server.ts",
   "daemon/editor/repo-delete.ts",
+  "daemon/editor/repo-fs-ops.ts",
 ] as const;
 
 export function isDaemonCodeStale(args: {

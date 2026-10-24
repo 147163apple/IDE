@@ -1,4 +1,5 @@
 
+- **P-55（立卡+实现，2026-10-24）**：新增 **`TASK-C.10i`**（文件树第一批：顶栏路径折叠整树；新建文件/文件夹；右键「在 Finder 显示 / 复制路径 / 重命名 / 删除」）。Cursor 其余右键（Chat/终端/对比/时间线/浏览器打开等）**仅**写入 v0.2+ RFC 锚定，**不实施**、不推翻现架构。同步：版本头第 45 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10h→C.10i`）、§3.4 详细卡、Sprint「当前首要」→ **C.10i**；走查报告 §6.17；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-54（C.10h 删除 Not Found 热修，2026-10-24）**：Tina 确认删除后对话框显示「Not Found」、文件未删。根因：**不是**前后端路径不一致——源码双方都是 `POST /api/repo/delete`；而是 Daemon 于 C.10h 合入前（~13:14）启动，`stagent open` 健康检查通过后**复用旧进程**，路由未挂到活进程（活探针：`/api/repo/tree` 200、`/api/repo/delete` 404）。热修：① `isDaemonCodeStale` + `tryReuseRunningDaemon` 发现 `daemon/server.ts` / `repo-delete.ts` mtime 新于 `startedAt` 则 shutdown/SIGTERM 退役再启；② 前端 404 改白话「本机服务还是旧版…重新打开」；③ 实测删除走废纸篓。四件套 **1295 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.16。
 - **P-43（合入回写，2026-10-24）**：`TASK-C.10c` → **`[COMPLETED]`**（main tip `6811f44` 快进合入；四件套 **1267 passed / 6 skipped**）。同步：版本头第 34 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 第三轮含暗号清扫收口；走查报告 §6.5/§6.7 回写。交付要点：白话标签、图谱单入口、页脚/欢迎降噪。架构规范仅 §11 注记 9 轻量锚定延续。# Stagent v0.1 研发任务拆解与工程执行规范 (v1.6.2 代码事实对齐与卡片净化版)
 - **P-45（合入回写，2026-10-24）**：`TASK-C.10d` → **`[COMPLETED]`**（main tip `51ae8ae` 快进合入；四件套 **1273 passed / 6 skipped**）。同步：版本头第 36 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 左栏老板主路径收口；走查报告 §6.9/§6.10 回写。交付要点：换项目主视线、`left-project-files` 默认折叠、跟右侧说话提示。架构规范仅 §11 注记 9 轻量锚定延续。
@@ -56,13 +57,14 @@
 > 42. **状态回写（2026-10-24 · C.10h 确认删除点不了热修）**：右键删除后确认框点不了。根因 ContextMenu→AlertDialog 同步打开叠加 Radix `pointer-events` 锁；延后一帧打开。合入 tip `be4968b`；四件套 **1292 passed / 6 skipped**。对照走查 §6.16。
 > 43. **状态回写（2026-10-24 · 资源管理器去掉冗余「文件」标题）**：删除 `left-explorer-heading`「文件」字样；路径根与文件树保留。合入 tip `f14c8cb`；四件套 **1292 passed / 6 skipped**。
 > 44. **状态回写（2026-10-24 · C.10h 删除 Not Found 热修）**：确认删除回「Not Found」——活 Daemon 复用旧进程致 `POST /api/repo/delete` 未挂（路径在源码一致）。退役偏斜 Daemon + 404 白话；四件套 **1295 passed / 6 skipped**。对照走查 §6.16。
+> 45. **状态回写（2026-10-24 · 立卡并实现 TASK-C.10i · 文件树第一批）**：Tina 授权第一批——点顶栏路径折叠整树；顶栏右侧新建文件/文件夹；右键含「在 Finder 中显示 / 复制路径 / 重命名 / 删除（已有）」。新增 **`TASK-C.10i`**（实现中合入后改 COMPLETED）。Cursor 其余右键菜单项（加进 Chat、在集成终端中打开、选择以进行比较、打开时间线、在浏览器中打开等）写入 **v0.2+ RFC 锚定（不实施）**，不推翻现架构。前置：`TASK-C.10h` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.17。架构规范仅 §11 注记 9 轻量锚定延续。
 > 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1295 passed / 6 skipped**）。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（合入 C.10i 后以实测为准；合入前基线 **1295 passed / 6 skipped**）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -119,6 +121,7 @@
 | **TASK-C.10f** | 资源管理器纯文件树 + 规范与资产进项目审阅 | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `592f825`；合后四件套 1274 passed / 6 skipped） | P4 体验打磨 | • 与 C.10e 同 tip 合入<br>• 左栏只留纯文件树；`FileTreeSpecsSection` 挂「项目审阅」<br>• **不取消**能力；不改鉴权；不拆多路由 |
 | **TASK-C.10g** | 文件树展开/折叠（默认只展开第一层） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `a3fa7c7`；合后四件套 1281 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10f` COMPLETED<br>• 点文件夹展开/折叠；默认根下第一层展开；更深默认收起<br>• 点文件仍打开；不改鉴权；不抢 D.1e<br>• `file-tree-expand` + UI 回归 |
 | **TASK-C.10h** | 文件树右键删除（确认 / P.1 / 尽量废纸篓） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `008fd3a`；热修 `be4968b` 确认框可点；合后四件套 1292 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10g` COMPLETED<br>• 右键菜单 + 确认；`POST /api/repo/delete` 鉴权；保护清单拦则白话<br>• macOS 尽量废纸篓，否则普通文件永久删除并诚实说明；删成功刷新树<br>• 热修：ContextMenu 关闭后延后打开确认框（避免 pointer-events 锁）<br>• **不改**鉴权；不抢 D.1e |
+| **TASK-C.10i** | 文件树第一批（折叠整树 / 新建 / Finder·复制·重命名·删除） | 工作台 UX | **[COMPLETED]**（合入后回填 tip；四件套以实测为准） | P4 体验打磨 | • 前置 `C.10h` COMPLETED<br>• 点顶栏路径折叠整树；新建文件/文件夹；右键 Finder/复制路径/重命名/删除<br>• 写操作经鉴权 API + P.1；**不改**鉴权；不抢 D.1e<br>• Cursor 其余右键 → v0.2+ RFC 锚定（不实施） |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -189,7 +192,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i
               │                │                             │              │              │              │
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
@@ -279,7 +282,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10d", "to": "TASK-C.10e" },
   { "from": "TASK-C.10e", "to": "TASK-C.10f" },
   { "from": "TASK-C.10f", "to": "TASK-C.10g" },
-  { "from": "TASK-C.10g", "to": "TASK-C.10h" }
+  { "from": "TASK-C.10g", "to": "TASK-C.10h" },
+  { "from": "TASK-C.10h", "to": "TASK-C.10i" }
 ]
 ```
 
@@ -1511,6 +1515,25 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
+#### 【Task C.10i】文件树第一批（折叠整树 / 新建 / Finder·复制·重命名·删除）`[COMPLETED]`
+* **任务编号**：`TASK-C.10i`
+* **前置依赖**：`TASK-C.10h` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（合入后回填 tip 与四件套）
+* **目标**：资源管理器达到老板够用的 Cursor 式第一批文件操作，不一次复刻整张右键菜单。
+* **范围**：
+  1. **顶栏**：点击项目路径折叠整棵文件树；右侧提供新建文件 / 新建文件夹。
+  2. **右键（本批）**：在 Finder 中显示、复制路径、重命名、删除（沿用 C.10h）。
+  3. **后端**：`POST /api/repo/create`、`/api/repo/rename`、`/api/repo/reveal`（鉴权）；写操作过 P.1 保护清单白话拒绝。
+  4. **明确不包含（v0.2+ 锚定）**：加进 Chat、在集成终端中打开、选择以进行比较、打开时间线、在浏览器中打开、将文件夹添加到工作区等——见 `Stagent_v0.2_Architecture_Evolution_RFC.md` 附录锚点；**不实施**、不推翻现架构。
+* **主要改动**：
+  - `daemon/editor/repo-fs-ops.ts` + `daemon/server.ts` 路由
+  - `src/components/FileTree.tsx` / `WorkspaceLayout.tsx` / `src/routes/index.tsx`
+  - `src/lib/file-tree-ops.ts` / `file-tree-expand.ts`（collapseAll）
+* **验收**：
+  1. 点顶栏路径后子节点收起；新建/重命名/删除后树刷新。
+  2. 保护清单命中白话拒绝；系统路径（.git/.stagent）不可改。
+  3. 四件套绿；不回退 C.10h/g/f/e；不改鉴权。
+
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
@@ -1836,11 +1859,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：C.10h 已收口。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.16。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
+> - **当前首要编码任务**：C.10i 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.16。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
-> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–h` 均已 **COMPLETED**（C.10h tip `008fd3a`）。属非技术可用性打磨，不新开 Sprint 编号。
+> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–i` 均已 **COMPLETED**（C.10i 合入后回填 tip）。属非技术可用性打磨，不新开 Sprint 编号。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：

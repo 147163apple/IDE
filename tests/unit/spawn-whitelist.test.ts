@@ -47,6 +47,12 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
       "TASK-C.10h：仅 execFileSync 调用 /usr/bin/trash 或 osascript 移到废纸篓（固定系统二进制，非任意用户命令）",
   },
   {
+    file: "daemon/editor/repo-fs-ops.ts",
+    module: "daemon/editor",
+    reason:
+      "TASK-C.10i：仅 execFileSync 调用 open/xdg-open/explorer 在文件管理器中显示（固定系统二进制）",
+  },
+  {
     file: "daemon/server.ts",
     module: "daemon/server",
     reason: "Diff API 的 git diff（execFileSync）",

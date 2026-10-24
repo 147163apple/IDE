@@ -448,6 +448,7 @@ describe("TASK-W.5a spawn 静态禁令", () => {
       "daemon/editor/launcher.ts",
       // TASK-C.10h：废纸篓 trash/osascript
       "daemon/editor/repo-delete.ts",
+      "daemon/editor/repo-fs-ops.ts",
       "daemon/git/worktree-manager.ts",
       // TASK-D.1c：最近项目一点重开，仅 spawn 本仓 stagent start
       "daemon/core/open-workspace.ts",

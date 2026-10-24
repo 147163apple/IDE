@@ -624,6 +624,107 @@ export async function deleteRepoPath(
   }
 }
 
+/** C.10i：新建文件 / 文件夹 */
+export interface RepoCreateResult {
+  created: boolean;
+  path: string;
+  kind: "file" | "dir";
+  message: string;
+}
+
+export async function createRepoPath(
+  conn: DaemonConnection,
+  args: {
+    parent?: string;
+    name: string;
+    kind: "file" | "dir";
+    contractId?: string | null;
+  },
+): Promise<RepoCreateResult> {
+  try {
+    return await request<RepoCreateResult>(conn, "/api/repo/create", {
+      method: "POST",
+      body: JSON.stringify({
+        parent: args.parent ?? "",
+        name: args.name,
+        kind: args.kind,
+        ...(args.contractId ? { contract_id: args.contractId } : {}),
+      }),
+    });
+  } catch (err) {
+    if (err instanceof DaemonApiError && err.status === 404) {
+      throw new DaemonApiError(
+        404,
+        "本机服务还是旧版，还没有新建接口。请关掉后重新打开项目，再试一次。",
+      );
+    }
+    throw err;
+  }
+}
+
+/** C.10i：重命名 */
+export interface RepoRenameResult {
+  renamed: boolean;
+  from: string;
+  to: string;
+  message: string;
+}
+
+export async function renameRepoPath(
+  conn: DaemonConnection,
+  args: { from: string; to: string; contractId?: string | null },
+): Promise<RepoRenameResult> {
+  try {
+    return await request<RepoRenameResult>(conn, "/api/repo/rename", {
+      method: "POST",
+      body: JSON.stringify({
+        from: args.from,
+        to: args.to,
+        ...(args.contractId ? { contract_id: args.contractId } : {}),
+      }),
+    });
+  } catch (err) {
+    if (err instanceof DaemonApiError && err.status === 404) {
+      throw new DaemonApiError(
+        404,
+        "本机服务还是旧版，还没有重命名接口。请关掉后重新打开项目，再试一次。",
+      );
+    }
+    throw err;
+  }
+}
+
+/** C.10i：在 Finder / 文件管理器中显示 */
+export interface RepoRevealResult {
+  revealed: boolean;
+  path: string;
+  message: string;
+}
+
+export async function revealRepoPath(
+  conn: DaemonConnection,
+  relPath: string,
+  contractId?: string | null,
+): Promise<RepoRevealResult> {
+  try {
+    return await request<RepoRevealResult>(conn, "/api/repo/reveal", {
+      method: "POST",
+      body: JSON.stringify({
+        path: relPath,
+        ...(contractId ? { contract_id: contractId } : {}),
+      }),
+    });
+  } catch (err) {
+    if (err instanceof DaemonApiError && err.status === 404) {
+      throw new DaemonApiError(
+        404,
+        "本机服务还是旧版，还没有「在 Finder 中显示」接口。请关掉后重新打开项目，再试一次。",
+      );
+    }
+    throw err;
+  }
+}
+
 export interface ModelSettings {
   configured: boolean;
   model: string;

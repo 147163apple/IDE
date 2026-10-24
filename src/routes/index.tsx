@@ -37,6 +37,9 @@ import {
   fetchArchGraph,
   fetchRepoTree,
   deleteRepoPath,
+  createRepoPath,
+  renameRepoPath,
+  revealRepoPath,
   fetchDiff,
   fetchDiffFiles,
   fetchEvidence,
@@ -1543,6 +1546,18 @@ function Console() {
         onDeletePath={async (relPath) => {
           await deleteRepoPath(conn, relPath);
           await loadRepoTree();
+        }}
+        onCreatePath={async ({ parent, name, kind }) => {
+          const r = await createRepoPath(conn, { parent, name, kind });
+          await loadRepoTree();
+          return r.path;
+        }}
+        onRenamePath={async ({ from, to }) => {
+          await renameRepoPath(conn, { from, to });
+          await loadRepoTree();
+        }}
+        onRevealPath={async (relPath) => {
+          await revealRepoPath(conn, relPath);
         }}
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
