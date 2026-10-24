@@ -3,6 +3,7 @@
 - **P-45（合入回写，2026-10-24）**：`TASK-C.10d` → **`[COMPLETED]`**（main tip `51ae8ae` 快进合入；四件套 **1273 passed / 6 skipped**）。同步：版本头第 36 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 左栏老板主路径收口；走查报告 §6.9/§6.10 回写。交付要点：换项目主视线、`left-project-files` 默认折叠、跟右侧说话提示。架构规范仅 §11 注记 9 轻量锚定延续。
 - **P-46（立卡+实现，2026-10-24）**：新增 **`TASK-C.10e`**（Cursor 式欢迎页承载打开/切换项目）与 **`TASK-C.10f`**（资源管理器纯文件树 + 规范与资产进项目审阅）两张卡（Tina 产品定稿三条）。同步：版本头第 37 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10d→C.10e→C.10f`）、§3.4 详细卡、Sprint「当前首要」→ **C.10e→C.10f**；走查报告 §6.11。**不改**鉴权；**保留** C.8c 无钥匙重开/粘贴迁到欢迎页；**不抢** D.1e。架构规范仅 §11 注记 9 轻量续写。
 - **P-47（合入回写，2026-10-24）**：`TASK-C.10e` / `TASK-C.10f` → **`[COMPLETED]`**（main tip `592f825` 快进合入；四件套 **1274 passed / 6 skipped**）。同步：版本头第 38 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 欢迎页开项目/纯树/资产进审阅收口；走查报告 §6.11/§6.12。交付要点：`ProjectWelcomePage` + `OpenProjectEntry` page 变体；左栏 `left-explorer` 纯树；`SupervisorTab.specsSection`；顶栏「切换项目」；保留 C.8c；不抢 D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
+- **P-49（C.10f 空文件树热修，2026-10-24）**：Tina 点资源管理器只见「文件」+ 路径、无树节点。根因：左栏 `files` 仍绑架构图 `graph.nodes`，而建连故意不自动拉 AST（缺口 4.2）→ 空数组。非 C.10d 折叠、非 leftExtra。热修：新增轻量 `GET /api/repo/tree` + `listRepoTreePaths`（无 AST）；建连自动灌树；Demo 就绪改看真实目录。四件套 **1277 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。
 - **P-48（C.10f 漏接线热修，2026-10-24）**：Tina 打开工作台见左栏仍有「需求（合同 N）」列表——C.10e/f 已迁开项目与规范资产，但 `routes` 仍经 `leftExtra` 把合同列表塞进 `left-explorer`。热修：停渲染左栏 `leftExtra`；合同列表迁 `SupervisorTab.requirementList`（项目审阅）；欢迎/切换项目仍在中栏欢迎页（Tina 粘贴含中栏属整页选中，非左栏再塞）。四件套 **1275 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。
 
 > **版本定义与基线声明 (v1.6.2 · 2026-10-23)**：
@@ -44,6 +45,7 @@
 > 36. **状态回写（2026-10-24 · C.10d 合入）**：`TASK-C.10d` 由 `[NEW_TASK]`（`feat/task-c10d-left-boss-path`）更新为 **`[COMPLETED]`**（合入 main tip `51ae8ae`，分支快进；合后四件套 **1273 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：左栏默认主视线打开/切换项目；空闲「跟右侧说话」提示；规范与资产 + 文件树默认收进 `left-project-files`「项目文件」；`left-panel-boss.ts` + 单元/UI 回归；规范区默认折叠。**不改**鉴权；**不抢** D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
 > 37. **状态回写（2026-10-24 · 立卡 TASK-C.10e / C.10f · 欢迎页开项目 + 纯文件树 + 资产进审阅）**：Tina 产品定稿三条——① 规范与资产绑进「项目审阅」；② 资源管理器只展示纯文件树；③ 打开/切换项目不放 IDE 左栏，单独 Cursor 式欢迎页（最近一键重开 + 粘贴路径；保留 C.8c；不抢 D.1e）。新增 **`TASK-C.10e`**、**`TASK-C.10f`**（`[NEW_TASK]`）。前置：`C.10d` COMPLETED；建议序 **C.10e → C.10f**。**当前首要**→ **C.10e**。对照：走查报告 §6.11。架构规范仅 §11 注记 9 轻量续写（呈现位置，不改变鉴权/Demo Origin）。
 > 38. **状态回写（2026-10-24 · C.10e/f 合入）**：`TASK-C.10e` / `TASK-C.10f` 由 `[NEW_TASK]`（`feat/task-c10e-f-welcome-explorer`）更新为 **`[COMPLETED]`**（合入 main tip `592f825`，分支快进；合后四件套 **1274 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：欢迎页承载开项目（page 变体 + 顶栏切换项目）；左栏纯文件树；规范与资产进项目审阅；C.8c 能力保留；不抢 D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
+> 39. **状态回写（2026-10-24 · C.10f 空文件树热修）**：资源管理器空树根因是 `files` 绑未自动加载的架构图；改为 `/api/repo/tree` 轻量列举并建连加载。对照走查 §6.14。**不改**鉴权；不回潮缺口 4.2 自动 AST。
 > 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
@@ -1418,7 +1420,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.10f】资源管理器纯文件树 + 规范与资产进项目审阅 `[COMPLETED · 2026-10-24]`
 * **任务编号**：`TASK-C.10f`
 * **前置依赖**：`TASK-C.10e`（同 tip 合入）
-* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，tip `592f825`，与 C.10e 同提交；合后四件套 **1274 passed / 6 skipped**。交付：`left-explorer` 纯文件树；`SupervisorTab.specsSection`；路由插槽迁移；规范区默认在审阅页展开。**不含**改鉴权。**热修（同日）**：停渲染 `leftExtra` 合同列表，迁 `SupervisorTab.requirementList`；四件套 **1275 passed / 6 skipped**）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，tip `592f825`，与 C.10e 同提交；合后四件套 **1274 passed / 6 skipped**。交付：`left-explorer` 纯文件树；`SupervisorTab.specsSection`；路由插槽迁移；规范区默认在审阅页展开。**不含**改鉴权。**热修（同日）**：① 停渲染 `leftExtra` 合同列表，迁 `SupervisorTab.requirementList`（1275）；② 空文件树——`files` 改绑 `GET /api/repo/tree` 建连加载（1277））
 * **对照痛点**：规范与资产是 Supervisor 产物，不应和 `src`/`node_modules` 混在资源管理器里吓老板。
 * **v0.1 范围（施工合同）**：
   1. **资源管理器**：左栏只展示纯文件树（「文件」标题）；去掉规范与资产与「项目文件」大折叠壳。
