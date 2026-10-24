@@ -87,6 +87,7 @@ import {
 } from "@/components/AgentChatPane";
 import { buildProposalFromContract } from "@/lib/journey/proposal-from-contract";
 import { resolveCommandSurface } from "@/lib/command-surface";
+import type { AssistantModeSurface } from "@/lib/assistant-mode";
 import type { StudioViewportId } from "@/components/studio/viewport-routing";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
 import {
@@ -253,6 +254,9 @@ function Console() {
    */
   const [studioNonce, setStudioNonce] = useState(0);
   const [settingsNonce, setSettingsNonce] = useState(0);
+  /** TASK-C.9b：右栏助手模式 → 中栏同口径提示 */
+  const [assistantMode, setAssistantMode] =
+    useState<AssistantModeSurface | null>(null);
   /**
    * 打开「新建需求」：带上草稿范围、展开创建表单、并切到合同操作台。
    * 必须一起做——首屏不再默认打开 Studio，只 setShowForm 会让表单渲染在看不见的标签里。
@@ -1556,6 +1560,7 @@ function Console() {
             onConfigureKey={() => setSettingsNonce((n) => n + 1)}
             commandPhase={commandSurface.phase}
             primaryCtaTestId={commandSurface.primaryCtaTestId}
+            onAssistantModeChange={setAssistantMode}
           />
         }
         supervisorContent={
@@ -1681,16 +1686,27 @@ function Console() {
           />
         }
         middleBanner={
-          selected && staleContracts.has(selected.contract_id) ? (
-            <div
-              data-testid="evidence-stale-banner"
-              role="alert"
-              className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-800"
-            >
-              ⚠
-              代码在验证之后被改动过，之前的验收证据已失效（STALE），请重新「执行验证」后再合并。
-            </div>
-          ) : null
+          <>
+            {assistantMode && assistantMode.mode !== "real" ? (
+              <div
+                data-testid="assistant-mode-middle-hint"
+                data-assistant-mode={assistantMode.mode}
+                className="border-b border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+              >
+                {assistantMode.middleHint}
+              </div>
+            ) : null}
+            {selected && staleContracts.has(selected.contract_id) ? (
+              <div
+                data-testid="evidence-stale-banner"
+                role="alert"
+                className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-800"
+              >
+                ⚠
+                代码在验证之后被改动过，之前的验收证据已失效（STALE），请重新「执行验证」后再合并。
+              </div>
+            ) : null}
+          </>
         }
         onNewRequirement={() => openNewRequirement(selectedPaths)}
         settingsContent={

@@ -7,6 +7,10 @@ import {
   hasRealAssistantAvailable,
   pickPreferredAdapterId,
 } from "@/lib/pick-chat-adapter";
+import {
+  resolveAssistantMode,
+  type AssistantModeSurface,
+} from "@/lib/assistant-mode";
 import { relaunchCurrentSession } from "@/lib/daemon-api";
 
 export interface JourneyChatCard {
@@ -41,6 +45,11 @@ export interface AgentChatPaneProps {
   commandPhase?: "no_key" | "idle" | "in_progress" | undefined;
   /** 与指挥面一致的主 CTA test id */
   primaryCtaTestId?: string | undefined;
+  /**
+   * TASK-C.9b：模式变化时通知父级（中栏提示与右栏一致）。
+   * 不含设置深链回跳（归 C.9d）。
+   */
+  onAssistantModeChange?: ((surface: AssistantModeSurface) => void) | undefined;
 }
 
 /** TASK-C.6 右栏 Coding Agent 会话：流式输出、工具卡片、停止、排队、会话续接 */
@@ -53,6 +62,7 @@ export function AgentChatPane({
   keyConfigured,
   commandPhase,
   primaryCtaTestId,
+  onAssistantModeChange,
 }: AgentChatPaneProps) {
   const chat = useAgentSession(transport);
   const [draft, setDraft] = useState("");
@@ -76,6 +86,21 @@ export function AgentChatPane({
     current?.adapter_id ??
     "";
   const realReady = hasRealAssistantAvailable(chat.adapters);
+  const assistant = resolveAssistantMode({
+    keyReady: keyConfigured === true,
+    hasRealAssistant: realReady,
+    activeAdapterId: current?.adapter_id ?? null,
+  });
+  useEffect(() => {
+    onAssistantModeChange?.(assistant);
+    // 只在模式/文案变化时同步中栏；assistant 对象每渲新建，故按字段订阅
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 见上
+  }, [
+    assistant.mode,
+    assistant.middleHint,
+    assistant.canSendAsWork,
+    onAssistantModeChange,
+  ]);
   useEffect(() => {
     setAdapterId("");
   }, [chat.sessionId]);
@@ -138,9 +163,15 @@ export function AgentChatPane({
   }
 
   const submit = () => {
+    // C.9b：向导态不得假装流式干活——点发送只导向配置
+    if (assistant.mode === "wizard") {
+      onConfigureKey?.();
+      return;
+    }
     const text = draft.trim();
     if (!text) return;
     if (routing || journeyBusy) return;
+    if (!assistant.canSendAsWork) return;
     setDraft("");
     if (onBeforeSend) {
       setRouting(true);
@@ -157,7 +188,10 @@ export function AgentChatPane({
   };
 
   const sendDisabled =
-    routing || journeyBusy === true || (!onBeforeSend && !chat.sessionId);
+    routing ||
+    journeyBusy === true ||
+    !assistant.canSendAsWork ||
+    (!onBeforeSend && !chat.sessionId);
 
   const showJourneyActive =
     commandPhase === "in_progress" ||
@@ -168,6 +202,7 @@ export function AgentChatPane({
     <div
       data-testid="agent-chat"
       data-command-phase={commandPhase ?? (transport ? "idle" : "no_key")}
+      data-assistant-mode={assistant.mode}
       className="flex h-full flex-col gap-2 text-xs"
     >
       {showJourneyActive ? (
@@ -241,9 +276,10 @@ export function AgentChatPane({
           ? "进行中：请看下方对话、中间确认或三步台——这里继续补充说明即可。"
           : "你只跟这里说话就行：质疑「做错了」、提新功能、或说「标题字号大一点」这类小事——系统会在背后分流，不必自己找别的对话框。"}
       </p>
-      {!realReady && (
+      {assistant.mode === "wizard" && (
         <div
           data-testid="key-need-wizard"
+          data-assistant-mode="wizard"
           className="rounded border border-sky-600/40 bg-sky-500/10 px-2 py-1.5 text-[11px] leading-relaxed"
         >
           <p className="font-semibold text-sky-950">
@@ -280,6 +316,34 @@ export function AgentChatPane({
           </p>
         </div>
       )}
+      {assistant.mode === "practice" ? (
+        <div
+          data-testid="assistant-practice-banner"
+          data-assistant-mode="practice"
+          className="rounded border border-border/70 bg-muted/40 px-2 py-1 text-[11px] leading-relaxed text-muted-foreground"
+        >
+          当前是练习沙箱（不可当真）。
+          {realReady ? (
+            <> 要真干活：在上面选可用助手并点「新会话」。</>
+          ) : onConfigureKey ? (
+            <>
+              {" "}
+              要真干活请先
+              <button
+                type="button"
+                data-testid="practice-to-configure"
+                className="mx-1 underline"
+                onClick={onConfigureKey}
+              >
+                配置模型钥匙
+              </button>
+              。
+            </>
+          ) : (
+            " 要真干活请先配置模型钥匙。"
+          )}
+        </div>
+      ) : null}
       {current && (
         <div
           data-testid="current-agent"
@@ -396,11 +460,15 @@ export function AgentChatPane({
             }
           }}
           placeholder={
-            routing || journeyBusy
-              ? "正在分流处理…"
-              : chat.busy
-                ? "Agent 正在回答，可继续输入排队"
-                : "输入消息，回车发送（质疑 / 需求 / 小改都从这里说）"
+            assistant.mode === "wizard"
+              ? "先配置模型钥匙，再回来说话（不会假装发送）"
+              : assistant.mode === "practice"
+                ? "练习沙箱：可试界面，不会改项目"
+                : routing || journeyBusy
+                  ? "正在分流处理…"
+                  : chat.busy
+                    ? "Agent 正在回答，可继续输入排队"
+                    : "输入消息，回车发送（质疑 / 需求 / 小改都从这里说）"
           }
           disabled={sendDisabled}
           className="min-h-[48px] flex-1 rounded border p-1"
@@ -408,11 +476,21 @@ export function AgentChatPane({
         <div className="flex flex-col gap-1">
           <button
             type="button"
+            data-testid="chat-send"
+            data-assistant-mode={assistant.mode}
+            data-can-send={assistant.canSendAsWork ? "true" : "false"}
             onClick={submit}
             disabled={sendDisabled}
+            title={
+              assistant.mode === "wizard"
+                ? "还差钥匙：请点上方「去配置模型钥匙」"
+                : assistant.mode === "practice"
+                  ? "练习发送（不会改项目）"
+                  : undefined
+            }
             className="rounded border px-2"
           >
-            发送
+            {assistant.mode === "practice" ? "练习发送" : "发送"}
           </button>
           <button
             type="button"
