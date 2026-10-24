@@ -147,6 +147,7 @@ export interface WorkspaceLayoutProps {
  * 6. C.10e：打开/切换项目在欢迎页（Cursor 式），不在 IDE 左栏；顶栏可「切换项目」回欢迎页。
  * 7. C.10f：资源管理器只展示纯文件树；规范与资产在「项目审阅」。
  * 8. C.10h：文件树右键删除（确认 + P.1 门禁；尽量废纸篓）。
+ * 9. C.10f 热修：去掉资源管理器顶栏冗余「文件」标题，只留路径根 + 树。
  */
 export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const { contract } = props;
@@ -492,12 +493,6 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                 data-testid="left-explorer"
                 className="flex min-h-0 flex-1 flex-col"
               >
-                <div
-                  data-testid="left-explorer-heading"
-                  className="flex items-center gap-1.5 border-b px-2 py-1.5 text-xs font-semibold"
-                >
-                  文件
-                </div>
                 <div className="min-h-0 flex-1 overflow-auto">
                   <FileTree
                     nodes={props.files}

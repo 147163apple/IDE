@@ -98,10 +98,10 @@ describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅
   it("资源管理器只展示纯文件树；可点开源码", () => {
     renderWorkbench();
     expect(screen.getByTestId("left-explorer")).toBeInTheDocument();
-    expect(screen.getByTestId("left-explorer-heading")).toHaveTextContent(
-      "文件",
-    );
+    // 顶栏不再重复「文件」标题；路径根由 file-tree-root 展示
+    expect(screen.queryByTestId("left-explorer-heading")).toBeNull();
     expect(screen.getByTestId("file-tree")).toBeInTheDocument();
+    expect(screen.getByTestId("file-tree-root")).toBeInTheDocument();
     // C.10f 漏接线修复：左栏不得再出现合同/需求列表或开项目
     expect(screen.getByTestId("left-column").textContent).not.toMatch(
       /需求（合同/,
