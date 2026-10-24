@@ -1,9 +1,12 @@
 /**
- * TASK-D.1b：Daemon 同源托管控制台静态资源（dist/public）。
+ * TASK-D.1b / D.1d：Daemon 同源托管控制台静态资源（dist/public）。
  *
  * 与 Demo（4100~4110）严格分离：这里只服务 Stagent 安装包内的控制台构建产物，
  * 绝不与 Demo 预览共用 Origin；Demo iframe 仍受 connect-src 'none' 与
  * isDemoPreviewOrigin 403 约束。
+ *
+ * D.1d：控制台客户端以 hydrateRoot(document, …) 启动，必须托管 TanStack Start
+ * SPA/SSR 预渲染壳（含 $_TSR），不能再用「仅挂 index-*.js」的空 HTML。
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -41,8 +44,17 @@ export interface ConsoleAssets {
 }
 
 /**
+ * TanStack Start SPA/SSR 壳判定：客户端依赖 $_TSR 完成 hydrateRoot(document)。
+ * 仅挂 script 的空壳不算可托管（D.1d 已知缺陷根因）。
+ */
+export function isHydratableConsoleShell(html: string | Buffer): boolean {
+  const text = typeof html === "string" ? html : html.toString("utf8");
+  return text.includes("$_TSR") && /\/assets\/index-[^"'>\s]+\.js/.test(text);
+}
+
+/**
  * 解析控制台静态根目录。
- * 要求 `dist/public/assets` 存在且至少有一个 `index-*.js` 入口。
+ * 要求 `dist/public/assets` 存在、有 `index-*.js`，且具备可 hydrate 的入口 HTML。
  */
 export function resolveConsolePublicDir(
   packageRoot: string = resolvePackageRoot(),
@@ -51,7 +63,9 @@ export function resolveConsolePublicDir(
   const assetsDir = path.join(publicDir, "assets");
   if (!fs.existsSync(assetsDir)) return null;
   const assets = discoverConsoleAssets(publicDir);
-  return assets ? publicDir : null;
+  if (!assets) return null;
+  if (!readConsoleIndexHtml(publicDir)) return null;
+  return publicDir;
 }
 
 export function discoverConsoleAssets(publicDir: string): ConsoleAssets | null {
@@ -70,7 +84,28 @@ export function discoverConsoleAssets(publicDir: string): ConsoleAssets | null {
   return { js, css, routesJs };
 }
 
-/** 生成可被客户端 bundle hydrate 的最小 HTML 壳 */
+/**
+ * 读取可 hydrate 的控制台入口 HTML。
+ * 优先 index.html，其次 TanStack SPA 预渲染默认产物 _shell.html。
+ */
+export function readConsoleIndexHtml(publicDir: string): Buffer | null {
+  for (const name of ["index.html", "_shell.html"] as const) {
+    const abs = path.join(publicDir, name);
+    if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) continue;
+    try {
+      const body = fs.readFileSync(abs);
+      if (isHydratableConsoleShell(body)) return body;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * @deprecated D.1d 起不再用于同源托管。保留供单元测试对照「空白壳」形态。
+ * 生产路径必须使用 SPA 预渲染壳（见 readConsoleIndexHtml）。
+ */
 export function buildConsoleIndexHtml(assets: ConsoleAssets): string {
   const cssLink = assets.css
     ? `  <link rel="stylesheet" href="/assets/${assets.css}" />\n`
@@ -124,7 +159,7 @@ export interface StaticServeResult {
 /**
  * 尝试以静态方式响应控制台请求。
  * - 有实体文件 → 原样返回
- * - 无文件但属 SPA 导航（无扩展名或 .html）→ 回退 index.html 壳
+ * - 入口导航 → 返回可 hydrate 的 SPA 壳（index.html / _shell.html）
  * - 其它 → served:false，交给调用方 404
  */
 export function tryServeConsoleStatic(
@@ -154,14 +189,14 @@ export function tryServeConsoleStatic(
     return { served: true, status: 403 };
   }
 
-  const assets = discoverConsoleAssets(publicDir);
   const sendIndex = (): StaticServeResult => {
-    if (!assets) return { served: false };
-    const html = buildConsoleIndexHtml(assets);
+    const html = readConsoleIndexHtml(publicDir);
+    if (!html) return { served: false };
     const headers: Record<string, string> = {
       "Content-Type": "text/html; charset=utf-8",
       "Cache-Control": "no-store",
       "X-Content-Type-Options": "nosniff",
+      "Content-Length": String(html.length),
     };
     if (method === "HEAD") {
       res.writeHead(200, headers);
@@ -174,7 +209,7 @@ export function tryServeConsoleStatic(
   };
 
   if (fs.existsSync(target) && fs.statSync(target).isFile()) {
-    // 构建产物里可能没有预写 index.html：命中 index.html 时改用生成壳
+    // 入口 HTML：始终走可 hydrate 壳（可能来自 _shell.html 提升）
     if (path.basename(target) === "index.html") {
       return sendIndex();
     }

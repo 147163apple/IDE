@@ -11,5 +11,11 @@ export default defineConfig({
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
     // nitro/vite builds from this
     server: { entry: "server" },
+    // TASK-D.1d：启用 SPA shell 预渲染，使 dist/public/index.html 可被
+    // hydrateRoot(document, …) 挂载。Daemon 同源静态托管依赖该壳，
+    // 不得再用「仅挂 index-*.js」的空 HTML。
+    spa: {
+      enabled: true,
+    },
   },
 });

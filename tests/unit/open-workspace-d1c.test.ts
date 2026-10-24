@@ -11,6 +11,20 @@ import {
   tryReuseRunningDaemon,
 } from "../../daemon/core/open-workspace";
 
+
+function writeHydratableDist(root: string, jsName: string) {
+  const assets = path.join(root, "dist", "public", "assets");
+  fs.mkdirSync(assets, { recursive: true });
+  fs.writeFileSync(path.join(assets, jsName), "console.log(1)");
+  fs.writeFileSync(
+    path.join(root, "dist", "public", "index.html"),
+    `<!DOCTYPE html><html><head></head><body>
+<script>self.$_TSR={h(){},e(){},c(){},p(){},buffer:[]};$_TSR.e();</script>
+<script type="module" async src="/assets/${jsName}"></script>
+</body></html>`,
+  );
+}
+
 describe("TASK-D.1c open-workspace", () => {
   let tmp: string;
 
@@ -140,9 +154,7 @@ describe("TASK-D.1c open-workspace", () => {
 
   it("buildWorkspaceLaunchUrl 同源不写 base", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-ow-launch-"));
-    const assets = path.join(tmp, "dist", "public", "assets");
-    fs.mkdirSync(assets, { recursive: true });
-    fs.writeFileSync(path.join(assets, "index-hash.js"), "x");
+    writeHydratableDist(tmp, "index-hash.js");
     const launch = buildWorkspaceLaunchUrl(
       { port: 3006, token: "tok" },
       { packageRoot: tmp },

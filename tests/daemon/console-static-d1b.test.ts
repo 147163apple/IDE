@@ -22,6 +22,17 @@ describe("Daemon console static host (TASK-D.1b)", () => {
     fs.mkdirSync(assets, { recursive: true });
     fs.writeFileSync(path.join(assets, "index-d1b.js"), "export {};");
     fs.writeFileSync(path.join(assets, "styles-d1b.css"), "body{}");
+    // D.1d：同源托管要求可 hydrate 的 SPA 壳（含 $_TSR）
+    fs.writeFileSync(
+      path.join(publicDir, "index.html"),
+      `<!DOCTYPE html><html lang="zh"><head>
+<title>Stagent</title>
+<link rel="modulepreload" href="/assets/index-d1b.js"/>
+</head><body>
+<script>self.$_TSR={h(){},e(){},c(){},p(){},buffer:[]};$_TSR.e();</script>
+<script type="module" async src="/assets/index-d1b.js"></script>
+</body></html>`,
+    );
   });
 
   afterEach(async () => {

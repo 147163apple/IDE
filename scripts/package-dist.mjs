@@ -71,37 +71,49 @@ function emptyDir(dir) {
  * 而整个失败——删 70 个条目会被判定为危险操作，逐条删也只是把 70 次摊开而已。
  */
 
-/** TASK-D.1b：为 Daemon 同源托管写入 index.html 壳（发现 hashed assets） */
-function writeConsoleIndexHtml(publicDir) {
-  const assetsDir = path.join(publicDir, "assets");
-  if (!fs.existsSync(assetsDir)) {
-    console.warn("[package-dist] 无 assets/，跳过 index.html");
-    return;
+/**
+ * TASK-D.1d：安装可 hydrate 的控制台入口 HTML。
+ * TanStack Start SPA 预渲染默认写出 `_shell.html`（含 $_TSR）；提升为 index.html。
+ * 禁止再写「仅挂 index-*.js」的空白壳冒充可托管。
+ */
+function isHydratableConsoleShell(buf) {
+  const text = Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf);
+  return text.includes("$_TSR") && /\/assets\/index-[^"'>\s]+\.js/.test(text);
+}
+
+function installConsoleIndexHtml(publicDir) {
+  const indexPath = path.join(publicDir, "index.html");
+  const shellPath = path.join(publicDir, "_shell.html");
+
+  if (fs.existsSync(shellPath)) {
+    const shell = fs.readFileSync(shellPath);
+    if (isHydratableConsoleShell(shell)) {
+      fs.writeFileSync(indexPath, shell);
+      console.log(
+        "[package-dist] 已将 SPA 预渲染 _shell.html 提升为 dist/public/index.html",
+      );
+      return;
+    }
+    console.warn(
+      "[package-dist] _shell.html 存在但缺少 $_TSR hydrate 标记，未提升",
+    );
   }
-  const files = fs.readdirSync(assetsDir);
-  const js = files.find((f) => /^index-.*\.js$/.test(f));
-  const css = files.find((f) => /^styles-.*\.css$/.test(f));
-  if (!js) {
-    console.warn("[package-dist] 未找到 index-*.js，跳过 index.html");
-    return;
+
+  if (fs.existsSync(indexPath)) {
+    const existing = fs.readFileSync(indexPath);
+    if (isHydratableConsoleShell(existing)) {
+      console.log(
+        "[package-dist] 保留已有可 hydrate 的 dist/public/index.html",
+      );
+      return;
+    }
   }
-  const cssLink = css
-    ? `  <link rel="stylesheet" href="/assets/${css}" />\n`
-    : "";
-  const html = `<!DOCTYPE html>
-<html lang="zh" class="dark">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stagent</title>
-${cssLink}</head>
-<body>
-  <script type="module" src="/assets/${js}"></script>
-</body>
-</html>
-`;
-  fs.writeFileSync(path.join(publicDir, "index.html"), html, "utf8");
-  console.log(`[package-dist] 已写入 dist/public/index.html（入口 ${js}）`);
+
+  console.warn(
+    "[package-dist] 未找到可 hydrate 的 SPA shell；跳过空白 index.html。" +
+      " 请确认 vite.config 已启用 tanstackStart.spa.enabled（TASK-D.1d）。" +
+      " CLI 将回退 Vite 开发界面。",
+  );
 }
 
 function disposeDir(dir) {
@@ -142,7 +154,7 @@ fs.mkdirSync(distDir, { recursive: true });
 fs.cpSync(path.join(outputDir, "public"), path.join(distDir, "public"), {
   recursive: true,
 });
-writeConsoleIndexHtml(path.join(distDir, "public"));
+installConsoleIndexHtml(path.join(distDir, "public"));
 fs.cpSync(path.join(outputDir, "server"), path.join(distDir, "server"), {
   recursive: true,
 });

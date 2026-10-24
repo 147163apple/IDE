@@ -13,6 +13,20 @@ import {
  * TASK-D.1b：一键打开项目 CLI 单元测试。
  */
 
+
+function writeHydratableDist(root: string, jsName: string) {
+  const assets = path.join(root, "dist", "public", "assets");
+  fs.mkdirSync(assets, { recursive: true });
+  fs.writeFileSync(path.join(assets, jsName), "console.log(1)");
+  fs.writeFileSync(
+    path.join(root, "dist", "public", "index.html"),
+    `<!DOCTYPE html><html><head></head><body>
+<script>self.$_TSR={h(){},e(){},c(){},p(){},buffer:[]};$_TSR.e();</script>
+<script type="module" async src="/assets/${jsName}"></script>
+</body></html>`,
+  );
+}
+
 describe("stagent open 参数解析（TASK-D.1b）", () => {
   it("识别 open 子命令与位置路径", () => {
     const opts = parseArgs(["open", "/tmp/demo-project"]);
@@ -81,11 +95,9 @@ describe("resolveConsoleUiTarget", () => {
     expect(target.daemonBaseUrl).toBe("http://127.0.0.1:3004");
   });
 
-  it("有 dist/public/assets/index-*.js 时走同源", () => {
+  it("有可 hydrate 的 dist/public 时走同源", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-d1b-dist-"));
-    const assets = path.join(tmp, "dist", "public", "assets");
-    fs.mkdirSync(assets, { recursive: true });
-    fs.writeFileSync(path.join(assets, "index-testhash.js"), "console.log(1)");
+    writeHydratableDist(tmp, "index-testhash.js");
     const target = resolveConsoleUiTarget({
       daemonPort: 3006,
       uiUrl: "http://localhost:5173",
@@ -97,9 +109,7 @@ describe("resolveConsoleUiTarget", () => {
 
   it("forceUiUrl 时即使有 dist 也回退", () => {
     tmp = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-d1b-force-"));
-    const assets = path.join(tmp, "dist", "public", "assets");
-    fs.mkdirSync(assets, { recursive: true });
-    fs.writeFileSync(path.join(assets, "index-x.js"), "x");
+    writeHydratableDist(tmp, "index-x.js");
     const target = resolveConsoleUiTarget({
       daemonPort: 3003,
       uiUrl: "http://localhost:5173",

@@ -21,10 +21,25 @@ node scripts/verify-env.mjs            # 环境门槛 + typecheck + lint + 单�
 
 ### 打开一个业务项目（当前真实可用路径）
 
-**重要（2026-10-24）**：`stagent open` 的「Daemon 同源单窗口」在修好 `TASK-D.1d` 之前存在**已知缺陷**——`dist/public/index.html` 静态壳撑不起 TanStack Start 控制台，浏览器常见**空白页**。  
-生产级愿景与分层说明见：`docs/reports/打开项目-愿景与现状.md`。
+生产级愿景与分层说明见：`docs/reports/打开项目-愿景与现状.md`。  
+`TASK-D.1d` 已修复同源空白：先 `npm run build`，再用 `stagent open` 即可单窗口进入工作台（仍走 `#token=`；Demo 仍独立 Origin）。
 
-#### 推荐：开发态双端（可聊、非空白）
+#### 推荐：一键 open（D.1b + D.1d 同源单窗口）
+
+```bash
+# 本仓需有可 hydrate 的 dist/public（含 SPA $_TSR 壳）
+npm run build
+npx tsx bin/stagent.ts open /path/to/your-project
+# 或：npm run stagent -- open /path/to/your-project
+```
+
+行为摘要：
+
+- 启动或复用该工作区 Daemon；成功则写入本机「最近项目」列表（`TASK-D.1c`）。
+- 有可 hydrate 的 `dist/public` 时：只开一个浏览器窗口，URL 带 `#token=`，渲染完整三栏工作台。
+- 无可用同源壳时：open 回退 Vite 并注入 `#base=`（以 CLI 实际输出为准）。
+
+#### 可选：开发态双端（Vite HMR）
 
 ```bash
 # 终端 A：在本仓启动指向业务目录的 Daemon（端口常为 3001~3010）
@@ -38,20 +53,6 @@ npm run dev
 
 - 同机示例：`http://127.0.0.1:5173/#token=<TOKEN>&base=http://127.0.0.1:<DAEMON_PORT>`
 - `#base=` 在控制台端口与 Daemon 端口不同时**必需**，否则前端会连错端口。
-
-#### 一键 open（D.1b；同源壳修好前请慎用）
-
-```bash
-npx tsx bin/stagent.ts open /path/to/your-project
-# 或：npm run stagent -- open /path/to/your-project
-```
-
-行为摘要：
-
-- 启动或复用该工作区 Daemon；成功则写入本机「最近项目」列表（`TASK-D.1c`）。
-- **若**同源托管可用：尝试只开一个浏览器窗口，URL 带 `#token=`（及必要时 `#base=`）。
-- **当前**：同源页往往空白 → 请改用上方「开发态双端」，或等待 `TASK-D.1d`。
-- 无 `dist/public` 时，open 可能回退 Vite 并注入 `#base=`（以 CLI 实际输出为准）。
 
 #### 最近项目（D.1c）
 
@@ -109,7 +110,7 @@ Stagent 的本地子进程与路径白名单**不是对抗性沙箱**，定位�
 bin/                  CLI 入口（stagent open / start / status）
 daemon/
   core/               PID 锁、端口扫描、session-token、最近项目
-  console/            同源静态托管（D.1b；空白壳修复见 D.1d）
+  console/            同源静态托管（D.1b + D.1d 可 hydrate SPA 壳）
   git/                Worktree 生命周期、分支保护
   mcp/                Scoped 工具网关
   runner/             结构化命令执行、环境脱敏
@@ -141,15 +142,14 @@ npm run build                   # 前端与装配 dist/
 
 ## v0.1 已知限制
 
-1. **同源单窗口控制台空白（`TASK-D.1d`）**：`stagent open` 打开的 Daemon 端口页可能白屏；请用上文 Vite + `#token=` / `#base=` 绕路。
-2. **无系统「选任意文件夹」**：浏览器做不到；最近列表可用（D.1c）；真·选夹见可延后的 `TASK-D.1e`。
+1. **无系统「选任意文件夹」**：浏览器做不到；最近列表可用（D.1c）；真·选夹见正式推迟的 `TASK-D.1e`（v0.2+ / P5.8）。
 3. **AI Worker / 真施工**：完整改码依赖可用模型 Key 与适配器；`TASK-W.5b` / `W.5c` 等仍按任务规范推进。
 4. **架构雷达 1000 节点 60 FPS 未实测**（v0.2+）。
 5. **单任务串行**：Daemon 当前并行度按 v0.1 约定为 1。
 6. **跨平台**：仅 macOS 为主实测面；Linux/Windows 待加强真机验证。
 7. **账单精度**：默认 `ESTIMATED`，`UNAVAILABLE` 时只作上限约束。
 
-按规范 §10，上述关键体验与安全叙述未闭环前，**不得**把 v0.1 表述为「已验证的生产安全成品」。打开项目生产级目标以文档与 D.1d/D.1e 为准推进。
+按规范 §10，上述关键体验与安全叙述未闭环前，**不得**把 v0.1 表述为「已验证的生产安全成品」。打开项目进门路径以 D.1d 同源单窗口为准；真·选夹见 D.1e（v0.2+）。
 
 ---
 
