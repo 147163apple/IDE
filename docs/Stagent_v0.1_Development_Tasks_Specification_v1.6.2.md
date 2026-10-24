@@ -1,4 +1,5 @@
 
+- **P-65（合入回写，2026-10-24）**：`TASK-C.10p` → **`[COMPLETED]`**（main tip `35b56c9` 快进合入；四件套 **1335 passed / 6 skipped**）。同步：版本头第 54 条 tip/四件套、§1.1 矩阵、§3.4 详细卡、走查 §6.25。**不改**鉴权；**不假绿**。
 - **P-64（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10p`**（任务图谱开工/核销前自动确保任务 Worktree：缺失则重建；基线回退 main/HEAD；主区脏不阻断）。同步：版本头第 54 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10o→C.10p`）、§3.4 详细卡、Sprint「当前首要」→ **C.10p**；走查报告 §6.25；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不假绿**；**不抢** D.1e。
 - **P-63（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10o`**（任务图谱开工/核销入口：有图时「开工下一节点」「核销点亮」接到既有 `start`/`verify`；PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据）。同步：版本头第 53 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10n→C.10o`）、§3.4 详细卡、Sprint「当前首要」→ **C.10o**；走查报告 §6.24；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-62（热修合入，2026-10-24）**：`TASK-C.10n` 热修——「确认原型并建图」失败/未选合同时错误回显到任务图谱顶栏（原只写演示页，空态 CTA 像无反应）。四件套 **1323 passed / 6 skipped**；tip 见状态回写。**不改**鉴权；**不接** start/verify。
@@ -86,8 +87,8 @@
 >
 > 53. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10o · 任务图谱开工/核销入口）**：Tina 授权（t680u）——任务图谱只读，后台已有 start/verify（C.7）但 UI 未接。新增 **`TASK-C.10o`** 并收口为 **`[COMPLETED]`**（合入 tip `830fca1`；四件套 **1331 passed / 6 skipped**）。交付：有图时顶栏「开工下一节点」「核销点亮」；详情可对可开工/可核销节点操作；接到 `POST /api/graph/nodes/start` 与 `POST /api/graph/verify`；状态 PENDING→RUNNING→点亮；失败黄条；COMMAND 退出码按声明别名提交，写入/Scope/SHA 仍由 Daemon 现算（不假绿）。前置：`TASK-C.10n` / `TASK-C.7` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.24。架构规范仅 §11 注记 9 轻量锚定延续。
 >
-> 54. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10p · 图谱开工/核销自动确保 Worktree）**：Tina 反馈（t681u）核销报「任务 Worktree 不存在」（合同已 MERGED、树已清）。新增 **`TASK-C.10p`** 并收口为 **`[COMPLETED]`**（合入 tip 待回填；四件套待回填）。交付：`ensureTaskWorktree` + `resolveExistingBaseBranch`；`POST /api/graph/nodes/start` 与 `POST /api/graph/verify` 前自愈重建；基线优先合同 base_branch，缺失回退 main/master/HEAD；主区脏 `acknowledgeDirty`。前置：`TASK-C.10o` / `TASK-A.1` COMPLETED。**不改**鉴权；**不假绿**；**不抢** D.1e。对照走查报告 §6.25。架构规范仅 §11 注记 9 轻量锚定延续。
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10p tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1331 passed / 6 skipped**；C.10o 合入后回写）。
+> 54. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10p · 图谱开工/核销自动确保 Worktree）**：Tina 反馈（t681u）核销报「任务 Worktree 不存在」（合同已 MERGED、树已清）。新增 **`TASK-C.10p`** 并收口为 **`[COMPLETED]`**（合入 tip `35b56c9`；四件套 **1335 passed / 6 skipped**）。交付：`ensureTaskWorktree` + `resolveExistingBaseBranch`；`POST /api/graph/nodes/start` 与 `POST /api/graph/verify` 前自愈重建；基线优先合同 base_branch，缺失回退 main/master/HEAD；主区脏 `acknowledgeDirty`。前置：`TASK-C.10o` / `TASK-A.1` COMPLETED。**不改**鉴权；**不假绿**；**不抢** D.1e。对照走查报告 §6.25。架构规范仅 §11 注记 9 轻量锚定延续。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10p tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1335 passed / 6 skipped**；C.10p 合入后回写）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -150,7 +151,7 @@
 | **TASK-C.10l** | 设置「高级」可选会话/适配器（不回潮右栏） | 工作台 UX | **[COMPLETED]**（tip `d407b5c`；**1316 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10k` COMPLETED<br>• 高级内：助手下拉 / 新会话 / 历史会话；与右栏共享会话实例<br>• 右栏保持 C.10k 只留对话；元信息/工具 JSON 仍不展示<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10m** | 质疑自查裁决按钮接线（缺陷修复 / 新需求演进） | 工作台 UX | **[COMPLETED]**（tip `0d65890`；**1319 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10l` COMPLETED；工作区恢复干净 tip<br>• 两按钮 → `user_choice` → Daemon 强制分类<br>• 需求演进切合同视口；缺陷修复留质疑<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10n** | 任务图谱空态可感知（禁用无效切换 / 刷新反馈 / 建图 CTA） | 工作台 UX | **[COMPLETED]**（tip `bcad27f`；热修 `3e9bb22`；**1323 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10m` COMPLETED<br>• 无图：禁用视图切换；刷新 loading；白话空态 + 确认原型建图 CTA<br>• 有图：只读提示；选中节点高亮并滚到详情<br>• 热修：建图 CTA 错误回显图谱顶栏<br>• **不含** start/verify；不改鉴权；不抢 D.1e |
-| **TASK-C.10p** | 图谱开工/核销自动确保任务 Worktree | 工作台 UX / 执行内核 | **[COMPLETED]**（tip 待回填；四件套待回填） | P4 体验打磨 | • 前置 `C.10o` / `A.1` COMPLETED<br>• start/verify 前 `ensureTaskWorktree`；基线回退；主区脏不阻断<br>• **不含**假绿/改鉴权；不抢 D.1e |
+| **TASK-C.10p** | 图谱开工/核销自动确保任务 Worktree | 工作台 UX / 执行内核 | **[COMPLETED]**（tip `35b56c9`；**1335 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10o` / `A.1` COMPLETED<br>• start/verify 前 `ensureTaskWorktree`；基线回退；主区脏不阻断<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `830fca1`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
@@ -1732,7 +1733,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.10p】图谱开工/核销自动确保任务 Worktree `[COMPLETED]`
 * **任务编号**：`TASK-C.10p`
 * **前置依赖**：`TASK-C.10o` (COMPLETED)、`TASK-A.1` (COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-24；Tina 报错 t681u「任务 Worktree 不存在」隐含授权修复；tip / 四件套合入后回填）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `35b56c9`；Tina 报错 t681u「任务 Worktree 不存在」隐含授权修复；四件套 **1335 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）
 * **对照痛点**：C.10o 接上 start/verify 后，历史已 MERGED 合同的图仍可点核销，但批准时创建的 Worktree 合入后已清理；`collectWorktreeEvidence` 直接 409，老板看到黄条「任务 Worktree 不存在：…/task-contract_…」。
 * **根因（代码事实）**：Worktree 由 `orchestrator.approve` / `healResume` 创建；`/api/graph/nodes/start` 只改图态、不建树；`/api/graph/verify` 要求树已在盘。合入清理后图与树脱节。
 * **v0.1 范围（施工合同）**：
