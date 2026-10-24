@@ -13,7 +13,6 @@ import {
  * TASK-D.1b：一键打开项目 CLI 单元测试。
  */
 
-
 function writeHydratableDist(root: string, jsName: string) {
   const assets = path.join(root, "dist", "public", "assets");
   fs.mkdirSync(assets, { recursive: true });

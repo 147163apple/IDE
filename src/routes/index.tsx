@@ -248,6 +248,7 @@ function Console() {
    * （与 openRequest 的 nonce 同一套路，避免把 Tab 状态提到页面上）。
    */
   const [studioNonce, setStudioNonce] = useState(0);
+  const [settingsNonce, setSettingsNonce] = useState(0);
   /**
    * 打开「新建需求」：带上草稿范围、展开创建表单、并切到合同操作台。
    * 必须一起做——首屏不再默认打开 Studio，只 setShowForm 会让表单渲染在看不见的标签里。
@@ -1175,6 +1176,8 @@ function Console() {
             onBeforeSend={handleJourneyBeforeSend}
             journeyCards={journeyCards}
             journeyBusy={journeyBusy}
+            keyConfigured={settings?.configured === true}
+            onConfigureKey={() => setSettingsNonce((n) => n + 1)}
           />
         }
         supervisorContent={
@@ -1262,6 +1265,7 @@ function Console() {
           />
         }
         openStudioRequest={studioNonce}
+        openSettingsRequest={settingsNonce}
         terminalPanel={
           // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
           <StructuredTerminal
@@ -1973,50 +1977,72 @@ function ModelKeyPanel({
       onSaved(next);
       setApiKey("");
       setState("saved");
-      setMessage("已配置：Key 仅保存在 Daemon 进程内存，不写入磁盘、不回显。");
+      setMessage(
+        "已就绪。钥匙只留在本机这次运行里，不会写进项目、也不会在聊天里显示。回到右侧点「新会话」即可用真助手。",
+      );
     } catch (err) {
       setState("error");
       setMessage((err as Error).message);
     }
   };
 
+  const ready = settings?.configured === true;
+
   return (
-    <section className="flex flex-wrap items-center gap-2 border-b border-border bg-card px-3 py-2 text-[11px]">
-      <span className="text-muted-foreground">OpenAI API Key</span>
-      <input
-        type="password"
-        value={apiKey}
-        onChange={(e) => setApiKey(e.target.value)}
-        placeholder={
-          settings?.configured ? "已配置（重新输入可覆盖）" : "sk-..."
-        }
-        className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <span className="text-muted-foreground">模型</span>
-      <input
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-        className="w-40 rounded border border-border bg-background px-2 py-1 outline-none"
-      />
-      <button
-        onClick={() => void save()}
-        disabled={state === "saving" || apiKey.trim().length < 8}
-        className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-40"
+    <section
+      data-testid="model-key-wizard"
+      className="space-y-2 text-[11px] leading-relaxed"
+    >
+      <p className="text-muted-foreground">
+        三步配好模型钥匙（OpenAI 兼容接口均可）：
+      </p>
+      <ol className="list-decimal space-y-0.5 pl-4 text-muted-foreground">
+        <li>在下方粘贴钥匙（密码框，页面不会明文回显）</li>
+        <li>确认模型名（可按服务商说明改）</li>
+        <li>点「保存」→ 状态变成「已就绪」，再回右侧开新会话</li>
+      </ol>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">模型钥匙</span>
+        <input
+          type="password"
+          autoComplete="off"
+          value={apiKey}
+          onChange={(e) => setApiKey(e.target.value)}
+          placeholder={ready ? "已就绪（重新输入可覆盖）" : "粘贴你的钥匙…"}
+          className="w-64 rounded border border-border bg-background px-2 py-1 outline-none"
+        />
+        <span className="text-muted-foreground">模型</span>
+        <input
+          value={model}
+          onChange={(e) => setModel(e.target.value)}
+          className="w-40 rounded border border-border bg-background px-2 py-1 outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={state === "saving" || apiKey.trim().length < 8}
+          className="rounded bg-primary px-2 py-1 text-primary-foreground disabled:opacity-40"
+        >
+          {state === "saving" ? "保存中…" : "保存"}
+        </button>
+      </div>
+      <p
+        data-testid="model-key-status"
+        className={ready ? "text-emerald-700" : "text-amber-800"}
       >
-        {state === "saving" ? "保存中…" : "保存到 Daemon"}
-      </button>
-      <span className="text-muted-foreground">
-        当前：
-        {settings?.configured ? `已配置（来源 ${settings.source}）` : "未配置"}
-      </span>
+        状态：
+        {ready
+          ? `已就绪（来源 ${settings?.source ?? "本机"}）`
+          : "还差一步：尚未配置"}
+      </p>
       {message && (
-        <span
+        <p
           className={
-            state === "error" ? "text-destructive" : "text-emerald-600"
+            state === "error" ? "text-destructive" : "text-emerald-700"
           }
         >
           {message}
-        </span>
+        </p>
       )}
     </section>
   );

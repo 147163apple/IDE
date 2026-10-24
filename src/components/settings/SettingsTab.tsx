@@ -297,12 +297,12 @@ export function SettingsTab({
       </Section>
 
       <Section
-        title="模型 Key"
+        title="模型钥匙"
         icon={<KeyRound className="h-4 w-4" />}
         testId="settings-model-key"
       >
         {modelKeySlot ?? (
-          <p className="opacity-60">当前页面没有注入模型 Key 面板。</p>
+          <p className="opacity-60">当前页面没有注入模型钥匙面板。</p>
         )}
       </Section>
 

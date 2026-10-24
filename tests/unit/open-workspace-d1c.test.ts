@@ -11,7 +11,6 @@ import {
   tryReuseRunningDaemon,
 } from "../../daemon/core/open-workspace";
 
-
 function writeHydratableDist(root: string, jsName: string) {
   const assets = path.join(root, "dist", "public", "assets");
   fs.mkdirSync(assets, { recursive: true });

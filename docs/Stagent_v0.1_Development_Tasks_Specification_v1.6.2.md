@@ -69,7 +69,7 @@
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（components/diff/* + StructuredTerminal.tsx 在位；5 用例绿） | P3 差异终端 | 双栏/内联 Git Diff 审阅；结构化终端流式日志展示、ANSI 渲染、先脱敏后截断。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（AgentChatPane + use-agent-session 在位；8 用例绿） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume。 |
 | **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[COMPLETED]**（2026-10-23 合入 main，merge `5117b27`；原交付于 `feat/task-c7-graph-engine`，基线 `main@05f090f`；干净环境四件套全绿：1032 passed / 6 skipped；新增 31 用例：24 单元 + 7 UI） | P4.5 拓扑点亮 (v1.6.1) | • `daemon/graph/graph-engine.ts`：Daemon 独占内存权威 + 原子落盘 `.stagent/specs/task_graph.json`，`revision` 单调递增、对外只给快照<br>• `SupervisorProposalV1` 以 `Omit<TaskNode, "state" \| "executed_at" \| "commit_sha">` 类型层剥离运行态；运行期夹带运行态字段直接 `E_PROPOSAL_INVALID`<br>• 七态严格对齐 §3.2.1；`illumination-verifier.ts` 要求「受控写入 + 退出码 0 + Commit SHA + 文件指纹」，空命令集/空结果集 `E_EMPTY_VERIFICATION_BLOCKED` 拒绝点亮（UI 警告灰，不假绿）<br>• `evidence-collector.ts`：文件 SHA-256、Scope、HEAD 由 Daemon 现算，HTTP 调用方不得自报证据<br>• 外部改码 `STALE_REVERIFY` 变灰并撤销指纹；AUDITED 合同同周期退回 VERIFYING<br>• `TASK_GRAPH_UPDATED` 帧 + `revision` 乱序保护；业务功能树 / 执行 DAG 双视图，100ms 翠绿过渡<br>• 左栏【规范与资产】专区展示需求 / 合同 / Demo 与真实点亮进度；文件树随图谱更新刷新 |
-| **TASK-C.8a** | 老板模式文案与默认助手（消演示恐吓 / Key 向导） | 工作台 UX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1d` COMPLETED<br>• 默认不恐吓：弱化/收起「演示 Agent · 不调用模型」大黄字与「右侧说需求」打架的口径<br>• 真助手未配 Key 时给一条龙白话向导（去哪配、配完怎么验），不甩工程师后台话术<br>• **不含**改鉴权 / Demo Origin / 新开桌面壳 |
+| **TASK-C.8a** | 老板模式文案与默认助手（消演示恐吓 / Key 向导） | 工作台 UX | **[IN_PROGRESS]**（`feat/task-c8a-boss-copy`） | P4 体验打磨 | • 前置 `D.1d` COMPLETED<br>• 默认不恐吓：弱化/收起「演示 Agent · 不调用模型」大黄字与「右侧说需求」打架的口径<br>• 真助手未配 Key 时给一条龙白话向导（去哪配、配完怎么验），不甩工程师后台话术<br>• **不含**改鉴权 / Demo Origin / 新开桌面壳 |
 | **TASK-C.8b** | Fast Path 老板三步台（藏工程师合同细节） | 工作台 UX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1d` + `S.6` COMPLETED<br>• 小事 Fast Path 中栏收成老板三步：「改哪里 / 要不要动保护 / 确认开改」<br>• 默认折叠 src/**、npm、Daemon、保护解锁等合同工程细节；需要时再展开<br>• **不含**改 Fast Path 准入规则本体 / 状态机边 |
 | **TASK-C.8c** | 连接与打开死路自救（无钥匙一键重开 + 粘贴路径） | 工作台 UX / DX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1b`/`D.1c`/`D.1d` COMPLETED；**不抢** `D.1e`（系统选择器仍 DEFERRED）<br>• 无 token 冷开：一键重开带钥匙会话，不死锁对话<br>• 开新夹：粘贴绝对路径 + 一键重开/唤起，少催「去终端敲 npx stagent open」说明书<br>• **不含**系统文件夹选择器 / Electron·Tauri |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
@@ -1023,7 +1023,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.8a】老板模式文案与默认助手（消演示恐吓 / Key 向导）`[NEW_TASK · 2026-10-24]`
 * **任务编号**：`TASK-C.8a`
 * **前置依赖**：`TASK-D.1d` (COMPLETED，main tip `b11d15b`；文档基线含 `fea44e2`)
-* **任务状态**：**[NEW_TASK]**（走查 Top3 之「消恐吓感」；建议排期第一张；**当前首要**编码任务）
+* **任务状态**：**[IN_PROGRESS]**（分支 `feat/task-c8a-boss-copy`；实现备注：消演示恐吓文案、默认优先真助手、右栏 Key 向导 + 设置三步配钥匙；**未合 main**）
 * **对照痛点（走查）**：默认「演示 Agent」+ 大黄字「不调用模型、不读文件」与右栏「说需求」打架；真助手显示未配 Key 却无一条龙向导——老板会以为「不能干活」。
 * **v0.1 范围**：把工作台默认话术与助手选择收成**老板模式**：① 默认呈现不恐吓、与「可以提需求」一致；② 未配模型 Key 时给白话一步步向导（去哪配、配完怎么知道好了）；③ 演示/沙箱能力若仍保留，须降级为可折叠的次要说明，不得用整页黄条阻断心智。
 * **明确不包含**：

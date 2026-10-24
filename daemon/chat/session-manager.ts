@@ -8,6 +8,7 @@ import type {
 import type { AdapterEvent, ChatAdapter, HistoryTurn } from "./types";
 import { ChatSessionStore, type StoredSession } from "./session-store";
 import { buildProtectionPromptNotice } from "../protection/protection-list";
+import { pickPreferredAdapterId } from "../../src/lib/pick-chat-adapter";
 
 /**
  * TASK-C.6 会话管理器。
@@ -86,14 +87,20 @@ export class ChatSessionManager {
     return s ? { ...s, busy: this.isBusy(id) } : null;
   }
 
-  createSession(adapterId: string): ChatSessionSummary {
-    if (!this.adapters.has(adapterId)) {
-      throw new Error(`unknown adapter: ${adapterId}`);
+  /** TASK-C.8a：未指定时优先真助手，演示/练习沙箱仅兜底 */
+  createSession(adapterId?: string): ChatSessionSummary {
+    const resolved =
+      adapterId && adapterId.length > 0
+        ? adapterId
+        : pickPreferredAdapterId(this.listAdapters());
+    if (!resolved || !this.adapters.has(resolved)) {
+      throw new Error(`unknown adapter: ${resolved || "(empty)"}`);
     }
+    const adapterIdFinal = resolved;
     const at = this.now();
     const session: StoredSession = {
       id: newId("chat"),
-      adapter_id: adapterId,
+      adapter_id: adapterIdFinal,
       title: "新会话",
       created_at: at,
       updated_at: at,

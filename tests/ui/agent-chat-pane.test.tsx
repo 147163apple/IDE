@@ -144,7 +144,7 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
 
   it("未连接时显示提示", () => {
     render(<AgentChatPane transport={null} />);
-    expect(screen.getByTestId("agent-chat")).toHaveTextContent("还没连上后台");
+    expect(screen.getByTestId("agent-chat")).toHaveTextContent("还没连上工作台");
   });
 });
 
@@ -177,12 +177,12 @@ describe("foldChatEvents", () => {
 });
 
 describe("TASK-C.6 未连接与可见标签（白话）", () => {
-  it("未连接时给出白话提示：用带钥匙的链接打开，或粘贴到 Session Token", () => {
+  it("未连接时给出白话提示：用带钥匙的链接打开，或去设置粘贴", () => {
     render(<AgentChatPane transport={null} />);
     const box = screen.getByRole("status");
-    expect(box.textContent).toContain("还没连上后台");
-    expect(box.textContent).toContain("#token=");
-    expect(box.textContent).toContain("Session");
+    expect(box.textContent).toContain("还没连上工作台");
+    expect(box.textContent).toContain("钥匙");
+    expect(box.textContent).toContain("设置");
   });
   it("Agent 下拉框旁有可见文字「AI 助手：」", async () => {
     const { t } = fakeTransport();
@@ -192,8 +192,8 @@ describe("TASK-C.6 未连接与可见标签（白话）", () => {
   });
 });
 
-describe("TASK-C.6 当前会话所用助手要说清楚", () => {
-  it("打开演示会话时：下拉框跟随为演示助手，并显示白话提醒", async () => {
+describe("TASK-C.6 / C.8a 当前会话所用助手要说清楚", () => {
+  it("打开练习沙箱会话时：下拉跟随，说明可折叠且不恐吓", async () => {
     const t: AgentSessionTransport = {
       listAdapters: vi.fn(async () => [
         {
@@ -205,7 +205,7 @@ describe("TASK-C.6 当前会话所用助手要说清楚", () => {
         },
         {
           id: "demo",
-          label: "演示 Agent（不调用模型）",
+          label: "练习沙箱（可选）",
           control_mode: "UNCONTROLLED_EXTERNAL" as const,
           verified_on: "",
           available: true,
@@ -239,10 +239,71 @@ describe("TASK-C.6 当前会话所用助手要说清楚", () => {
     };
     render(<AgentChatPane transport={t} />);
     const line = await screen.findByTestId("current-agent");
-    expect(line.textContent).toContain(
-      "当前对话使用：演示 Agent（不调用模型）",
+    expect(line.textContent).toContain("练习沙箱");
+    expect(line.textContent).not.toContain("不调用模型");
+    expect(line.textContent).not.toContain("不会真的读文件");
+    expect(screen.getByTestId("demo-sandbox-note")).toBeTruthy();
+    expect(screen.getByTestId("journey-entry-hint")).toBeTruthy();
+    // 主 CTA「说需求」与恐吓文案不得并排大黄条打架
+    expect(line.className).not.toMatch(/amber/);
+    await waitFor(() =>
+      expect(
+        (screen.getByLabelText("选择 Agent") as HTMLSelectElement).value,
+      ).toBe("demo"),
     );
-    expect(line.textContent).toContain("不会真的读文件");
+  });
+
+  it("TASK-C.8a：真助手都不可用时给出钥匙向导，且与「请说需求」一致", async () => {
+    const onConfigureKey = vi.fn();
+    const t: AgentSessionTransport = {
+      listAdapters: vi.fn(async () => [
+        {
+          id: "claude-code",
+          label: "Claude Code",
+          control_mode: "GATEWAY_ENFORCED" as const,
+          verified_on: "x",
+          available: false,
+          unavailable_reason: "还差一步：去设置里配模型钥匙",
+        },
+        {
+          id: "baseline",
+          label: "自研保底 Agent（OpenAI 兼容，只聊天）",
+          control_mode: "GATEWAY_ENFORCED" as const,
+          verified_on: "",
+          available: false,
+          unavailable_reason: "还差一步：去设置里配模型钥匙",
+        },
+        {
+          id: "demo",
+          label: "练习沙箱（可选）",
+          control_mode: "GATEWAY_ENFORCED" as const,
+          verified_on: "",
+          available: true,
+        },
+      ]),
+      listSessions: vi.fn(async () => []),
+      createSession: vi.fn(),
+      getSession: vi.fn(),
+      send: vi.fn(async () => "started" as const),
+      interrupt: vi.fn(async () => true),
+      subscribe: () => () => undefined,
+    };
+    render(
+      <AgentChatPane
+        transport={t}
+        onConfigureKey={onConfigureKey}
+        keyConfigured={false}
+      />,
+    );
+    const wizard = await screen.findByTestId("key-need-wizard");
+    expect(wizard.textContent).toContain("还差一步");
+    expect(wizard.textContent).toContain("模型钥匙");
+    expect(screen.getByTestId("journey-entry-hint")).toBeTruthy();
+    // 不得出现整页恐吓否定「说需求」
+    expect(wizard.textContent).not.toContain("不调用模型");
+    expect(wizard.textContent).not.toContain("不读文件");
+    fireEvent.click(screen.getByTestId("open-key-settings"));
+    expect(onConfigureKey).toHaveBeenCalled();
     await waitFor(() =>
       expect(
         (screen.getByLabelText("选择 Agent") as HTMLSelectElement).value,

@@ -67,6 +67,11 @@ export interface WorkspaceLayoutProps {
    * 页面无法直接 setActiveTab，所以用信号替代共享状态。
    */
   openStudioRequest?: number;
+  /**
+   * 外部请求切到设置 Tab（TASK-C.8a：右栏「去配置模型钥匙」）；
+   * nonce 变化即触发，与 openStudioRequest 同模式。
+   */
+  openSettingsRequest?: number;
   /** 中栏顶部横幅（Evidence STALE 等） */
   middleBanner?: ReactNode;
   /**
@@ -219,6 +224,12 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     );
     setActiveTab(SETTINGS_TAB_ID);
   };
+
+  const settingsReq = props.openSettingsRequest;
+  useEffect(() => {
+    if (!settingsReq) return;
+    openSettings();
+  }, [settingsReq]);
 
   const studio = (
     <div

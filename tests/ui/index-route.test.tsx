@@ -116,7 +116,7 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     );
   });
 
-  it("连接与诊断收进设置页：齿轮打开设置 Tab，模型 Key / 实时流都在里面", async () => {
+  it("连接与诊断收进设置页：齿轮打开设置 Tab，模型钥匙 / 实时流都在里面", async () => {
     render(<Console />);
     fireEvent.click(screen.getByTestId("activity-settings"));
     expect(
@@ -124,7 +124,8 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     ).toBe("true");
     expect(screen.getByTestId("settings-tab")).toBeInTheDocument();
     // 原顶栏上的三样东西现在都在设置页
-    expect(screen.getByText("模型 Key")).toBeInTheDocument();
+    expect(screen.getByTestId("settings-model-key")).toBeInTheDocument();
+    expect(screen.getByTestId("model-key-wizard")).toBeInTheDocument();
     expect(screen.getByTestId("stream-status")).toBeInTheDocument();
     expect(screen.getByTestId("worker-control")).toBeInTheDocument();
     // 连接配置可编辑

@@ -1601,7 +1601,7 @@ export class StagentDaemon {
       }
       if (method === "POST" && pathname === "/api/chat/sessions") {
         const body = (await this.readJsonBody(req)) as { adapter_id?: string };
-        const session = this.chat.createSession(body.adapter_id ?? "demo");
+        const session = this.chat.createSession(body.adapter_id);
         this.sendJson(res, 201, { session });
         return;
       }

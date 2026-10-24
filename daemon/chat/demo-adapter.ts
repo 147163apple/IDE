@@ -2,8 +2,8 @@ import type { ChatAdapterInfo } from "../../src/lib/chat-events";
 import type { AdapterEvent, AdapterRunInput, ChatAdapter } from "./types";
 
 /**
- * 演示 Agent：不调用任何模型、不花钱。逐字回显并假装调用一次工具，
- * 用于在没有 Claude Code / API Key 时验证右栏流式、打断与续接。
+ * 练习沙箱（可选）：本地回声、不花钱、不改项目。
+ * 仅用于试界面；真干活请配模型钥匙后切到真助手。
  */
 export class DemoChatAdapter implements ChatAdapter {
   constructor(private readonly tickMs = 40) {}
@@ -11,7 +11,7 @@ export class DemoChatAdapter implements ChatAdapter {
   info(): ChatAdapterInfo {
     return {
       id: "demo",
-      label: "演示 Agent（不调用模型）",
+      label: "练习沙箱（可选）",
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: true,

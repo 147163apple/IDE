@@ -15,13 +15,14 @@ export class BaselineChatAdapter implements ChatAdapter {
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: !!key,
-      ...(key ? {} : { unavailable_reason: "未配置模型 Key" }),
+      ...(key ? {} : { unavailable_reason: "还差一步：去设置里配模型钥匙" }),
     };
   }
 
   async *run(input: AdapterRunInput): AsyncIterable<AdapterEvent> {
     const apiKey = getRuntimeKey();
-    if (!apiKey) throw new Error("未配置模型 Key（顶部「模型 Key」）");
+    if (!apiKey)
+      throw new Error("还差一步：请到设置 → 模型钥匙里配置后再开新会话");
     const [{ streamText }, { createOpenAI }] = await Promise.all([
       import("ai"),
       import("@ai-sdk/openai"),

@@ -109,9 +109,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
         : "UNCONTROLLED_EXTERNAL",
       verified_on: this.opts.verifiedOn ?? "",
       available: hasKey,
-      ...(hasKey
-        ? {}
-        : { unavailable_reason: "Daemon 环境未设置 ANTHROPIC_API_KEY" }),
+      ...(hasKey ? {} : { unavailable_reason: "还差一步：去设置里配模型钥匙" }),
     };
   }
 
@@ -216,7 +214,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
 
   async *run(input: AdapterRunInput): AsyncIterable<AdapterEvent> {
     const key = this.key();
-    if (!key) throw new Error("Daemon 环境未设置 ANTHROPIC_API_KEY");
+    if (!key) throw new Error("还差一步：请到设置 → 模型钥匙里配置后再试");
     const launch = this.buildLaunch(input);
     const proc: ManagedProcess = (this.opts.spawn ?? spawnManaged)({
       command: launch.command,
