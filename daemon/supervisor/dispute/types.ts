@@ -21,6 +21,9 @@ export type DisputeClassification =
 export type DisputeActionKind =
   "REWORK" | "REQUIREMENT_CHANGE" | "MANUAL_ARBITRATION";
 
+/** 降级后用户白话裁决（架构 D-3 / §5.7） */
+export type DisputeUserChoice = "BUG_FIX" | "REQUIREMENT_CHANGE";
+
 export interface PromptFactMessage {
   message_id: string;
   role: "user" | "supervisor" | "system";

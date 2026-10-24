@@ -1,4 +1,5 @@
 
+- **P-60（立卡+实现+合入，2026-10-24）**：工作区先恢复干净 tip（`8dd039d` / C.10l）后新增 **`TASK-C.10m`**（质疑自查「按缺陷修复 / 按新需求演进」空接线：UI 回调 → `user_choice` → Daemon 强制分类）。同步：版本头第 50 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10l→C.10m`）、§3.4 详细卡、Sprint「当前首要」→ **C.10m**；走查报告 §6.22；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-59（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10l`**（设置「高级」加回可选会话/适配器：助手下拉、新会话、历史会话；**不**回潮右栏主视线；会话元信息/工具 JSON 仍不展示）。同步：版本头第 49 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10k→C.10l`）、§3.4 详细卡、Sprint「当前首要」→ **C.10l**；走查报告 §6.21；架构规范 §11 注记 9 轻量续写；v0.2 附录 B 标注本项已落地高级。**不改**鉴权；**不抢** D.1e。
 - **P-58（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10k`**（右栏 AI 对话老板主视线：删除多余信息，只留双方对话；Cursor 右侧对话对齐能力写入 v0.2+ RFC 附录 B，**不实施整页复刻**）。同步：版本头第 48 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10j→C.10k`）、§3.4 详细卡、Sprint「当前首要」→ **C.10k**；走查报告 §6.20；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-57（C.10j 后打开文件无法关闭热修，2026-10-24）**：Tina 打开文件后无法关闭标签。根因：**不是** Markdown 预览挡住关按钮——文件 Tab 在 `FileTree.onOpen` / `openRequest` / 重命名重开时未设 `closable: true`，顶栏 × 根本不渲染（系统 Tab 才显式 closable）。热修：`fileTab()` 统一补 closable；渲染侧非系统 Tab 默认可关 `(closable ?? !system)`；补 UI 用例。合入 tip `09fdcfd`；四件套 **1313 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.19。**不改**鉴权；不抢 D.1e。
@@ -73,7 +74,7 @@
 
 > 49. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10l · 设置高级可选会话/适配器）**：Tina 授权（t671u）——适配器/新会话/历史会话放回设置「高级」，不进右栏主路径。新增 **`TASK-C.10l`** 并收口为 **`[COMPLETED]`**（合入 tip `d407b5c`；四件套 **1316 passed / 6 skipped**）。交付：`settings-chat-session` 于 `settings-advanced`；Console 上提 `useAgentSession` 与右栏共享；右栏仍无工程师控件（C.10k 保持）。会话元信息/工具 JSON **不**进设置。前置：`TASK-C.10k` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.21。架构规范仅 §11 注记 9 轻量锚定延续。
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1316 passed / 6 skipped**；C.10l 合入后回写）。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**PLACEHOLDER_TESTS**；C.10m 合入后回写）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -204,11 +205,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k ──► TASK-C.10l
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k ──► TASK-C.10l ──► TASK-C.10m
               │                │                             │              │              │              │
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
-              建议序：C.10l 已合 · **设置高级可选会话/适配器收口**
+              建议序：C.10m 已合 · **质疑裁决按钮接线收口**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -298,7 +299,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10h", "to": "TASK-C.10i" },
   { "from": "TASK-C.10i", "to": "TASK-C.10j" },
   { "from": "TASK-C.10j", "to": "TASK-C.10k" },
-  { "from": "TASK-C.10k", "to": "TASK-C.10l" }
+  { "from": "TASK-C.10k", "to": "TASK-C.10l" },
+  { "from": "TASK-C.10l", "to": "TASK-C.10m" }
 ]
 ```
 
@@ -1629,6 +1631,34 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   5. 四件套全绿；不打印 token。
 * **FAIL**：控件回潮右栏；或高级与右栏各管一份会话不同步；或改鉴权。
 
+
+#### 【Task C.10m】质疑自查裁决按钮接线（缺陷修复 / 新需求演进）`[COMPLETED]`
+* **任务编号**：`TASK-C.10m`
+* **前置依赖**：`TASK-C.10l` (COMPLETED)；工作区恢复干净 tip `8dd039d`
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `PLACEHOLDER_TIP`；Tina 授权 t673u；四件套 **PLACEHOLDER_TESTS**；tsc 0 / eslint 0 errors / build 通过）
+* **对照痛点**：非 IDE 走查发现质疑自查「按缺陷修复 / 按新需求演进」可点但无反应（空接线）；脏工作区有误回退风险，须先恢复 tip 再改。
+* **v0.1 范围（施工合同）**：
+  1. **恢复**：`/Users/tina/Desktop/1020` reset 到干净 tip（C.10l / `8dd039d`），丢弃误回退脏区。
+  2. **UI**：`DisputeConsolePane` 暴露 `onChooseBugFix` / `onChooseRequirementChange`；降级或 UNATTRIBUTED 时两按钮可点。
+  3. **接线**：`index.tsx` 把按钮接到 `runDisputeSelfCheckUi(challenge, user_choice)`；`BUG_FIX` / `REQUIREMENT_CHANGE`。
+  4. **API/引擎**：`submitDisputeSelfCheck` 传 `user_choice`；Daemon 校验；`outcomeFromUserChoice` 强制分类与 next_action。
+  5. **产品反馈**：选择后旅程卡白话确认；需求演进切合同视口并打开表单。
+  6. **纪律**：不改鉴权；不抢 D.1e；不打印 token。
+* **明确不包含**：重做整套质疑引擎；自动改代码不经审阅；Cursor 整页右栏复刻。
+* **涉及核心文件（预期）**：
+  - `src/components/studio/DisputeConsolePane.tsx`
+  - `src/routes/index.tsx`
+  - `src/lib/daemon-api.ts`
+  - `daemon/server.ts` / `daemon/supervisor/dispute/*`
+  - UI：`tests/ui/studio-viewport-switching.test.tsx`；单测：`tests/unit/dispute-triad.test.ts`
+* **Pass/Fail 验收判定**（≤5）：
+  1. 降级报告下两按钮可点且回调触发（Harness UI 测）。
+  2. `user_choice=BUG_FIX` → IMPLEMENTATION_BUG + REWORK；`REQUIREMENT_CHANGE` → 需求演进路径。
+  3. 非法 `user_choice` 被 Daemon 拒绝。
+  4. 工作区恢复 hash 为 `8dd039d`（或文档记载的干净 tip）。
+  5. 四件套全绿；不打印 token。
+* **FAIL**：按钮仍空接线；或借机改鉴权/绕过保护清单。
+
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
@@ -1954,7 +1984,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：C.10l 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.21。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
+> - **当前首要编码任务**：C.10m 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.22。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。

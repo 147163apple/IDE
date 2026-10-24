@@ -2344,6 +2344,7 @@ export class StagentDaemon {
         contract_id?: unknown;
         challenge?: unknown;
         session_id?: unknown;
+        user_choice?: unknown;
       };
       try {
         body = (await this.readJsonBody(req)) as typeof body;
@@ -2387,6 +2388,19 @@ export class StagentDaemon {
         return;
       }
 
+      const rawChoice =
+        typeof body.user_choice === "string" ? body.user_choice.trim() : "";
+      let userChoice: "BUG_FIX" | "REQUIREMENT_CHANGE" | undefined;
+      if (rawChoice === "BUG_FIX" || rawChoice === "REQUIREMENT_CHANGE") {
+        userChoice = rawChoice;
+      } else if (rawChoice !== "") {
+        this.sendJson(res, 400, {
+          error: "user_choice_invalid",
+          message: "user_choice 只能是 BUG_FIX 或 REQUIREMENT_CHANGE",
+        });
+        return;
+      }
+
       const loaded = this.orchestrator.getStore().getWithMigration(contractId);
       if (!loaded) {
         this.sendJson(res, 404, {
@@ -2406,6 +2420,7 @@ export class StagentDaemon {
           challenge,
           repoRoot: this.repoRoot,
           ...(sessionId === undefined ? {} : { sessionId }),
+          ...(userChoice === undefined ? {} : { userChoice }),
         });
         this.broadcastDisputeReport(report);
         this.sendJson(res, 200, { report });

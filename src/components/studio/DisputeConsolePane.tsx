@@ -51,7 +51,7 @@ export interface DisputeConsolePaneProps {
   error?: string | null | undefined;
   onSubmit?: ((challenge: string) => void | Promise<void>) | undefined;
   /** 用户在降级场景下点选「按缺陷修复」 */
-  onChooseBugfix?: (() => void) | undefined;
+  onChooseBugFix?: (() => void) | undefined;
   /** 用户在降级场景下点选「按新需求演进」 */
   onChooseRequirementChange?: (() => void) | undefined;
 }
@@ -235,7 +235,9 @@ export function DisputeConsolePane(props: DisputeConsolePaneProps) {
               <button
                 type="button"
                 data-testid="dispute-choose-bugfix"
-                onClick={() => props.onChooseBugfix?.()}
+                onClick={() => {
+                  props.onChooseBugFix?.();
+                }}
                 className="rounded border border-border px-2 py-1 text-xs"
               >
                 按缺陷修复
@@ -243,7 +245,9 @@ export function DisputeConsolePane(props: DisputeConsolePaneProps) {
               <button
                 type="button"
                 data-testid="dispute-choose-requirement"
-                onClick={() => props.onChooseRequirementChange?.()}
+                onClick={() => {
+                  props.onChooseRequirementChange?.();
+                }}
                 className="rounded border border-border px-2 py-1 text-xs"
               >
                 按新需求演进

@@ -1160,12 +1160,16 @@ export interface DisputeSelfCheckResponse {
   code?: string | undefined;
 }
 
+export type DisputeUserChoice = "BUG_FIX" | "REQUIREMENT_CHANGE";
+
 export async function submitDisputeSelfCheck(
   conn: DaemonConnection,
   input: {
     contract_id: string;
     challenge: string;
     session_id?: string | undefined;
+    /** 降级后用户点选：按缺陷修复 / 按新需求演进 */
+    user_choice?: DisputeUserChoice | undefined;
   },
 ): Promise<DisputeSelfCheckResponse> {
   return request<DisputeSelfCheckResponse>(conn, "/api/supervisor/dispute", {
@@ -1176,6 +1180,9 @@ export async function submitDisputeSelfCheck(
       ...(input.session_id === undefined
         ? {}
         : { session_id: input.session_id }),
+      ...(input.user_choice === undefined
+        ? {}
+        : { user_choice: input.user_choice }),
     }),
   });
 }

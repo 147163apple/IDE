@@ -4,6 +4,7 @@ import {
   buildRequirementChangeProposal,
   buildReworkProposal,
   classifyDispute,
+  computeSignals,
 } from "./classification";
 import { collectTriadFacts, type DisputeFactDeps } from "./evidence-triad";
 import {
@@ -12,6 +13,7 @@ import {
   E_DISPUTE_TIMEOUT,
   type DisputeNextAction,
   type DisputeReport,
+  type DisputeUserChoice,
   type SpecFact,
   type TriadFacts,
 } from "./types";
@@ -35,6 +37,8 @@ export interface DisputeSelfCheckInput {
   sessionId?: string | undefined;
   timeoutMs?: number | undefined;
   now?: (() => Date) | undefined;
+  /** 用户在降级场景点选后强制归因，跳过自动置信度门槛 */
+  userChoice?: DisputeUserChoice | undefined;
 }
 
 /**
@@ -99,6 +103,31 @@ function plainSummary(
   }
 }
 
+/** 用户白话裁决：强制分类并生成对应 next_action（不经置信度门槛） */
+export function outcomeFromUserChoice(
+  choice: DisputeUserChoice,
+  facts: TriadFacts,
+  contract: SoftwareContract,
+): ReturnType<typeof classifyDispute> {
+  const signals = computeSignals(facts, contract);
+  if (choice === "BUG_FIX") {
+    return {
+      classification: "IMPLEMENTATION_BUG",
+      suggested: "IMPLEMENTATION_BUG",
+      confidence: 1,
+      signals,
+      rationale: ["您已选择：按缺陷修复（人工裁决）"],
+    };
+  }
+  return {
+    classification: "REQUIREMENT_DRIFT",
+    suggested: "REQUIREMENT_DRIFT",
+    confidence: 1,
+    signals,
+    rationale: ["您已选择：按新需求演进（人工裁决）"],
+  };
+}
+
 /** 执行一次完整的质疑自查（不含 HTTP/广播） */
 export async function runDisputeSelfCheck(
   input: DisputeSelfCheckInput,
@@ -123,7 +152,9 @@ export async function runDisputeSelfCheck(
     timeoutMs,
   );
 
-  const outcome = classifyDispute(facts, input.contract);
+  const outcome = input.userChoice
+    ? outcomeFromUserChoice(input.userChoice, facts, input.contract)
+    : classifyDispute(facts, input.contract);
   const crId = changeRequestId(at);
 
   let nextAction: DisputeNextAction;

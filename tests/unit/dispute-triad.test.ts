@@ -336,3 +336,50 @@ describe("超时降级报告", () => {
     expect(report.plain_summary).toContain("自查超时");
   });
 });
+
+describe("用户白话裁决 userChoice", () => {
+  it("BUG_FIX 强制 IMPLEMENTATION_BUG + REWORK，不经置信度门槛", async () => {
+    const facts = triad({
+      changed: ["src/order.ts"],
+      specEntries: [],
+      promptMatched: 0,
+      tests: [],
+    });
+    const report = await runDisputeSelfCheck(
+      {
+        contract: CONTRACT,
+        challenge: facts.challenge,
+        repoRoot: "/tmp/not-used",
+        userChoice: "BUG_FIX",
+      },
+      depsFor(facts),
+    );
+    expect(report.classification).toBe("IMPLEMENTATION_BUG");
+    expect(report.degraded).toBe(false);
+    expect(report.next_action.kind).toBe("REWORK");
+    expect(report.rationale.join(" ")).toContain("按缺陷修复");
+  });
+
+  it("REQUIREMENT_CHANGE 强制 REQUIREMENT_DRIFT + 新需求提案", async () => {
+    const facts = triad({
+      changed: ["src/order.ts"],
+      specEntries: ["- 订单金额满 100 元时自动减 20 元"],
+      promptMatched: 0,
+      tests: [{ exit_code: 1, passed: false }],
+    });
+    const report = await runDisputeSelfCheck(
+      {
+        contract: CONTRACT,
+        challenge: facts.challenge,
+        repoRoot: "/tmp/not-used",
+        userChoice: "REQUIREMENT_CHANGE",
+      },
+      depsFor(facts),
+    );
+    expect(report.classification).toBe("REQUIREMENT_DRIFT");
+    expect(report.degraded).toBe(false);
+    expect(report.next_action.kind).toBe("REQUIREMENT_CHANGE");
+    expect(report.next_action.change_request).toBeDefined();
+    expect(report.rationale.join(" ")).toContain("按新需求演进");
+  });
+});

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { DemoPreviewPane } from "../../src/components/studio/DemoPreviewPane";
 import { RealPlaytestPane } from "../../src/components/studio/RealPlaytestPane";
@@ -328,6 +329,57 @@ describe("DisputeConsolePane 表单与报告", () => {
     expect(
       within(screen.getByTestId("dispute-next-action")).getByText(/拍板|裁决/),
     ).toBeTruthy();
+  });
+
+  it("点按缺陷修复 / 按新需求演进会回调（不再空接线）", async () => {
+    function Harness() {
+      const [choice, setChoice] = useState("");
+      return (
+        <div>
+          <div data-testid="choice-out">{choice}</div>
+          <DisputeConsolePane
+            contractId="ctr-1"
+            report={{
+              report_id: "r1",
+              contract_id: "ctr-1",
+              challenge: "登录页没有记住我",
+              classification: "UNATTRIBUTED",
+              confidence: 0.4,
+              degraded: true,
+              plain_summary: "两边都说得通，请你拍板",
+              facts: {
+                prompt: {
+                  original_request: "做登录",
+                  matched_messages: 2,
+                  confirmations: 1,
+                },
+                spec: { matched_entries: ["登录页需记住我"], version: 1 },
+                code: {
+                  worktree_available: true,
+                  changed_files: ["src/login.tsx"],
+                  evidence_id: "ev-1",
+                },
+              },
+              next_action: {
+                kind: "MANUAL_ARBITRATION",
+                message: "请选择修复路径",
+              },
+            }}
+            onChooseBugFix={() => setChoice("bug")}
+            onChooseRequirementChange={() => setChoice("req")}
+          />
+        </div>
+      );
+    }
+    render(<Harness />);
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("dispute-choose-bugfix"));
+    });
+    expect(screen.getByTestId("choice-out")).toHaveTextContent("bug");
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("dispute-choose-requirement"));
+    });
+    expect(screen.getByTestId("choice-out")).toHaveTextContent("req");
   });
 });
 

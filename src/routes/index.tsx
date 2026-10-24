@@ -596,6 +596,54 @@ function Console() {
     [],
   );
 
+  const runDisputeSelfCheckUi = useCallback(
+    async (
+      challenge: string,
+      userChoice?: import("@/lib/daemon-api").DisputeUserChoice,
+    ) => {
+      if (!selected) return;
+      const textIn = challenge.trim();
+      if (textIn.length < 4) return;
+      setDisputeBusy(true);
+      setDisputeError(null);
+      try {
+        const result = await submitDisputeSelfCheck(conn, {
+          contract_id: selected.contract_id,
+          challenge: textIn,
+          ...(userChoice === undefined ? {} : { user_choice: userChoice }),
+        });
+        setDisputeReport(
+          toDisputeView(result.report, result.degraded === true),
+        );
+        if (userChoice !== undefined) {
+          setJourneyCards((prev) => [
+            ...prev.slice(-19),
+            {
+              id: `dispute-choice-${Date.now()}`,
+              kind: "DISPUTE" as const,
+              text:
+                userChoice === "BUG_FIX"
+                  ? `已按你的选择记为「缺陷修复」。${result.report.plain_summary}`
+                  : `已按你的选择记为「新需求演进」。${result.report.plain_summary}`,
+            },
+          ]);
+          if (userChoice === "REQUIREMENT_CHANGE") {
+            setStudioViewportOverride("contract");
+            setShowForm(true);
+            setStudioNonce((n) => n + 1);
+          } else {
+            setStudioViewportOverride("dispute");
+          }
+        }
+      } catch (err) {
+        setDisputeError((err as Error).message);
+      } finally {
+        setDisputeBusy(false);
+      }
+    },
+    [conn, selected, toDisputeView],
+  );
+
   /** TASK-S.6：右侧唯一入口分流 */
   const handleJourneyBeforeSend = useCallback(
     async (text: string): Promise<"handled" | "passthrough"> => {
@@ -1994,59 +2042,17 @@ function Console() {
                 busy={disputeBusy}
                 error={disputeError}
                 onSubmit={async (challenge) => {
-                  if (!selected) return;
-                  setDisputeBusy(true);
-                  setDisputeError(null);
-                  try {
-                    const result = await submitDisputeSelfCheck(conn, {
-                      contract_id: selected.contract_id,
-                      challenge,
-                    });
-                    const report = result.report;
-                    setDisputeReport({
-                      report_id: report.report_id,
-                      contract_id: report.contract_id,
-                      challenge: report.challenge,
-                      classification: report.classification,
-                      suggested_classification: report.suggested_classification,
-                      confidence: report.confidence,
-                      degraded: report.degraded || result.degraded === true,
-                      plain_summary: report.plain_summary,
-                      rationale: report.rationale,
-                      facts: {
-                        prompt: {
-                          original_request:
-                            report.facts.prompt.original_request,
-                          matched_messages:
-                            report.facts.prompt.matched_messages.length,
-                          confirmations:
-                            report.facts.prompt.confirmations.length,
-                        },
-                        spec: report.facts.spec
-                          ? {
-                              matched_entries:
-                                report.facts.spec.matched_entries,
-                              version: report.facts.spec.version,
-                            }
-                          : null,
-                        code: {
-                          worktree_available: report.facts.code.available,
-                          changed_files: report.facts.code.changed_files,
-                          evidence_id: report.facts.code.evidence_id,
-                        },
-                      },
-                      next_action: report.next_action
-                        ? {
-                            kind: report.next_action.kind,
-                            message: report.next_action.message,
-                          }
-                        : undefined,
-                    });
-                  } catch (err) {
-                    setDisputeError((err as Error).message);
-                  } finally {
-                    setDisputeBusy(false);
-                  }
+                  await runDisputeSelfCheckUi(challenge);
+                }}
+                onChooseBugFix={() => {
+                  const challenge = disputeReport?.challenge?.trim();
+                  if (!challenge) return;
+                  void runDisputeSelfCheckUi(challenge, "BUG_FIX");
+                }}
+                onChooseRequirementChange={() => {
+                  const challenge = disputeReport?.challenge?.trim();
+                  if (!challenge) return;
+                  void runDisputeSelfCheckUi(challenge, "REQUIREMENT_CHANGE");
                 }}
               />
             }
