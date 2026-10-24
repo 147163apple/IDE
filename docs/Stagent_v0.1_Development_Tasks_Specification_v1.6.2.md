@@ -83,7 +83,7 @@
 >
 > 52. **状态回写（2026-10-24 · C.10n 热修 · 建图 CTA 错误回显）**：Tina 反馈（t676u）合入后仍「按钮点击无法反应」。排查：main 已含 C.10n；dist 已有空态文案；真正缺口是 CTA 触发 `handleConfirmPrototype` 后，未选合同/建图失败的 `confirmPrototypeError` 只写到演示页，图谱空态看不见。热修 tip `3e9bb22`：`error={confirmPrototypeError ?? taskGraphError}`；四件套 **1323 passed / 6 skipped**。并重建 dist、重启同源 daemon。**不改**鉴权；**不接** start/verify。
 >
-> 53. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10o · 任务图谱开工/核销入口）**：Tina 授权（t680u）——任务图谱只读，后台已有 start/verify（C.7）但 UI 未接。新增 **`TASK-C.10o`** 并收口为 **`[COMPLETED]`**（合入 tip `be44e3b`；四件套 **1331 passed / 6 skipped**）。交付：有图时顶栏「开工下一节点」「核销点亮」；详情可对可开工/可核销节点操作；接到 `POST /api/graph/nodes/start` 与 `POST /api/graph/verify`；状态 PENDING→RUNNING→点亮；失败黄条；COMMAND 退出码按声明别名提交，写入/Scope/SHA 仍由 Daemon 现算（不假绿）。前置：`TASK-C.10n` / `TASK-C.7` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.24。架构规范仅 §11 注记 9 轻量锚定延续。
+> 53. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10o · 任务图谱开工/核销入口）**：Tina 授权（t680u）——任务图谱只读，后台已有 start/verify（C.7）但 UI 未接。新增 **`TASK-C.10o`** 并收口为 **`[COMPLETED]`**（合入 tip `830fca1`；四件套 **1331 passed / 6 skipped**）。交付：有图时顶栏「开工下一节点」「核销点亮」；详情可对可开工/可核销节点操作；接到 `POST /api/graph/nodes/start` 与 `POST /api/graph/verify`；状态 PENDING→RUNNING→点亮；失败黄条；COMMAND 退出码按声明别名提交，写入/Scope/SHA 仍由 Daemon 现算（不假绿）。前置：`TASK-C.10n` / `TASK-C.7` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.24。架构规范仅 §11 注记 9 轻量锚定延续。
 >
 > **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10o tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1331 passed / 6 skipped**；C.10o 合入后回写）。
 
@@ -148,7 +148,7 @@
 | **TASK-C.10l** | 设置「高级」可选会话/适配器（不回潮右栏） | 工作台 UX | **[COMPLETED]**（tip `d407b5c`；**1316 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10k` COMPLETED<br>• 高级内：助手下拉 / 新会话 / 历史会话；与右栏共享会话实例<br>• 右栏保持 C.10k 只留对话；元信息/工具 JSON 仍不展示<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10m** | 质疑自查裁决按钮接线（缺陷修复 / 新需求演进） | 工作台 UX | **[COMPLETED]**（tip `0d65890`；**1319 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10l` COMPLETED；工作区恢复干净 tip<br>• 两按钮 → `user_choice` → Daemon 强制分类<br>• 需求演进切合同视口；缺陷修复留质疑<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10n** | 任务图谱空态可感知（禁用无效切换 / 刷新反馈 / 建图 CTA） | 工作台 UX | **[COMPLETED]**（tip `bcad27f`；热修 `3e9bb22`；**1323 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10m` COMPLETED<br>• 无图：禁用视图切换；刷新 loading；白话空态 + 确认原型建图 CTA<br>• 有图：只读提示；选中节点高亮并滚到详情<br>• 热修：建图 CTA 错误回显图谱顶栏<br>• **不含** start/verify；不改鉴权；不抢 D.1e |
-| **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `be44e3b`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
+| **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `830fca1`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -1704,7 +1704,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.10o】任务图谱开工/核销入口（接 start/verify）`[COMPLETED]`
 * **任务编号**：`TASK-C.10o`
 * **前置依赖**：`TASK-C.10n` (COMPLETED)、`TASK-C.7` (COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `be44e3b`；Tina 授权 t680u「立卡接开工/核销入口」；四件套 **1331 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `830fca1`；Tina 授权 t680u「立卡接开工/核销入口」；四件套 **1331 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）
 * **对照痛点**：图谱已是只读看板（C.10n）；Daemon 已有 `POST /api/graph/nodes/start` 与 `POST /api/graph/verify`（C.7），UI 未接。老板看见「排队中」无法感知地往前推。
 * **v0.1 范围（施工合同）**：
   1. **开工**：有图时顶栏「开工下一节点」（按依赖取下一 PENDING 且前置已点亮）；详情对可开工节点提供「开工此节点」。回调 `startTaskGraphNode` → Daemon `startNode`。
