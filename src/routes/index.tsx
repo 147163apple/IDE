@@ -117,7 +117,6 @@ import {
 } from "@/components/studio/DisputeConsolePane";
 import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
 import { SettingsTab } from "@/components/settings/SettingsTab";
-import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
 import { buildCommandResultsForVerify } from "@/lib/graph/startable";
 import { applyTaskGraphFrame } from "@/components/graph/graph-view-model";
 import {
@@ -1891,10 +1890,10 @@ function Console() {
         }}
         graphContent={
           /*
-            Task Graph Tab（TASK-C.7）：业务功能导图与执行 DAG 双视图。
+            Task Graph Tab（C.7 + C.10q）：全景/施工双视角；施工侧为本轮功能汇总与执行 DAG。
             数据全部来自 Daemon 快照：首屏 GET + TASK_GRAPH_UPDATED 帧。
           */
-          <TaskGraphPanel
+          <TaskGraphPane
             graph={taskGraph}
             loading={taskGraphLoading}
             error={confirmPrototypeError ?? taskGraphError}
@@ -1910,6 +1909,17 @@ function Console() {
               void handleVerifyGraphNode(nodeId);
             }}
             actionBusy={graphActionBusy}
+            panoramaSummary={
+              selected
+                ? {
+                    contractTitle: selected.intent.title,
+                    contractDescription: selected.intent.description,
+                    acceptanceCriteria: selected.intent.acceptance_criteria,
+                    requirementsHint,
+                    riskLevel: selected.intent.risk_level,
+                  }
+                : null
+            }
           />
         }
         middleBanner={
@@ -2126,6 +2136,17 @@ function Console() {
                   void handleVerifyGraphNode(nodeId);
                 }}
                 actionBusy={graphActionBusy}
+                panoramaSummary={
+                  selected
+                    ? {
+                        contractTitle: selected.intent.title,
+                        contractDescription: selected.intent.description,
+                        acceptanceCriteria: selected.intent.acceptance_criteria,
+                        requirementsHint,
+                        riskLevel: selected.intent.risk_level,
+                      }
+                    : null
+                }
               />
             }
             dispute={

@@ -2,7 +2,7 @@ import type { TaskGraph } from "@/lib/graph/task-graph";
 import { layoutFunctionalTree, visualForState } from "./graph-view-model";
 
 /**
- * 上层视图：业务功能思维导图。
+ * 上层视图：本轮施工·功能汇总（非进门全仓脑图；全景见 C.10q）。
  *
  * 非技术用户先看这一层——"邮箱验证码登录"亮没亮，而不是先去读 DAG。
  * 每个功能的状态由 Daemon 图中的工程节点**汇总派生**（一对多映射），
@@ -24,7 +24,7 @@ export function FunctionalTree({
   return (
     <div data-testid="functional-tree" className="p-3">
       <p className="mb-2 text-xs leading-relaxed text-muted-foreground">
-        业务功能导图：每个功能汇总其下所有工程节点的真实状态，点亮只认物理证据。
+        本轮施工·功能汇总：每个功能汇总其下所有工程节点的真实状态，点亮只认物理证据。
       </p>
       <ul className="space-y-1">
         {rows.map((row) => {

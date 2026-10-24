@@ -247,7 +247,7 @@ describe("Task Graph 双视图", () => {
     );
   });
 
-  it("业务功能导图汇总下层节点真实状态（不另算一套）", () => {
+  it("本轮施工·功能汇总下层节点真实状态（不另算一套）", () => {
     render(
       <TaskGraphPanel
         graph={makeGraph({

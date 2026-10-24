@@ -22,7 +22,7 @@ import {
  *
  * 数据边界：本组件**不取数**。权威快照由主页面通过 `graph` 注入
  * （首屏 GET + `TASK_GRAPH_UPDATED` 帧覆盖），这里做：
- * 1. 视图映射（业务功能树 / 执行 DAG）；
+ * 1. 视图映射（本轮施工·功能汇总 / 执行 DAG）；
  * 2. 前后快照差分，给新点亮节点加 100ms 翠绿过渡；
  * 3. C.10o：有图时暴露开工/核销按钮，真正改态仍由页面回调 Daemon。
  *
@@ -164,7 +164,7 @@ export function TaskGraphPanel({
                     : "hover:bg-accent/60"
                 }`}
               >
-                业务功能导图
+                本轮施工·功能汇总
               </button>
               <button
                 type="button"
@@ -191,7 +191,7 @@ export function TaskGraphPanel({
                 title="还没有图，无法切换视图"
                 className="cursor-not-allowed rounded border px-2 py-0.5 text-xs opacity-40"
               >
-                业务功能导图
+                本轮施工·功能汇总
               </button>
               <button
                 type="button"
@@ -322,7 +322,7 @@ export function TaskGraphPanel({
             <p className="max-w-md leading-relaxed">
               {loading
                 ? "正在向本机服务要最新进度，请稍候。"
-                : "要看到进度图，需要先确认原型开工。确认后这里会出现业务功能导图和执行拓扑；点亮只认三件物理证据：受控写入、退出码 0、Commit SHA 指纹。"}
+                : "要看到进度图，需要先确认原型开工。确认后这里会出现本轮施工·功能汇总与执行拓扑；点亮只认三件物理证据：受控写入、退出码 0、Commit SHA 指纹。"}
             </p>
             {!loading && onConfirmPrototype ? (
               <button
@@ -341,7 +341,7 @@ export function TaskGraphPanel({
                 data-testid="graph-empty-view-hint"
                 className="max-w-sm text-[11px] leading-relaxed"
               >
-                「业务功能导图 /
+                「本轮施工·功能汇总 /
                 执行拓扑」要有图之后才能切换；现在点它们不会有变化。
               </p>
             ) : null}
