@@ -88,6 +88,7 @@ vi.mock("@/lib/daemon-api", async (orig) => {
     fetchArchGraph: vi.fn(async () => {
       throw new Error("no graph in test");
     }),
+    fetchRepoTree: vi.fn(async () => ({ root: "/tmp", files: ["src/a.ts"] })),
     fetchSettings: vi.fn(async () => ({
       configured: false,
       model: "",

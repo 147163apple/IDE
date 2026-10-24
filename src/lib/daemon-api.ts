@@ -569,6 +569,22 @@ export async function fetchArchGraph(
   return request<ArchGraphPayload>(conn, "/api/arch/graph");
 }
 
+/** C.10f 热修：资源管理器纯文件树（相对路径列表，无 AST） */
+export interface RepoTreePayload {
+  root: string;
+  files: string[];
+}
+
+export async function fetchRepoTree(
+  conn: DaemonConnection,
+  contractId?: string | null,
+): Promise<RepoTreePayload> {
+  const q = new URLSearchParams();
+  if (contractId) q.set("contract_id", contractId);
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  return request<RepoTreePayload>(conn, `/api/repo/tree${suffix}`);
+}
+
 export interface ModelSettings {
   configured: boolean;
   model: string;

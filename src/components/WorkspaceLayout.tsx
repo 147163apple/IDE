@@ -48,6 +48,8 @@ export interface WorkspaceLayoutProps {
   runMode: RunMode;
   contract?: ActiveContract | null | undefined;
   files: FileNode[];
+  /** C.10f 热修：文件树加载中 */
+  filesLoading?: boolean | undefined;
   /** 以下为接入主页面用的插槽，均可选 */
   banner?: ReactNode;
   /**
@@ -497,6 +499,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                   <FileTree
                     nodes={props.files}
                     rootLabel={root}
+                    loading={props.filesLoading}
                     onOpen={(p) =>
                       openTab({ id: p, title: p.split("/").pop() ?? p })
                     }

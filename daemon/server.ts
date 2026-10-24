@@ -146,6 +146,7 @@ import { getModelSettings, setRuntimeKey } from "./worker/key-store";
 import { ChatSessionManager } from "./chat/session-manager";
 import {
   decideWrite,
+  listRepoTreePaths,
   readFileFor,
   recordViolation,
   type FileAccessContext,
@@ -2570,6 +2571,25 @@ export class StagentDaemon {
       }
       // 返回持久化快照本身，前端据此在首帧前也能还原界面
       this.sendJson(res, 200, this.getPresentationSnapshot());
+      return;
+    }
+
+    // C.10f 热修：轻量文件树（无 AST），供资源管理器纯树展示
+    if (method === "GET" && pathname === "/api/repo/tree") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      try {
+        const contractId = parsedUrl.searchParams.get("contract_id");
+        const ctx = this.fileContext(contractId);
+        const root =
+          ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
+        const files = listRepoTreePaths(root);
+        this.sendJson(res, 200, { root, files });
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+      }
       return;
     }
 

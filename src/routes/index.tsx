@@ -35,6 +35,7 @@ import {
   admitContract,
   executeContract,
   fetchArchGraph,
+  fetchRepoTree,
   fetchDiff,
   fetchDiffFiles,
   fetchEvidence,
@@ -189,6 +190,9 @@ function Console() {
   const [draft, setDraft] = useState<SupervisorDraftResult | null>(null);
 
   const [graph, setGraph] = useState<ArchGraphPayload | null>(null);
+  /** C.10f 热修：资源管理器文件来自 /api/repo/tree，不绑架构图 */
+  const [repoPaths, setRepoPaths] = useState<string[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
   const [query, setQuery] = useState("");
   const [showCycles, setShowCycles] = useState(false);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
@@ -278,36 +282,15 @@ function Console() {
     setStudioNonce((n) => n + 1);
   }, []);
 
-  const fileTree = useMemo(
-    () =>
-      buildFileTree(
-        (graph?.graph.nodes.map((n) => n.filePath) ?? []).map((p) =>
-          // 架构图给的是绝对路径；文件树与编辑器统一用仓库相对路径
-          repoRoot && p.startsWith(repoRoot + "/")
-            ? p.slice(repoRoot.length + 1)
-            : p,
-        ),
-      ),
-    [graph, repoRoot],
-  );
+  const fileTree = useMemo(() => buildFileTree(repoPaths), [repoPaths]);
 
   const selected = useMemo(
     () => contracts.find((c) => c.contract_id === selectedId) ?? null,
     [contracts, selectedId],
   );
 
-  /** 架构图里的真实文件路径（仓库相对），用于判断 Demo 资产是否已生成 */
-  const repoRelativePaths = useMemo(() => {
-    const paths = new Set<string>();
-    for (const node of graph?.graph.nodes ?? []) {
-      const relative =
-        repoRoot && node.filePath.startsWith(repoRoot + "/")
-          ? node.filePath.slice(repoRoot.length + 1)
-          : node.filePath;
-      paths.add(relative);
-    }
-    return paths;
-  }, [graph, repoRoot]);
+  /** 仓库相对路径集合：判断 Demo 等资产是否已生成（来自纯文件树，非 AST） */
+  const repoRelativePaths = useMemo(() => new Set(repoPaths), [repoPaths]);
 
   /**
    * 左栏【规范与资产】的数据。只列真实存在或真实缺失的东西：
@@ -1010,6 +993,24 @@ function Console() {
     }
   }, [conn]);
 
+  /** C.10f：轻量文件树（无 AST）；建连即拉，供资源管理器展示 */
+  const loadRepoTree = useCallback(async () => {
+    setFilesLoading(true);
+    try {
+      const payload = await fetchRepoTree(conn);
+      setRepoPaths(payload.files);
+    } catch {
+      // 列表失败不阻断主流程；保留上一份树
+    } finally {
+      setFilesLoading(false);
+    }
+  }, [conn]);
+
+  useEffect(() => {
+    if (!connected) return;
+    void loadRepoTree();
+  }, [connected, loadRepoTree]);
+
   /**
    * 拉取 Task Graph 权威快照。切合同立即重拉：图谱属于合同，
    * 把 A 的图挂在 B 的页面上比空态更危险。
@@ -1036,18 +1037,18 @@ function Console() {
   }, [connected, loadTaskGraph, selectedId]);
 
   /**
-   * 文件树跟随真实变更：Task Graph 每次更新都意味着 Worktree 里发生了
-   * 写入/验证，重新拉一次架构图，左栏文件树与【规范与资产】的 Demo 条目
-   * 就会随真实文件出现。`lastTreeSync` 防止"刷新文件树 → 触发渲染 → 再刷新"
-   * 的循环。
+   * 文件树跟随真实变更：Task Graph 更新 → 重拉轻量目录树。
+   * 若用户已打开过架构图，顺带刷新 AST 图（不自动首次拉取，避免缺口 4.2 回潮）。
+   * `lastTreeSync` 防止刷新循环。
    */
   const lastTreeSync = useRef<string | null>(null);
   useEffect(() => {
-    if (!connected || !taskGraph || !graph) return;
+    if (!connected || !taskGraph) return;
     if (lastTreeSync.current === taskGraph.updated_at) return;
     lastTreeSync.current = taskGraph.updated_at;
-    void loadArchGraph();
-  }, [connected, taskGraph, graph, loadArchGraph]);
+    void loadRepoTree();
+    if (graph) void loadArchGraph();
+  }, [connected, taskGraph, graph, loadRepoTree, loadArchGraph]);
 
   const runAction = async (label: string, action: () => Promise<void>) => {
     setBusy(label);
@@ -1537,6 +1538,7 @@ function Console() {
         contract={workspaceContract}
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
+        filesLoading={filesLoading}
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard

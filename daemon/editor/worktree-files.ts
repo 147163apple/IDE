@@ -118,3 +118,78 @@ export function recordViolation(repoRoot: string, v: ViolationRecord): void {
     JSON.stringify(v) + "\n",
   );
 }
+
+/**
+ * C.10f 热修：资源管理器需要「纯文件树」路径列表。
+ * 故意不做 AST——只 walk 磁盘，建连即可填充左栏；忽略常见大目录。
+ */
+export const TREE_IGNORED_DIRS = new Set([
+  "node_modules",
+  ".git",
+  ".stagent",
+  "dist",
+  ".output",
+  "coverage",
+  ".tmp",
+  ".next",
+  ".vite",
+  ".turbo",
+  ".cache",
+]);
+
+/** 被忽略目录里仍要探测的 Demo 候选（规范资产「就绪」判断） */
+export const TREE_EXTRA_PROBES = [".stagent/demo/index.html"] as const;
+
+export function listRepoTreePaths(
+  root: string,
+  options?: { maxFiles?: number },
+): string[] {
+  const maxFiles = options?.maxFiles ?? 5000;
+  const rootAbs = path.resolve(root);
+  const acc: string[] = [];
+
+  const walk = (dirAbs: string): void => {
+    if (acc.length >= maxFiles) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dirAbs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (acc.length >= maxFiles) return;
+      if (entry.name === "." || entry.name === "..") continue;
+      const abs = path.join(dirAbs, entry.name);
+      if (entry.isDirectory()) {
+        if (entry.name.startsWith(".") || TREE_IGNORED_DIRS.has(entry.name)) {
+          continue;
+        }
+        walk(abs);
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const rel = path.relative(rootAbs, abs).split(path.sep).join("/");
+      if (rel && !rel.startsWith("..")) acc.push(rel);
+    }
+  };
+
+  walk(rootAbs);
+
+  for (const probe of TREE_EXTRA_PROBES) {
+    if (acc.length >= maxFiles) break;
+    const abs = path.resolve(rootAbs, probe);
+    const rel = path.relative(rootAbs, abs).split(path.sep).join("/");
+    if (
+      rel &&
+      !rel.startsWith("..") &&
+      !path.isAbsolute(rel) &&
+      fs.existsSync(abs) &&
+      !acc.includes(rel)
+    ) {
+      acc.push(rel);
+    }
+  }
+
+  return acc;
+}

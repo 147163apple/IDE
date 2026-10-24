@@ -61,6 +61,10 @@ vi.mock("@/lib/daemon-api", async (orig) => {
     fetchArchGraph: vi.fn(async () => {
       throw new Error("no graph in test");
     }),
+    fetchRepoTree: vi.fn(async () => ({
+      root: "/Users/tina/Desktop/1020",
+      files: ["README.md", "src/routes/index.tsx", "package.json"],
+    })),
     fetchSettings: vi.fn(async () => ({ configured: false })),
     readWorktreeFile: vi.fn(async (_c: unknown, p: string) => ({
       path: p,
