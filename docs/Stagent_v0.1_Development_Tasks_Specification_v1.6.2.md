@@ -89,8 +89,8 @@
 > 53. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10o · 任务图谱开工/核销入口）**：Tina 授权（t680u）——任务图谱只读，后台已有 start/verify（C.7）但 UI 未接。新增 **`TASK-C.10o`** 并收口为 **`[COMPLETED]`**（合入 tip `830fca1`；四件套 **1331 passed / 6 skipped**）。交付：有图时顶栏「开工下一节点」「核销点亮」；详情可对可开工/可核销节点操作；接到 `POST /api/graph/nodes/start` 与 `POST /api/graph/verify`；状态 PENDING→RUNNING→点亮；失败黄条；COMMAND 退出码按声明别名提交，写入/Scope/SHA 仍由 Daemon 现算（不假绿）。前置：`TASK-C.10n` / `TASK-C.7` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.24。架构规范仅 §11 注记 9 轻量锚定延续。
 >
 > 54. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10p · 图谱开工/核销自动确保 Worktree）**：Tina 反馈（t681u）核销报「任务 Worktree 不存在」（合同已 MERGED、树已清）。新增 **`TASK-C.10p`** 并收口为 **`[COMPLETED]`**（合入 tip `35b56c9`；四件套 **1335 passed / 6 skipped**）。交付：`ensureTaskWorktree` + `resolveExistingBaseBranch`；`POST /api/graph/nodes/start` 与 `POST /api/graph/verify` 前自愈重建；基线优先合同 base_branch，缺失回退 main/master/HEAD；主区脏 `acknowledgeDirty`。前置：`TASK-C.10o` / `TASK-A.1` COMPLETED。**不改**鉴权；**不假绿**；**不抢** D.1e。对照走查报告 §6.25。架构规范仅 §11 注记 9 轻量锚定延续。
-> 55. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10q · Studio 全景/施工双视角壳）**：Tina 授权（t684u）——图谱相关方案写入设计说明；v0.1 先立双视角壳 + 改名消歧义；三张真全景图进 v0.2。新增 **`TASK-C.10q`** 并收口为 **`[COMPLETED]`**（合入 tip `TBD_TIP`；四件套 **TBD_GATES**）。交付：`StudioLensShell` + `PanoramaPane`（合同摘要 + v0.2 占位）；无图默认全景、有图/刚建图切施工；「业务功能导图」→「本轮施工·功能汇总」；全景禁止施工绿灯。前置：`TASK-C.10p` COMPLETED。**不改**鉴权；**不假绿**；**不改** start/verify/illumination；**不抢** D.1e。对照走查 §6.26、设计说明 §9、RFC 附录 C。
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10q tip 为准（合入后回填）；此前 C.10p 基线 **1335 passed / 6 skipped**。
+> 55. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10q · Studio 全景/施工双视角壳）**：Tina 授权（t684u）——图谱相关方案写入设计说明；v0.1 先立双视角壳 + 改名消歧义；三张真全景图进 v0.2。新增 **`TASK-C.10q`** 并收口为 **`[COMPLETED]`**（合入 tip `4280de6`；四件套 **1342 passed / 6 skipped**）。交付：`StudioLensShell` + `PanoramaPane`（合同摘要 + v0.2 占位）；无图默认全景、有图/刚建图切施工；「业务功能导图」→「本轮施工·功能汇总」；全景禁止施工绿灯。前置：`TASK-C.10p` COMPLETED。**不改**鉴权；**不假绿**；**不改** start/verify/illumination；**不抢** D.1e。对照走查 §6.26、设计说明 §9、RFC 附录 C。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10q tip `4280de6` 为准；此前 C.10p 基线 **1335 passed / 6 skipped**。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -154,7 +154,7 @@
 | **TASK-C.10m** | 质疑自查裁决按钮接线（缺陷修复 / 新需求演进） | 工作台 UX | **[COMPLETED]**（tip `0d65890`；**1319 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10l` COMPLETED；工作区恢复干净 tip<br>• 两按钮 → `user_choice` → Daemon 强制分类<br>• 需求演进切合同视口；缺陷修复留质疑<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-C.10n** | 任务图谱空态可感知（禁用无效切换 / 刷新反馈 / 建图 CTA） | 工作台 UX | **[COMPLETED]**（tip `bcad27f`；热修 `3e9bb22`；**1323 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10m` COMPLETED<br>• 无图：禁用视图切换；刷新 loading；白话空态 + 确认原型建图 CTA<br>• 有图：只读提示；选中节点高亮并滚到详情<br>• 热修：建图 CTA 错误回显图谱顶栏<br>• **不含** start/verify；不改鉴权；不抢 D.1e |
 | **TASK-C.10p** | 图谱开工/核销自动确保任务 Worktree | 工作台 UX / 执行内核 | **[COMPLETED]**（tip `35b56c9`；**1335 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10o` / `A.1` COMPLETED<br>• start/verify 前 `ensureTaskWorktree`；基线回退；主区脏不阻断<br>• **不含**假绿/改鉴权；不抢 D.1e |
-| **TASK-C.10q** | Studio 全景/施工双视角壳 + 改名消歧义 | 工作台 UX | **[COMPLETED]**（tip `TBD_TIP`；**TBD_GATES**） | P4 体验打磨 | • 前置 `C.10p` COMPLETED<br>• `StudioLensShell` / `PanoramaPane`；无图全景、有图施工；「本轮施工·功能汇总」改名<br>• 三张真全景图 → v0.2 RFC 附录 C（本卡不实现）<br>• **不含**假绿/改 illumination/start/verify；不抢 D.1e |
+| **TASK-C.10q** | Studio 全景/施工双视角壳 + 改名消歧义 | 工作台 UX | **[COMPLETED]**（tip `4280de6`；**1342 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10p` COMPLETED<br>• `StudioLensShell` / `PanoramaPane`；无图全景、有图施工；「本轮施工·功能汇总」改名<br>• 三张真全景图 → v0.2 RFC 附录 C（本卡不实现）<br>• **不含**假绿/改 illumination/start/verify；不抢 D.1e |
 | **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `830fca1`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
@@ -1762,7 +1762,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.10q】Studio 全景/施工双视角壳 + 改名消歧义
 * **任务编号**：`TASK-C.10q`
 * **前置依赖**：`TASK-C.10p` (COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `TBD_TIP`；Tina 授权 t684u「都放进方案，然后 v0.1 先立双视角壳」；四件套 **TBD_GATES**；tsc 0 / eslint 0 errors / build 通过）
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `4280de6`；Tina 授权 t684u「都放进方案，然后 v0.1 先立双视角壳」；四件套 **1342 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）
 * **对照痛点**：非专业用户需要「能干嘛 / 怎么用 / 管什么 / 这轮改哪」四张透视卡；现有「业务功能导图」易与进门全仓脑图撞名；确认原型前中栏只有施工空态。
 * **v0.1 范围（施工合同）**：
   1. Studio 中栏「全景 / 施工」双视角切换壳（`StudioLensShell`）；两视角 `hidden` 保活。
@@ -2114,7 +2114,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
-> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–q` 均已 **COMPLETED**（C.10q tip 合入后回填）。属非技术可用性打磨，不新开 Sprint 编号。
+> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–q` 均已 **COMPLETED**（C.10q tip `4280de6`）。属非技术可用性打磨，不新开 Sprint 编号。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
