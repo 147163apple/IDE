@@ -43,8 +43,10 @@ describe("TASK-C.3 MonacoEditorPane", () => {
     await waitFor(() => expect(f.save).toHaveBeenCalledWith("src/a.ts", "b"));
     await waitFor(() => expect(screen.queryByText("● 未保存")).toBeNull());
   });
-  it("只读文件：只读标记，编辑器 readOnly，保存按钮禁用", async () => {
+  it("只读 Markdown：切到源码后只读标记，编辑器 readOnly，保存按钮禁用", async () => {
     render(<MonacoEditorPane path="docs/x.md" io={io(false)} />);
+    await screen.findByTestId("markdown-preview");
+    fireEvent.click(screen.getByTestId("markdown-view-source"));
     expect(await screen.findByTestId("monaco")).toHaveAttribute("readonly");
     expect(screen.getByTestId("file-access")).toHaveTextContent("只读");
     expect(screen.getByText("保存")).toBeDisabled();

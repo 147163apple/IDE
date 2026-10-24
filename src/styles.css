@@ -169,3 +169,141 @@
     animation: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * TASK-C.10j Markdown 阅读预览（对齐 Cursor 阅读感，非完整 VS Code）
+ * ------------------------------------------------------------------------- */
+.markdown-preview {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+.markdown-preview-body {
+  font-size: 0.95rem;
+  line-height: 1.7;
+  word-wrap: break-word;
+}
+
+.markdown-preview-body > :first-child {
+  margin-top: 0;
+}
+
+.markdown-preview-body h1,
+.markdown-preview-body h2,
+.markdown-preview-body h3,
+.markdown-preview-body h4,
+.markdown-preview-body h5,
+.markdown-preview-body h6 {
+  font-weight: 650;
+  line-height: 1.3;
+  margin: 1.4em 0 0.55em;
+  color: var(--foreground);
+}
+
+.markdown-preview-body h1 {
+  font-size: 1.75rem;
+  padding-bottom: 0.35em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-preview-body h2 {
+  font-size: 1.4rem;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--border);
+}
+
+.markdown-preview-body h3 {
+  font-size: 1.2rem;
+}
+
+.markdown-preview-body h4 {
+  font-size: 1.05rem;
+}
+
+.markdown-preview-body p {
+  margin: 0.75em 0;
+}
+
+.markdown-preview-body a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.markdown-preview-body blockquote {
+  margin: 0.9em 0;
+  padding: 0.15em 0 0.15em 1em;
+  border-left: 3px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.markdown-preview-body ul,
+.markdown-preview-body ol {
+  margin: 0.75em 0;
+  padding-left: 1.6em;
+}
+
+.markdown-preview-body li {
+  margin: 0.25em 0;
+}
+
+.markdown-preview-body li > ul,
+.markdown-preview-body li > ol {
+  margin: 0.15em 0;
+}
+
+.markdown-preview-body hr {
+  margin: 1.5em 0;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.markdown-preview-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.9rem;
+}
+
+.markdown-preview-body th,
+.markdown-preview-body td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+
+.markdown-preview-body th {
+  background: var(--muted);
+  font-weight: 600;
+}
+
+.markdown-preview-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  background: var(--muted);
+  padding: 0.12em 0.35em;
+  border-radius: 4px;
+}
+
+.markdown-preview-body pre {
+  margin: 1em 0;
+  padding: 0.9em 1em;
+  overflow: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #f6f8fa;
+}
+
+.markdown-preview-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1.55;
+  color: inherit;
+}
+
+.markdown-preview-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}

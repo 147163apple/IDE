@@ -1,4 +1,5 @@
 
+- **P-56（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10j`**（中栏 Markdown 预览阅读：打开 `.md` 默认好看预览含标题/引用/GFM/代码高亮；可切源码编辑；对齐 Cursor 阅读感，不做完整 VS Code）。同步：版本头第 46 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10i→C.10j`）、§3.4 详细卡、Sprint「当前首要」→ **C.10j**；走查报告 §6.18；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e；不重做 Monaco 保存门禁。
 - **P-55（立卡+实现，2026-10-24）**：新增 **`TASK-C.10i`**（文件树第一批：顶栏路径折叠整树；新建文件/文件夹；右键「在 Finder 显示 / 复制路径 / 重命名 / 删除」）。Cursor 其余右键（Chat/终端/对比/时间线/浏览器打开等）**仅**写入 v0.2+ RFC 锚定，**不实施**、不推翻现架构。同步：版本头第 45 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10h→C.10i`）、§3.4 详细卡、Sprint「当前首要」→ **C.10i**；走查报告 §6.17；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-54（C.10h 删除 Not Found 热修，2026-10-24）**：Tina 确认删除后对话框显示「Not Found」、文件未删。根因：**不是**前后端路径不一致——源码双方都是 `POST /api/repo/delete`；而是 Daemon 于 C.10h 合入前（~13:14）启动，`stagent open` 健康检查通过后**复用旧进程**，路由未挂到活进程（活探针：`/api/repo/tree` 200、`/api/repo/delete` 404）。热修：① `isDaemonCodeStale` + `tryReuseRunningDaemon` 发现 `daemon/server.ts` / `repo-delete.ts` mtime 新于 `startedAt` 则 shutdown/SIGTERM 退役再启；② 前端 404 改白话「本机服务还是旧版…重新打开」；③ 实测删除走废纸篓。四件套 **1295 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.16。
 - **P-43（合入回写，2026-10-24）**：`TASK-C.10c` → **`[COMPLETED]`**（main tip `6811f44` 快进合入；四件套 **1267 passed / 6 skipped**）。同步：版本头第 34 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 第三轮含暗号清扫收口；走查报告 §6.5/§6.7 回写。交付要点：白话标签、图谱单入口、页脚/欢迎降噪。架构规范仅 §11 注记 9 轻量锚定延续。# Stagent v0.1 研发任务拆解与工程执行规范 (v1.6.2 代码事实对齐与卡片净化版)
@@ -58,13 +59,14 @@
 > 43. **状态回写（2026-10-24 · 资源管理器去掉冗余「文件」标题）**：删除 `left-explorer-heading`「文件」字样；路径根与文件树保留。合入 tip `f14c8cb`；四件套 **1292 passed / 6 skipped**。
 > 44. **状态回写（2026-10-24 · C.10h 删除 Not Found 热修）**：确认删除回「Not Found」——活 Daemon 复用旧进程致 `POST /api/repo/delete` 未挂（路径在源码一致）。退役偏斜 Daemon + 404 白话；四件套 **1295 passed / 6 skipped**。对照走查 §6.16。
 > 45. **状态回写（2026-10-24 · 立卡并实现 TASK-C.10i · 文件树第一批）**：Tina 授权第一批——点顶栏路径折叠整树；顶栏右侧新建文件/文件夹；右键含「在 Finder 中显示 / 复制路径 / 重命名 / 删除（已有）」。新增 **`TASK-C.10i`**（**COMPLETED**，tip `5388f9c`）。Cursor 其余右键菜单项（加进 Chat、在集成终端中打开、选择以进行比较、打开时间线、在浏览器中打开等）写入 **v0.2+ RFC 锚定（不实施）**，不推翻现架构。前置：`TASK-C.10h` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.17。架构规范仅 §11 注记 9 轻量锚定延续。
+> 46. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10j · 中栏 Markdown 预览阅读）**：Tina 授权（t666u）复刻 Cursor 式 Markdown 阅读。新增 **`TASK-C.10j`** 并收口为 **`[COMPLETED]`**（合入 tip 待回填）。交付：打开 `.md`/`.markdown`/`.mdx` 默认好看预览（标题/引用/GFM 表格/代码高亮）；顶栏「预览|源码」切换；源码仍走 Monaco + 既有保存门禁；非 Markdown 不出现切换。前置：`TASK-C.10i` COMPLETED。**不改**鉴权；**不抢** D.1e；不做分栏预览/完整面包屑/完整 VS Code。对照走查报告 §6.18。架构规范仅 §11 注记 9 轻量锚定延续。
 > 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1305 passed / 6 skipped**）。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**C.10j 合入后回填**；此前 C.10i **1305 passed / 6 skipped**）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -122,6 +124,7 @@
 | **TASK-C.10g** | 文件树展开/折叠（默认只展开第一层） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `a3fa7c7`；合后四件套 1281 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10f` COMPLETED<br>• 点文件夹展开/折叠；默认根下第一层展开；更深默认收起<br>• 点文件仍打开；不改鉴权；不抢 D.1e<br>• `file-tree-expand` + UI 回归 |
 | **TASK-C.10h** | 文件树右键删除（确认 / P.1 / 尽量废纸篓） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `008fd3a`；热修 `be4968b` 确认框可点；合后四件套 1292 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10g` COMPLETED<br>• 右键菜单 + 确认；`POST /api/repo/delete` 鉴权；保护清单拦则白话<br>• macOS 尽量废纸篓，否则普通文件永久删除并诚实说明；删成功刷新树<br>• 热修：ContextMenu 关闭后延后打开确认框（避免 pointer-events 锁）<br>• **不改**鉴权；不抢 D.1e |
 | **TASK-C.10i** | 文件树第一批（折叠整树 / 新建 / Finder·复制·重命名·删除） | 工作台 UX | **[COMPLETED]**（tip `5388f9c`；**1305 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10h` COMPLETED<br>• 点顶栏路径折叠整树；新建文件/文件夹；右键 Finder/复制路径/重命名/删除<br>• 写操作经鉴权 API + P.1；**不改**鉴权；不抢 D.1e<br>• Cursor 其余右键 → v0.2+ RFC 锚定（不实施） |
+| **TASK-C.10j** | 中栏 Markdown 预览阅读（默认预览 / 可切源码） | 工作台 UX | **[COMPLETED]**（tip 待回填） | P4 体验打磨 | • 前置 `C.10i` COMPLETED<br>• `.md` 默认好看预览（标题/引用/GFM/代码高亮）；「预览|源码」切换<br>• 源码仍 Monaco + 既有保存门禁；非 md 无切换<br>• **不含**分栏预览/完整面包屑/完整 VS Code；不改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -192,11 +195,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j
               │                │                             │              │              │              │
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
-              建议序：C.10h 已合 · **文件树右键删除收口**
+              建议序：C.10i 已合 · **当前首要 C.10j Markdown 预览阅读**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -283,7 +286,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10e", "to": "TASK-C.10f" },
   { "from": "TASK-C.10f", "to": "TASK-C.10g" },
   { "from": "TASK-C.10g", "to": "TASK-C.10h" },
-  { "from": "TASK-C.10h", "to": "TASK-C.10i" }
+  { "from": "TASK-C.10h", "to": "TASK-C.10i" },
+  { "from": "TASK-C.10i", "to": "TASK-C.10j" }
 ]
 ```
 
@@ -1051,7 +1055,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-### 3.4 Cursor 式三栏 IDE 工作台与多维 Studio 视口（C.1/C.3 落 Sprint 1；C.2 落 Sprint 4 多维视口；C.8a/b/c 走查 Top3 已合；C.9a–C.9d 第二轮指挥权已合；C.10a–f 第三/四轮体验打磨已合；C.4 推迟）
+### 3.4 Cursor 式三栏 IDE 工作台与多维 Studio 视口（C.1/C.3 落 Sprint 1；C.2 落 Sprint 4 多维视口；C.8a/b/c 走查 Top3 已合；C.9a–C.9d 第二轮指挥权已合；C.10a–j 第三/四轮体验打磨已合；C.4 推迟）
 
 #### 【Task C.1】Cursor 式三栏 IDE 响应式工作台骨架与 Studio 视口
 * **任务编号**：`TASK-C.1`
@@ -1533,6 +1537,32 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   1. 点顶栏路径后子节点收起；新建/重命名/删除后树刷新。
   2. 保护清单命中白话拒绝；系统路径（.git/.stagent）不可改。
   3. 四件套绿；不回退 C.10h/g/f/e；不改鉴权。
+
+
+#### 【Task C.10j】中栏 Markdown 预览阅读（默认预览 / 可切源码）`[COMPLETED]`
+* **任务编号**：`TASK-C.10j`
+* **前置依赖**：`TASK-C.10i` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-24；Tina 授权 t666u；tip 待回填；四件套待回填）
+* **对照痛点**：打开 `.md` 只见 Monaco 源码，缺少 Cursor 式好看阅读（标题/引用/代码高亮）。
+* **v0.1 范围（施工合同）**：
+  1. **默认**：打开 `.md` / `.markdown` / `.mdx` 进入好看预览（标题层级、引用、GFM 表格/列表、围栏代码高亮）。
+  2. **切换**：顶栏「预览 | 源码」；源码仍走 Monaco，保存门禁不变（C.3 / P.1）。
+  3. **非 Markdown**：行为与 C.3 一致，不出现切换控件。
+  4. **纪律**：对齐 Cursor 阅读感；**不做**完整 VS Code（分栏预览、完整面包屑、插件生态等）；不改鉴权；不抢 D.1e；不打印 token。
+* **明确不包含**：Markdown 分栏同步预览；完整路径面包屑导航条；WYSIWYG 所见即所得编辑；扩展语言包/主题市场。
+* **涉及核心文件（预期）**：
+  - `src/lib/markdown-file.ts`
+  - `src/components/editor/MarkdownPreview.tsx`
+  - `src/components/MonacoEditorPane.tsx` / `src/styles.css`
+  - 单元：`tests/unit/markdown-file.test.ts`；UI：`tests/ui/markdown-preview-pane.test.tsx`（并回归 `monaco-editor-pane.test.tsx`）
+* **Pass/Fail 验收判定**（≤5）：
+  1. `.md` 默认可见预览标题/引用；无 Monaco。
+  2. 点「源码」出现 Monaco；再点「预览」回到阅读。
+  3. 非 `.md` 无切换控件。
+  4. 不回退 C.10i/h；不改鉴权与保存门禁。
+  5. 四件套全绿；不打印 token。
+* **FAIL**：`.md` 仍只能看源码；预览无标题/引用样式；切换破坏保存门禁。
+
 
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
