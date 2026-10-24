@@ -87,6 +87,10 @@ import {
 } from "@/components/AgentChatPane";
 import { buildProposalFromContract } from "@/lib/journey/proposal-from-contract";
 import { resolveCommandSurface } from "@/lib/command-surface";
+import {
+  resolveActiveInProgress,
+  resolveInProgressCta,
+} from "@/lib/in-progress-lifecycle";
 import type { AssistantModeSurface } from "@/lib/assistant-mode";
 import type { StudioViewportId } from "@/components/studio/viewport-routing";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
@@ -1507,21 +1511,18 @@ function Console() {
   // TASK-C.9a：三态单一指挥面（无钥匙 / 有钥匙空闲 / 进行中）
   const needsProtectionConfirm =
     admission != null && shouldConfirmAdmission(admission);
+  // C.10a：进行中只跟忙碌/确认/三步台；历史 journeyCards 不粘住 in_progress
+  const activeProgress = {
+    journeyBusy,
+    bossMode,
+    needsProtectionConfirm,
+    confirmPrototypeBusy,
+  };
   const commandSurface = resolveCommandSurface({
     hasSession: connected,
     keyReady: settings?.configured === true,
-    inProgress:
-      journeyBusy ||
-      bossMode ||
-      needsProtectionConfirm ||
-      journeyCards.length > 0,
-    inProgressCta: needsProtectionConfirm
-      ? "protection-confirm-approve"
-      : bossMode
-        ? "boss-fastpath-confirm"
-        : journeyBusy || journeyCards.length > 0
-          ? "journey-active"
-          : undefined,
+    inProgress: resolveActiveInProgress(activeProgress),
+    inProgressCta: resolveInProgressCta(activeProgress),
   });
 
   return (

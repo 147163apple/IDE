@@ -136,7 +136,7 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
     );
   });
 
-  it("进行中态：欢迎让路，指挥面指向进行中 CTA", () => {
+  it("进行中态：指挥面指向进行中 CTA；纯 journey-active 不空让路壳（C.10a）", () => {
     const surface = resolveCommandSurface({
       hasSession: true,
       keyReady: true,
@@ -161,9 +161,8 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
       "data-phase",
       "in_progress",
     );
-    // C.9d：进行中中栏让路，不再渲染 IDE 欢迎页
-    expect(screen.getByTestId("middle-yield")).toBeInTheDocument();
-    expect(screen.queryByTestId("welcome-pane")).toBeNull();
+    // C.10a：无三步台/确认时不渲染空 middle-yield
+    expect(screen.queryByTestId("middle-yield")).toBeNull();
     expect(screen.getByTestId("command-surface")).toHaveAttribute(
       "data-primary-cta",
       "journey-active",

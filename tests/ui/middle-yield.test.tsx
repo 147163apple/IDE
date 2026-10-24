@@ -14,7 +14,7 @@ const base = {
 };
 
 describe("TASK-C.9d 中栏让路 / 设置回跳", () => {
-  it("进行中：欢迎页让路为 middle-yield，不再占主视线", () => {
+  it("C.10a：纯 journey-active 无三步台时不渲染空让路壳（回欢迎/主路径）", () => {
     const surface = resolveCommandSurface({
       hasSession: true,
       keyReady: true,
@@ -22,8 +22,12 @@ describe("TASK-C.9d 中栏让路 / 设置回跳", () => {
       inProgressCta: "journey-active",
     });
     render(<WorkspaceLayout {...base} commandSurface={surface} />);
-    expect(screen.getByTestId("middle-yield")).toBeInTheDocument();
-    expect(screen.queryByTestId("welcome-pane")).toBeNull();
+    expect(screen.queryByTestId("middle-yield")).toBeNull();
+    // 欢迎区可能是 welcome-pane 或 welcome-surface
+    expect(
+      screen.queryByTestId("welcome-pane") ??
+        screen.getByTestId("welcome-surface"),
+    ).toBeTruthy();
   });
 
   it("三步台 CTA：自动打开 Studio", async () => {

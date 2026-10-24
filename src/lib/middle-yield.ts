@@ -6,6 +6,7 @@
  * - 聊≠改：PROTECTED 下白话一句
  *
  * 不含重做 Studio 四视口路由；不改 Fast Path 准入/状态机边。
+ * C.10a：空让路壳与 in_progress 退出见 `in-progress-lifecycle.ts`。
  */
 
 import type { CommandSurfacePhase, InProgressCta } from "./command-surface";

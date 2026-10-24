@@ -17,9 +17,10 @@ import type { CommandSurface } from "../lib/command-surface";
 import {
   CHAT_VS_EDIT_PLAIN,
   shouldAutoOpenStudioForProgress,
-  shouldYieldMiddleWelcome,
   type SettingsDeepFocus,
 } from "../lib/middle-yield";
+import { shouldRenderMiddleYieldShell } from "../lib/in-progress-lifecycle";
+import type { InProgressCta } from "../lib/command-surface";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
 /** Supervisor 审阅 Tab（左下角图标入口打开；中央阅读区，可关闭） */
@@ -265,24 +266,21 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     setRightOpen(true);
   }, [closeSettingsReq]);
 
-  // C.9d：三步台/保护确认进行中 → 自动打开 Studio，欢迎页让路
+  // C.9d + C.10a：三步台/保护确认进行中 → 保持 Studio 打开（关了也会再开，避免空让路壳）
   const progressCta = props.commandSurface?.primaryCtaTestId;
   const progressPhase = props.commandSurface?.phase;
+  const progressCtaTyped: InProgressCta | undefined =
+    progressCta === "boss-fastpath-confirm" ||
+    progressCta === "protection-confirm-approve" ||
+    progressCta === "journey-active"
+      ? progressCta
+      : undefined;
   useEffect(() => {
     if (progressPhase !== "in_progress") return;
-    if (
-      !shouldAutoOpenStudioForProgress(
-        progressCta === "boss-fastpath-confirm" ||
-          progressCta === "protection-confirm-approve"
-          ? progressCta
-          : undefined,
-      )
-    ) {
-      return;
-    }
+    if (!shouldAutoOpenStudioForProgress(progressCtaTyped)) return;
     openStudio();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅相位/CTA 变化时开 Studio
-  }, [progressPhase, progressCta]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 相位/CTA/关台后仍要接到三步台
+  }, [progressPhase, progressCtaTyped, activeTab]);
 
   const studio = (
     <div
@@ -541,7 +539,10 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             {showWelcome ? (
-              shouldYieldMiddleWelcome(surface?.phase) ? (
+              shouldRenderMiddleYieldShell({
+                phase: surface?.phase,
+                cta: progressCtaTyped,
+              }) ? (
                 <div
                   data-testid="middle-yield"
                   data-command-phase="in_progress"
