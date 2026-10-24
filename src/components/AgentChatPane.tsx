@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useAgentSession,
   type AgentSessionTransport,
@@ -52,7 +52,10 @@ export interface AgentChatPaneProps {
   onAssistantModeChange?: ((surface: AssistantModeSurface) => void) | undefined;
 }
 
-/** TASK-C.6 右栏 Coding Agent 会话：流式输出、工具卡片、停止、排队、会话续接 */
+/**
+ * TASK-C.6 右栏 Coding Agent 会话；TASK-C.10k：老板主视线只留双方对话，
+ * 去掉适配器/历史会话/会话元信息/工具 JSON 等工程师噪声。
+ */
 export function AgentChatPane({
   transport,
   onBeforeSend,
@@ -66,25 +69,19 @@ export function AgentChatPane({
 }: AgentChatPaneProps) {
   const chat = useAgentSession(transport);
   const [draft, setDraft] = useState("");
-  const [adapterId, setAdapterId] = useState<string>("");
   const [routing, setRouting] = useState(false);
   const [relaunchBusy, setRelaunchBusy] = useState(false);
   const [relaunchError, setRelaunchError] = useState<string | null>(null);
+  const ensuringSessionRef = useRef(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const current = chat.sessions.find((s) => s.id === chat.sessionId);
-  // 下拉框默认跟随「当前打开的会话」所用的助手；否则优先真助手，演示仅兜底（C.8a）
   const currentAdapterAvailable = chat.adapters.some(
     (a) => a.id === current?.adapter_id && a.available,
   );
-  const adapterChoice =
-    adapterId ||
-    pickPreferredAdapterId(
-      chat.adapters,
-      currentAdapterAvailable ? (current?.adapter_id ?? null) : null,
-    );
-  const currentLabel =
-    chat.adapters.find((a) => a.id === current?.adapter_id)?.label ??
-    current?.adapter_id ??
-    "";
+  const adapterChoice = pickPreferredAdapterId(
+    chat.adapters,
+    currentAdapterAvailable ? (current?.adapter_id ?? null) : null,
+  );
   const realReady = hasRealAssistantAvailable(chat.adapters);
   const assistant = resolveAssistantMode({
     keyReady: keyConfigured === true,
@@ -101,9 +98,24 @@ export function AgentChatPane({
     assistant.canSendAsWork,
     onAssistantModeChange,
   ]);
+
+  // C.10k：无工程师「新会话」按钮时，自动用首选助手开会话，老板只说话。
+  const newSession = chat.newSession;
   useEffect(() => {
-    setAdapterId("");
-  }, [chat.sessionId]);
+    if (chat.sessionId) {
+      setSessionReady(true);
+      return;
+    }
+    setSessionReady(false);
+    if (!transport) return;
+    if (!adapterChoice) return;
+    if (assistant.mode === "wizard") return;
+    if (ensuringSessionRef.current) return;
+    ensuringSessionRef.current = true;
+    void newSession(adapterChoice).finally(() => {
+      ensuringSessionRef.current = false;
+    });
+  }, [transport, chat.sessionId, adapterChoice, assistant.mode, newSession]);
 
   if (!transport) {
     const doRelaunch = () => {
@@ -190,6 +202,7 @@ export function AgentChatPane({
   const sendDisabled =
     routing ||
     journeyBusy === true ||
+    (!sessionReady && !chat.sessionId) ||
     !assistant.canSendAsWork ||
     (!onBeforeSend && !chat.sessionId);
 
@@ -197,6 +210,8 @@ export function AgentChatPane({
     commandPhase === "in_progress" ||
     primaryCtaTestId === "journey-active" ||
     journeyBusy === true;
+
+  const dialogueMessages = chat.messages.filter((m) => m.role !== "tool");
 
   return (
     <div
@@ -216,46 +231,8 @@ export function AgentChatPane({
           进行中：请看对话、中间确认或三步台
         </div>
       ) : null}
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="font-semibold">AI 助手：</span>
-        <select
-          aria-label="选择 Agent"
-          value={adapterChoice}
-          onChange={(e) => setAdapterId(e.target.value)}
-          className="rounded border px-1"
-        >
-          {chat.adapters.map((a) => (
-            <option key={a.id} value={a.id} disabled={!a.available}>
-              {a.label}
-              {a.control_mode === "UNCONTROLLED_EXTERNAL" ? "（未受控）" : ""}
-              {a.available ? "" : `（${a.unavailable_reason ?? "不可用"}）`}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          className="rounded border px-2"
-          disabled={!adapterChoice}
-          onClick={() => void chat.newSession(adapterChoice)}
-        >
-          新会话
-        </button>
-        <span className="opacity-70">历史会话：</span>
-        <select
-          aria-label="历史会话"
-          value={chat.sessionId ?? ""}
-          onChange={(e) => void chat.selectSession(e.target.value)}
-          className="min-w-0 flex-1 rounded border px-1"
-        >
-          {!chat.sessionId && <option value="">（无会话）</option>}
-          {chat.sessions.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.title} · {s.adapter_id}
-            </option>
-          ))}
-        </select>
-      </div>
-      <p
+      {/* C.10k：主 CTA 锚点保留（指挥面），视觉不再占一整条说明书 */}
+      <span
         data-testid="journey-entry-hint"
         data-primary-cta={
           primaryCtaTestId === "journey-entry-hint" ||
@@ -266,16 +243,10 @@ export function AgentChatPane({
         data-command-role={
           commandPhase === "idle" || !commandPhase ? "primary" : "secondary"
         }
-        className={
-          commandPhase === "idle" || !commandPhase
-            ? "rounded border border-sky-600/40 bg-sky-500/10 px-2 py-1.5 text-[11px] leading-relaxed text-sky-950"
-            : "rounded border border-border/60 bg-muted/30 px-2 py-1 text-[10px] leading-relaxed text-muted-foreground"
-        }
+        className="sr-only"
       >
-        {commandPhase === "in_progress"
-          ? "进行中：请看下方对话、中间确认或三步台——这里继续补充说明即可。"
-          : "你只跟这里说话就行：质疑「做错了」、提新功能、或说「标题字号大一点」这类小事——系统会在背后分流，不必自己找别的对话框。"}
-      </p>
+        在下方输入框说出你的需求
+      </span>
       {assistant.mode === "wizard" && (
         <div
           data-testid="key-need-wizard"
@@ -284,14 +255,14 @@ export function AgentChatPane({
         >
           <p className="font-semibold text-sky-950">
             {keyConfigured
-              ? "钥匙已就绪：选一个可用助手，再点「新会话」即可开聊。"
+              ? "钥匙已就绪：直接在下方说话即可。"
               : "还差一步：配好模型钥匙，真助手就能干活。"}
           </p>
           {!keyConfigured && (
             <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-sky-950/90">
               <li>点下方按钮打开设置里的「模型钥匙」</li>
               <li>粘贴钥匙并保存（不会显示在聊天里）</li>
-              <li>回到这里，看到助手可选后点「新会话」</li>
+              <li>回到这里，在下方直接说话</li>
             </ol>
           )}
           {onConfigureKey && (
@@ -311,9 +282,6 @@ export function AgentChatPane({
               {keyConfigured ? "打开设置核对钥匙" : "去配置模型钥匙"}
             </button>
           )}
-          <p className="mt-1 text-[10px] opacity-70">
-            「练习沙箱」只是本地回声，用来试界面；要改项目请走真助手。
-          </p>
         </div>
       )}
       {assistant.mode === "practice" ? (
@@ -324,7 +292,7 @@ export function AgentChatPane({
         >
           当前是练习沙箱（不可当真）。
           {realReady ? (
-            <> 要真干活：在上面选可用助手并点「新会话」。</>
+            <> 真助手已就绪，新开的对话会自动用真助手。</>
           ) : onConfigureKey ? (
             <>
               {" "}
@@ -344,89 +312,25 @@ export function AgentChatPane({
           )}
         </div>
       ) : null}
-      {current && (
-        <div
-          data-testid="current-agent"
-          className={
-            current.adapter_id === "demo"
-              ? "rounded border border-border/70 bg-muted/40 px-2 py-1 text-[11px] leading-relaxed text-muted-foreground"
-              : "font-semibold"
-          }
-        >
-          {current.adapter_id === "demo" ? (
-            <details data-testid="demo-sandbox-note">
-              <summary className="cursor-pointer select-none">
-                当前：练习沙箱（可选）· 点开看说明
-              </summary>
-              <p className="mt-1">
-                这是本地练习模式：方便试界面，不会改你的项目文件。要真干活，请
-                {realReady
-                  ? "在上面选可用助手并点「新会话」。"
-                  : "先配置模型钥匙，再开新会话。"}
-              </p>
-              {!realReady && onConfigureKey && (
-                <button
-                  type="button"
-                  className="mt-1 rounded border px-2 py-0.5"
-                  onClick={onConfigureKey}
-                >
-                  去配置模型钥匙
-                </button>
-              )}
-            </details>
-          ) : (
-            <>当前对话使用：{currentLabel}</>
-          )}
-        </div>
-      )}
-      {current && (
-        <div data-testid="chat-session-meta" className="text-[10px] opacity-60">
-          {current.adapter_id}
-          {current.native_session_id
-            ? ` · 原生会话 ${current.native_session_id.slice(0, 12)}`
-            : ""}
-          {chat.firstTokenMs !== null ? ` · 首字 ${chat.firstTokenMs}ms` : ""}
-        </div>
-      )}
       <div
         data-testid="chat-messages"
         className="min-h-0 flex-1 space-y-2 overflow-auto"
       >
-        {chat.messages.map((m) =>
-          m.role === "tool" && m.tool ? (
-            <div
-              key={m.id}
-              data-testid="tool-card"
-              className="rounded border bg-muted/40 p-2"
-            >
-              <div className="font-semibold">🔧 {m.tool.name}</div>
-              <pre className="whitespace-pre-wrap text-[10px] opacity-70">
-                {JSON.stringify(m.tool.input).slice(0, 300)}
-              </pre>
-              {m.tool.output !== undefined && (
-                <pre
-                  className={`whitespace-pre-wrap text-[10px] ${m.tool.is_error ? "text-destructive" : ""}`}
-                >
-                  {m.tool.output.slice(0, 500)}
-                </pre>
-              )}
-            </div>
-          ) : (
-            <div
-              key={m.id}
-              data-role={m.role}
-              className={
-                m.role === "user"
-                  ? "ml-6 rounded bg-primary/10 p-2"
-                  : m.role === "system"
-                    ? "text-center text-[10px] opacity-60"
-                    : "whitespace-pre-wrap p-1"
-              }
-            >
-              {m.text}
-            </div>
-          ),
-        )}
+        {dialogueMessages.map((m) => (
+          <div
+            key={m.id}
+            data-role={m.role}
+            className={
+              m.role === "user"
+                ? "ml-6 rounded bg-primary/10 p-2"
+                : m.role === "system"
+                  ? "text-center text-[10px] opacity-60"
+                  : "whitespace-pre-wrap p-1"
+            }
+          >
+            {m.text}
+          </div>
+        ))}
         {(journeyCards ?? []).map((card) => (
           <div
             key={card.id}
@@ -467,8 +371,8 @@ export function AgentChatPane({
                 : routing || journeyBusy
                   ? "正在分流处理…"
                   : chat.busy
-                    ? "Agent 正在回答，可继续输入排队"
-                    : "输入消息，回车发送（质疑 / 需求 / 小改都从这里说）"
+                    ? "助手正在回答，可继续输入排队"
+                    : "说出你的需求：质疑、新功能或小改…"
           }
           disabled={sendDisabled}
           className="min-h-[48px] flex-1 rounded border p-1"

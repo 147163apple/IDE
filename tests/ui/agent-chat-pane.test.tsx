@@ -89,12 +89,11 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
     ]);
     render(<AgentChatPane transport={t} />);
     expect(await screen.findByText("之前的回答")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-session-meta")).toHaveTextContent(
-      "abc-native",
-    );
-    expect(
-      screen.getByRole("option", { name: /Claude Code（未受控）/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByText("之前的问题")).toBeInTheDocument();
+    // C.10k：会话元信息 / 适配器下拉不再出现在老板主视线
+    expect(screen.queryByTestId("chat-session-meta")).toBeNull();
+    expect(screen.queryByLabelText("选择 Agent")).toBeNull();
+    expect(screen.queryByText("AI 助手：")).toBeNull();
   });
 
   it("逐 token 流式渲染 + 工具卡片 + 停止", async () => {
@@ -122,8 +121,9 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
     push({ kind: "delta", text: "好" });
     push({ kind: "delta", text: "的" });
     expect(screen.getByText("好的")).toBeInTheDocument();
-    expect(screen.getByTestId("tool-card")).toHaveTextContent("Edit");
-    expect(screen.getByTestId("tool-card")).toHaveTextContent("已写入");
+    // C.10k：工具 JSON 卡片不进双方对话主视线
+    expect(screen.queryByTestId("tool-card")).toBeNull();
+    expect(screen.queryByText("Edit")).toBeNull();
     const stop = screen.getByText("停止");
     expect(stop).not.toBeDisabled();
     fireEvent.click(stop);
@@ -222,16 +222,22 @@ describe("TASK-C.6 / C.8c 未连接与可见标签（白话）", () => {
     expect(screen.getByTestId("chat-relaunch-with-token")).toBeInTheDocument();
     expect(box.textContent).toContain("设置");
   });
-  it("Agent 下拉框旁有可见文字「AI 助手：」", async () => {
+  it("C.10k：连接后只留对话区，不出现适配器/历史会话工程师控件", async () => {
     const { t } = fakeTransport();
     render(<AgentChatPane transport={t} />);
-    expect(await screen.findByText("AI 助手：")).toBeTruthy();
-    expect(screen.getByLabelText("选择 Agent")).toBeTruthy();
+    expect(await screen.findByTestId("chat-messages")).toBeTruthy();
+    expect(screen.queryByText("AI 助手：")).toBeNull();
+    expect(screen.queryByLabelText("选择 Agent")).toBeNull();
+    expect(screen.queryByLabelText("历史会话")).toBeNull();
+    expect(screen.queryByText("新会话")).toBeNull();
+    expect(screen.queryByTestId("chat-session-meta")).toBeNull();
+    // 主 CTA 锚点仍在（sr-only），指挥面不破
+    expect(screen.getByTestId("journey-entry-hint")).toBeTruthy();
   });
 });
 
 describe("TASK-C.6 / C.8a 当前会话所用助手要说清楚", () => {
-  it("打开练习沙箱会话时：下拉跟随，说明可折叠且不恐吓", async () => {
+  it("打开练习沙箱会话时：练习条可见且不恐吓；无工程师下拉", async () => {
     const t: AgentSessionTransport = {
       listAdapters: vi.fn(async () => [
         {
@@ -276,19 +282,15 @@ describe("TASK-C.6 / C.8a 当前会话所用助手要说清楚", () => {
       subscribe: () => () => undefined,
     };
     render(<AgentChatPane transport={t} />);
-    const line = await screen.findByTestId("current-agent");
-    expect(line.textContent).toContain("练习沙箱");
-    expect(line.textContent).not.toContain("不调用模型");
-    expect(line.textContent).not.toContain("不会真的读文件");
-    expect(screen.getByTestId("demo-sandbox-note")).toBeTruthy();
+    const banner = await screen.findByTestId("assistant-practice-banner");
+    expect(banner.textContent).toContain("练习沙箱");
+    expect(banner.textContent).not.toContain("不调用模型");
+    expect(banner.textContent).not.toContain("不会真的读文件");
+    expect(screen.queryByTestId("current-agent")).toBeNull();
+    expect(screen.queryByTestId("demo-sandbox-note")).toBeNull();
     expect(screen.getByTestId("journey-entry-hint")).toBeTruthy();
-    // 主 CTA「说需求」与恐吓文案不得并排大黄条打架
-    expect(line.className).not.toMatch(/amber/);
-    await waitFor(() =>
-      expect(
-        (screen.getByLabelText("选择 Agent") as HTMLSelectElement).value,
-      ).toBe("demo"),
-    );
+    expect(screen.queryByLabelText("选择 Agent")).toBeNull();
+    expect(banner.className).not.toMatch(/amber/);
   });
 
   it("TASK-C.8a：真助手都不可用时给出钥匙向导，且与「请说需求」一致", async () => {
@@ -342,10 +344,7 @@ describe("TASK-C.6 / C.8a 当前会话所用助手要说清楚", () => {
     expect(wizard.textContent).not.toContain("不读文件");
     fireEvent.click(screen.getByTestId("open-key-settings"));
     expect(onConfigureKey).toHaveBeenCalled();
-    await waitFor(() =>
-      expect(
-        (screen.getByLabelText("选择 Agent") as HTMLSelectElement).value,
-      ).toBe("demo"),
-    );
+    expect(screen.queryByLabelText("选择 Agent")).toBeNull();
+    expect(screen.queryByTestId("chat-session-meta")).toBeNull();
   });
 });
