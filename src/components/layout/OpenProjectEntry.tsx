@@ -21,8 +21,14 @@ export interface OpenProjectEntryProps {
   repoName: string;
   /** C.9a：指挥面相位；打开面板始终是次要入口 */
   commandPhase?: "no_key" | "idle" | "in_progress" | undefined;
-  /** C.9a：默认不展开（纪律）；生命周期细则归 C.9c */
+  /** C.9a：默认不展开（纪律）；生命周期细则归 C.9c；page 变体忽略（始终展开） */
   defaultExpanded?: boolean | undefined;
+  /**
+   * C.10e：呈现变体。
+   * - sidebar：可折叠次要入口（遗留；IDE 左栏不再使用）
+   * - page：欢迎页整页展开（最近项目 + 粘贴路径；不抢 D.1e）
+   */
+  variant?: "sidebar" | "page" | undefined;
 }
 
 export function OpenProjectEntry({
@@ -30,8 +36,10 @@ export function OpenProjectEntry({
   repoName,
   commandPhase = "idle",
   defaultExpanded = false,
+  variant = "sidebar",
 }: OpenProjectEntryProps) {
-  const [open, setOpen] = useState(defaultExpanded);
+  const pageMode = variant === "page";
+  const [open, setOpen] = useState(pageMode || defaultExpanded);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [items, setItems] = useState<RecentProjectItem[] | null>(null);
@@ -73,10 +81,10 @@ export function OpenProjectEntry({
   }, [refreshTokenFlag]);
 
   useEffect(() => {
-    if (open) {
+    if (open || pageMode) {
       void loadRecent();
     }
-  }, [open, loadRecent]);
+  }, [open, pageMode, loadRecent]);
 
   const copy = async () => {
     try {
@@ -144,27 +152,58 @@ export function OpenProjectEntry({
     hasSession: hasToken,
   });
 
-  return (
-    <div className="border-b px-2 py-2 text-xs">
-      <button
-        type="button"
-        data-testid="open-project"
-        data-command-role="secondary"
-        data-command-phase={commandPhase}
-        data-entry-mode={presentation.mode}
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 rounded border border-border px-2 py-1 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-      >
-        <FolderOpen className="h-3.5 w-3.5" />
-        <span className="truncate">{presentation.label}</span>
-        <span className="ml-auto truncate opacity-60">{repoName}</span>
-      </button>
+  const panelOpen = pageMode || open;
 
-      {open ? (
+  return (
+    <div
+      className={
+        pageMode
+          ? "w-full max-w-xl space-y-3 text-sm"
+          : "border-b px-2 py-2 text-xs"
+      }
+      data-open-variant={variant}
+    >
+      {pageMode ? (
+        <div
+          data-testid="open-project"
+          data-command-role="secondary"
+          data-command-phase={commandPhase}
+          data-entry-mode={presentation.mode}
+          data-variant="page"
+          className="flex items-center gap-2"
+        >
+          <FolderOpen className="h-5 w-5 shrink-0 text-sky-800" />
+          <div className="min-w-0">
+            <p className="font-semibold">{presentation.label}</p>
+            <p className="truncate text-xs text-muted-foreground">{repoName}</p>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-testid="open-project"
+          data-command-role="secondary"
+          data-command-phase={commandPhase}
+          data-entry-mode={presentation.mode}
+          data-variant="sidebar"
+          aria-expanded={open}
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-1.5 rounded border border-border px-2 py-1 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <FolderOpen className="h-3.5 w-3.5" />
+          <span className="truncate">{presentation.label}</span>
+          <span className="ml-auto truncate opacity-60">{repoName}</span>
+        </button>
+      )}
+
+      {panelOpen ? (
         <div
           data-testid="open-project-panel"
-          className="mt-1 space-y-2 rounded border border-dashed p-2 leading-relaxed"
+          className={
+            pageMode
+              ? "space-y-3 rounded-lg border border-border bg-card p-4 leading-relaxed"
+              : "mt-1 space-y-2 rounded border border-dashed p-2 leading-relaxed"
+          }
         >
           <p className="opacity-80">
             当前：

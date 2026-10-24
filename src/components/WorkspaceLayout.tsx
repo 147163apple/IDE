@@ -4,8 +4,7 @@ import { FileTree } from "./FileTree";
 import { SplitPaneContainer } from "./SplitPaneContainer";
 import { CollapsibleSection } from "./layout/CollapsibleSection";
 import { ActivityBar } from "./layout/ActivityBar";
-import { OpenProjectEntry } from "./layout/OpenProjectEntry";
-import { WelcomePane } from "./layout/WelcomePane";
+import { ProjectWelcomePage } from "./layout/ProjectWelcomePage";
 import { useResizablePanel } from "./layout/useResizablePanel";
 import {
   EXECUTION_STATUS_LABEL,
@@ -23,9 +22,8 @@ import { shouldRenderMiddleYieldShell } from "../lib/in-progress-lifecycle";
 import type { InProgressCta } from "../lib/command-surface";
 import { WORKBENCH_LABEL } from "../lib/workbench-labels";
 import {
-  LEFT_CHAT_HINT,
-  resolveLeftProjectFilesDefaultOpen,
-  shouldShowLeftChatHint,
+  resolveLeftShowsOpenProject,
+  resolveLeftShowsSpecs,
 } from "../lib/left-panel-boss";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
@@ -66,7 +64,10 @@ export interface WorkspaceLayoutProps {
   onOpenStudioGraph?: (() => void) | undefined;
   /** C.10c：合同操作台当前是否停在图谱视口（点亮 ActivityBar 图谱图标） */
   studioGraphActive?: boolean | undefined;
-  /** 左栏文件树上方的【规范与资产】专区（需求文档 / 合同 / Demo 原型） */
+  /**
+   * @deprecated C.10f：规范与资产已迁入「项目审阅」；布局左栏不再渲染此插槽。
+   * 保留 prop 仅兼容旧调用方；请改传到 SupervisorTab.specsSection。
+   */
   specsSection?: ReactNode;
   /** 右栏：AI 对话（主要需求沟通入口） */
   rightPanel?: ReactNode;
@@ -135,7 +136,8 @@ export interface WorkspaceLayoutProps {
  * 3. 首屏是**空编辑区**，Supervisor / 设置只在用户主动点击时开成可关闭 Tab；
  * 4. D4：无中心 Hub、无顶部 HUD、无成熟度气泡（本文件零相关实现）；
  * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪；
- * 6. C.10d：左栏默认主视线是打开/切换项目；规范与资产 + 文件树默认收进「项目文件」。
+ * 6. C.10e：打开/切换项目在欢迎页（Cursor 式），不在 IDE 左栏；顶栏可「切换项目」回欢迎页。
+ * 7. C.10f：资源管理器只展示纯文件树；规范与资产在「项目审阅」。
  */
 export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const { contract } = props;
@@ -165,10 +167,13 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
   const [terminalOpen, setTerminalOpen] = useState(false);
+  /** C.10e：顶栏「切换项目」强制回到欢迎页（开项目主阵地） */
+  const [forceProjectWelcome, setForceProjectWelcome] = useState(false);
   const left = useResizablePanel({ initial: 260, side: "left" });
   const right = useResizablePanel({ initial: 340, side: "right", min: 280 });
 
   const openTab = (tab: Tab) => {
+    setForceProjectWelcome(false);
     setTabs((t) => (t.some((x) => x.id === tab.id) ? t : [...t, tab]));
     setActiveTab(tab.id);
   };
@@ -189,6 +194,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         ? t
         : [...t, { id: p, title: p.split("/").pop() ?? p }],
     );
+    setForceProjectWelcome(false);
     setActiveTab(p);
   }, [req?.path, req?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -210,6 +216,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
 
   /** 左下角 Supervisor 图标：未打开则打开，已打开则聚焦（不做 toggle 关闭，避免误触丢状态） */
   const focusSupervisor = () => {
+    setForceProjectWelcome(false);
     setTabs((t) =>
       t.some((x) => x.id === SUPERVISOR_TAB_ID)
         ? t
@@ -235,6 +242,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   };
   /** 左下角齿轮：打开设置 Tab（同样不做 toggle，避免误触关掉正在填的表单） */
   const openSettings = () => {
+    setForceProjectWelcome(false);
     setTabs((t) =>
       t.some((x) => x.id === SETTINGS_TAB_ID)
         ? t
@@ -337,19 +345,26 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   );
   const surface = props.commandSurface;
   const welcomeVariant = surface?.welcomeVariant ?? "speak_right";
+  const switchToProjectWelcome = () => {
+    setForceProjectWelcome(true);
+    setActiveTab(null);
+    setSplit(false);
+  };
   const welcome = (
     <div data-testid="welcome-surface" className="h-full overflow-auto">
       {props.welcome ?? (
-        <WelcomePane
+        <ProjectWelcomePage
           repoName={props.repoName}
+          repoPath={props.repoPath}
           baseBranch={props.baseBranch}
+          commandPhase={surface?.phase}
+          welcomeVariant={welcomeVariant}
           onNewRequirement={
             welcomeVariant === "speak_right"
               ? props.onNewRequirement
               : undefined
           }
           onOpenSupervisor={focusSupervisor}
-          welcomeVariant={welcomeVariant}
         />
       )}
     </div>
@@ -375,8 +390,9 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const isSupervisor = activeTab === SUPERVISOR_TAB_ID;
   const isSettings = activeTab === SETTINGS_TAB_ID;
   const isGraph = activeTab === GRAPH_TAB_ID;
-  /** 没有打开任何标签 = 空编辑区（首屏默认就是这个） */
-  const showWelcome = tabs.length === 0 || activeTab === null;
+  /** 没有打开任何标签，或顶栏强制切回欢迎页（C.10e） */
+  const showWelcome =
+    forceProjectWelcome || tabs.length === 0 || activeTab === null;
   const lastFile = [...tabs].reverse().find((t) => !t.system)?.id ?? null;
 
   return (
@@ -401,6 +417,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         onNewRequirement={
           surface?.phase === "in_progress" ? undefined : props.onNewRequirement
         }
+        onSwitchProject={switchToProjectWelcome}
         quietBadge={surface?.quietHeaderBadge ?? true}
       />
       {props.banner}
@@ -457,38 +474,22 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                 data-bound={useWorktree ? "worktree" : "main"}
                 hidden
               />
-              <OpenProjectEntry
-                repoName={props.repoName}
-                repoPath={props.repoPath}
-                commandPhase={surface?.phase}
-                defaultExpanded={surface?.openProjectDefaultExpanded ?? false}
-              />
-              {shouldShowLeftChatHint(surface?.phase) ? (
-                <p
-                  data-testid="left-chat-hint"
-                  className="border-b border-border/60 px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground"
-                >
-                  {LEFT_CHAT_HINT}
-                </p>
-              ) : null}
-              <details
-                data-testid="left-project-files"
-                className="flex min-h-0 flex-1 flex-col open:min-h-0"
-                {...(resolveLeftProjectFilesDefaultOpen()
-                  ? { open: true }
-                  : {})}
+              {/* C.10e：开项目不在左栏；C.10f：规范不在左栏，只留纯文件树 */}
+              {resolveLeftShowsOpenProject() ? null : null}
+              {resolveLeftShowsSpecs() && props.specsSection
+                ? props.specsSection
+                : null}
+              <div
+                data-testid="left-explorer"
+                className="flex min-h-0 flex-1 flex-col"
               >
-                <summary
-                  data-testid="left-project-files-summary"
-                  className="flex cursor-pointer list-none items-center gap-1.5 border-b px-2 py-1.5 text-xs font-semibold [&::-webkit-details-marker]:hidden"
+                <div
+                  data-testid="left-explorer-heading"
+                  className="flex items-center gap-1.5 border-b px-2 py-1.5 text-xs font-semibold"
                 >
-                  项目文件
-                  <span className="ml-1 text-[10px] font-normal opacity-60">
-                    规范与资产 · 源码树
-                  </span>
-                </summary>
+                  文件
+                </div>
                 <div className="min-h-0 flex-1 overflow-auto">
-                  {props.specsSection}
                   <FileTree
                     nodes={props.files}
                     rootLabel={root}
@@ -498,7 +499,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                   />
                   {props.leftExtra}
                 </div>
-              </details>
+              </div>
             </aside>
             <div
               data-testid="resizer-left"

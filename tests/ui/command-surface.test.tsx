@@ -53,8 +53,12 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
       "data-primary-cta",
       "true",
     );
-    // 打开项目面板默认不展开
-    expect(screen.queryByTestId("open-project-panel")).toBeNull();
+    // C.10e：欢迎页承载开项目，page 变体面板展开（sidebar 默认收起仍归 C.9c）
+    expect(screen.getByTestId("open-project-panel")).toBeInTheDocument();
+    expect(screen.getByTestId("open-project")).toHaveAttribute(
+      "data-variant",
+      "page",
+    );
     // 顶栏不再用工程师暗号抢指挥
     expect(screen.getByTestId("run-mode")).toHaveTextContent("保护中");
     expect(screen.getByTestId("run-mode")).not.toHaveTextContent("PROTECTED");
@@ -129,10 +133,14 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
       "在右侧说出你的需求",
     );
     expect(screen.queryByText("打开文件")).toBeNull();
-    expect(screen.queryByTestId("open-project-panel")).toBeNull();
+    expect(screen.getByTestId("open-project-panel")).toBeInTheDocument();
     expect(screen.getByTestId("open-project")).toHaveAttribute(
       "data-command-role",
       "secondary",
+    );
+    expect(screen.getByTestId("open-project")).toHaveAttribute(
+      "data-variant",
+      "page",
     );
   });
 

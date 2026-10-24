@@ -1,4 +1,4 @@
-import { GitBranch, Plus } from "lucide-react";
+import { FolderOpen, GitBranch, Plus } from "lucide-react";
 import type { RunMode } from "./workspace-types";
 
 /**
@@ -17,6 +17,11 @@ export interface WorkspaceHeaderProps {
   onOpenStudio: () => void;
   /** 右侧唯一操作点：新建需求（走真实合同创建流程） */
   onNewRequirement?: (() => void) | undefined;
+  /**
+   * C.10e：回到欢迎页切换/打开项目（开项目不在 IDE 左栏）。
+   * 次要入口；不抢「新建需求」。
+   */
+  onSwitchProject?: (() => void) | undefined;
   /** C.9a：顶栏徽标降噪（默认 true） */
   quietBadge?: boolean | undefined;
 }
@@ -28,6 +33,7 @@ export function WorkspaceHeader({
   protectedCount = 0,
   onOpenStudio,
   onNewRequirement,
+  onSwitchProject,
   quietBadge = true,
 }: WorkspaceHeaderProps) {
   const protectedMode = runMode === "PROTECTED";
@@ -76,17 +82,31 @@ export function WorkspaceHeader({
         {modeLabel}
       </button>
 
-      {onNewRequirement ? (
-        <button
-          type="button"
-          data-testid="new-requirement"
-          data-command-role="secondary"
-          onClick={onNewRequirement}
-          className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          <Plus className="h-3 w-3" /> 新建需求
-        </button>
-      ) : null}
+      <div className="ml-auto flex items-center gap-1.5">
+        {onSwitchProject ? (
+          <button
+            type="button"
+            data-testid="switch-project"
+            data-command-role="secondary"
+            onClick={onSwitchProject}
+            title="回到欢迎页，打开或切换项目"
+            className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <FolderOpen className="h-3 w-3" /> 切换项目
+          </button>
+        ) : null}
+        {onNewRequirement ? (
+          <button
+            type="button"
+            data-testid="new-requirement"
+            data-command-role="secondary"
+            onClick={onNewRequirement}
+            className="flex items-center gap-1 rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <Plus className="h-3 w-3" /> 新建需求
+          </button>
+        ) : null}
+      </div>
     </header>
   );
 }

@@ -201,7 +201,7 @@ function Console() {
   const [taskGraph, setTaskGraph] = useState<TaskGraph | null>(null);
   const [taskGraphLoading, setTaskGraphLoading] = useState(false);
   const [taskGraphError, setTaskGraphError] = useState<string | null>(null);
-  const [specsOpen, setSpecsOpen] = useState(false); // C.10d：规范与资产默认收
+  const [specsOpen, setSpecsOpen] = useState(true); // C.10f：审阅页内默认展开本轮依据
 
   /** TASK-C.2：Daemon 权威展示态（STATE_CHANGED），驱动 Studio 默认视口 */
   const [presentationByContract, setPresentationByContract] = useState<
@@ -1537,15 +1537,6 @@ function Console() {
         contract={workspaceContract}
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
-        specsSection={
-          <FileTreeSpecsSection
-            assets={specAssets}
-            open={specsOpen}
-            onToggle={() => setSpecsOpen((v) => !v)}
-            onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
-            generation={specsGeneration}
-          />
-        }
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard
@@ -1634,6 +1625,15 @@ function Console() {
                   </p>
                 )}
               </div>
+            }
+            specsSection={
+              <FileTreeSpecsSection
+                assets={specAssets}
+                open={specsOpen}
+                onToggle={() => setSpecsOpen((v) => !v)}
+                onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
+                generation={specsGeneration}
+              />
             }
             protection={{
               mode: protection?.mode ?? "VIBE",

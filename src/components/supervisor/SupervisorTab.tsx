@@ -61,6 +61,11 @@ export interface SupervisorTabProps {
    * 这里只负责在宽屏下给它一整段位置。
    */
   architecture?: React.ReactNode;
+  /**
+   * TASK-C.10f：本轮「规范与资产」（需求 / 合同 / Demo）。
+   * 审阅页是 Supervisor 产物的归宿；不再塞资源管理器。
+   */
+  specsSection?: React.ReactNode;
   onApprove?: (() => void) | undefined;
   onDeny?: (() => void) | undefined;
   onOpenConsole: () => void;
@@ -114,6 +119,7 @@ export function SupervisorTab({
   admission,
   busy = false,
   architecture,
+  specsSection,
   onApprove,
   onDeny,
   onOpenConsole,
@@ -126,7 +132,7 @@ export function SupervisorTab({
       className="mx-auto max-w-5xl space-y-3 p-4 text-sm"
     >
       <header className="space-y-1">
-        <h2 className="text-base font-semibold">Supervisor</h2>
+        <h2 className="text-base font-semibold">项目审阅</h2>
         <p className="text-xs opacity-70">
           高级工程师视角：先把「这块代码长什么样、要改什么、会影响哪儿、怎么算做完」讲清楚，
           再决定是否开工。本页只呈现合同、保护清单与依赖拓扑里已有的字段，
@@ -153,6 +159,20 @@ export function SupervisorTab({
           ]}
         />
       </Section>
+
+      {specsSection ? (
+        <Section
+          title="本轮依据（规范与资产）"
+          icon={<FileCode2 className="h-4 w-4" />}
+          testId="supervisor-specs"
+        >
+          <p className="opacity-70">
+            需求文档、执行合同与 Demo
+            原型由项目审阅维护；点开可在中间编辑或预览。
+          </p>
+          <div className="pt-1">{specsSection}</div>
+        </Section>
+      ) : null}
 
       {/*
         架构总览：原来挤在左侧窄栏（260px）里，图和筛选都变形；

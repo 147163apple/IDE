@@ -108,4 +108,20 @@ describe("TASK-C.9c OpenProjectEntry 生命周期", () => {
       document.querySelector("input[webkitdirectory], input[directory]"),
     ).toBeNull();
   });
+
+  it("C.10e page 变体：欢迎页始终展开面板，不含系统选夹", () => {
+    render(
+      <OpenProjectEntry
+        repoName="1020"
+        repoPath="/Users/tina/Desktop/1020"
+        variant="page"
+      />,
+    );
+    expect(screen.getByTestId("open-project")).toHaveAttribute(
+      "data-variant",
+      "page",
+    );
+    expect(screen.getByTestId("open-project-panel")).toBeInTheDocument();
+    expect(document.querySelector('input[type="file"]')).toBeNull();
+  });
 });
