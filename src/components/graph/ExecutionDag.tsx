@@ -22,6 +22,8 @@ export interface ExecutionDagProps {
   /** 本次帧中新点亮的节点 id（由 TaskGraphPanel 做前后快照差分得出） */
   illuminatingIds?: ReadonlySet<string>;
   selectedAreaId?: string | null;
+  /** C.10n：当前选中节点，用于高亮 */
+  selectedNodeId?: string | null;
   onSelectNode?: (nodeId: string) => void;
 }
 
@@ -29,6 +31,7 @@ export function ExecutionDag({
   graph,
   illuminatingIds,
   selectedAreaId,
+  selectedNodeId = null,
   onSelectNode,
 }: ExecutionDagProps) {
   const layout = useMemo(() => layoutDag(graph), [graph]);
@@ -100,6 +103,7 @@ export function ExecutionDag({
           const issue = issueForNode(graph, node.node_id);
           const visual = visualForNode(node, issue);
           const illuminating = illuminatingIds?.has(node.node_id) === true;
+          const selected = selectedNodeId === node.node_id;
           const dimmed =
             selectedAreas !== null && !selectedAreas.has(node.functional_area);
           return (
@@ -110,6 +114,8 @@ export function ExecutionDag({
               data-state={node.state}
               data-tone={visual.tone}
               data-illuminating={illuminating ? "true" : "false"}
+              data-selected={selected ? "true" : "false"}
+              aria-pressed={selected}
               aria-label={`${node.title} · ${visual.label}`}
               title={issue ? `${issue.code}: ${issue.message}` : node.title}
               onClick={() => onSelectNode?.(node.node_id)}
@@ -117,7 +123,9 @@ export function ExecutionDag({
                 visual.surface
               } ${visual.animation === "pulse" ? "animate-pulse" : ""} ${
                 visual.animation === "blink" ? "animate-pulse" : ""
-              } ${illuminating ? "dag-illuminate" : ""}`}
+              } ${illuminating ? "dag-illuminate" : ""} ${
+                selected ? "ring-2 ring-sky-400 border-sky-500 z-10" : ""
+              }`}
               style={{
                 left: item.x,
                 top: item.y,

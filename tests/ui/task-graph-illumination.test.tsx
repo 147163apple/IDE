@@ -106,8 +106,54 @@ describe("Task Graph 双视图", () => {
   it("没有快照时显示空态，不伪造节点", () => {
     render(<TaskGraphPanel graph={null} />);
     expect(screen.getByTestId("graph-empty")).toBeInTheDocument();
+    expect(screen.getByText("当前合同还没有图")).toBeInTheDocument();
     expect(screen.queryByTestId("execution-dag")).toBeNull();
     expect(screen.queryByTestId("functional-tree")).toBeNull();
+  });
+
+  it("C.10n：无图时禁用视图切换，刷新显示 loading", () => {
+    const onRefresh = vi.fn();
+    render(<TaskGraphPanel graph={null} loading onRefresh={onRefresh} />);
+    const functional = screen.getByTestId("graph-view-functional");
+    const dag = screen.getByTestId("graph-view-dag");
+    expect(functional).toBeDisabled();
+    expect(dag).toBeDisabled();
+    fireEvent.click(functional);
+    fireEvent.click(dag);
+    expect(screen.getByTestId("graph-empty")).toBeInTheDocument();
+    expect(screen.queryByTestId("functional-tree")).toBeNull();
+    expect(screen.queryByTestId("execution-dag")).toBeNull();
+
+    const refresh = screen.getByTestId("graph-refresh");
+    expect(refresh).toHaveAttribute("data-loading", "true");
+    expect(refresh).toBeDisabled();
+    expect(refresh).toHaveTextContent("刷新中…");
+    fireEvent.click(refresh);
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it("C.10n：无图空态提供确认原型建图 CTA", () => {
+    const onConfirm = vi.fn();
+    render(<TaskGraphPanel graph={null} onConfirmPrototype={onConfirm} />);
+    expect(screen.getByTestId("graph-empty-view-hint")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("graph-empty-confirm-cta"));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("C.10n：有图时显示只读提示；选中节点高亮并出详情", () => {
+    render(<TaskGraphPanel graph={makeGraph()} />);
+    expect(screen.getByTestId("graph-readonly-hint")).toHaveTextContent(
+      "不会开工",
+    );
+    fireEvent.click(screen.getByTestId("graph-view-dag"));
+    fireEvent.click(screen.getByTestId("dag-node-n1"));
+    expect(screen.getByTestId("dag-node-n1")).toHaveAttribute(
+      "data-selected",
+      "true",
+    );
+    expect(screen.getByTestId("graph-node-detail")).toHaveTextContent(
+      "数据表迁移",
+    );
   });
 
   it("业务功能导图汇总下层节点真实状态（不另算一套）", () => {

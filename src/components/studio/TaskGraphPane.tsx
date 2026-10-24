@@ -2,7 +2,7 @@ import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
 import type { TaskGraph } from "@/lib/graph/task-graph";
 
 /**
- * Studio 视口 2：Task Graph 拓扑看板（TASK-C.2 胶水层）。
+ * Studio 视口 2：Task Graph 拓扑看板（TASK-C.2 胶水层；C.10n 透传空态 CTA）。
  *
  * 不重写点亮逻辑——直接挂载 C.7 的 `TaskGraphPanel`。
  * 外壳用 CSS 隐藏而非卸载，点亮动效与视图选择在切走再切回时仍在。
@@ -12,6 +12,8 @@ export interface TaskGraphPaneProps {
   loading?: boolean | undefined;
   error?: string | null | undefined;
   onRefresh?: (() => void) | undefined;
+  onConfirmPrototype?: (() => void) | undefined;
+  confirmPrototypeBusy?: boolean | undefined;
 }
 
 export function TaskGraphPane(props: TaskGraphPaneProps) {
@@ -24,6 +26,12 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
         {...(props.onRefresh === undefined
           ? {}
           : { onRefresh: props.onRefresh })}
+        {...(props.onConfirmPrototype === undefined
+          ? {}
+          : { onConfirmPrototype: props.onConfirmPrototype })}
+        {...(props.confirmPrototypeBusy === undefined
+          ? {}
+          : { confirmPrototypeBusy: props.confirmPrototypeBusy })}
       />
     </div>
   );

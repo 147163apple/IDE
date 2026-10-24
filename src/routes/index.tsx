@@ -1828,6 +1828,10 @@ function Console() {
             loading={taskGraphLoading}
             error={taskGraphError}
             onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
+            onConfirmPrototype={() => {
+              void handleConfirmPrototype();
+            }}
+            confirmPrototypeBusy={confirmPrototypeBusy}
           />
         }
         middleBanner={
@@ -2033,6 +2037,10 @@ function Console() {
                 loading={taskGraphLoading}
                 error={taskGraphError}
                 onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
+                onConfirmPrototype={() => {
+                  void handleConfirmPrototype();
+                }}
+                confirmPrototypeBusy={confirmPrototypeBusy}
               />
             }
             dispute={
