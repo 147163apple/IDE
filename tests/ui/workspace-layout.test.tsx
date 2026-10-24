@@ -34,7 +34,8 @@ describe("TASK-C.1 三栏工作台", () => {
     expect(screen.getByTestId("right-column")).toBeInTheDocument();
     expect(screen.getByTestId("repo-name")).toHaveTextContent("1020");
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");
-    expect(screen.getByTestId("run-mode")).toHaveTextContent("VIBE");
+    expect(screen.getByTestId("run-mode")).toHaveTextContent("自由");
+    expect(screen.getByTestId("run-mode")).toHaveAttribute("data-mode", "VIBE");
     // 顶栏收口后右侧只留一个最小操作点
     expect(screen.getByTestId("new-requirement")).toBeInTheDocument();
   });

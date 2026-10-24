@@ -17,13 +17,19 @@ import {
 export interface OpenProjectEntryProps {
   repoPath: string;
   repoName: string;
+  /** C.9a：指挥面相位；打开面板始终是次要入口 */
+  commandPhase?: "no_key" | "idle" | "in_progress" | undefined;
+  /** C.9a：默认不展开（纪律）；生命周期细则归 C.9c */
+  defaultExpanded?: boolean | undefined;
 }
 
 export function OpenProjectEntry({
   repoPath,
   repoName,
+  commandPhase = "idle",
+  defaultExpanded = false,
 }: OpenProjectEntryProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(defaultExpanded);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [items, setItems] = useState<RecentProjectItem[] | null>(null);
@@ -128,9 +134,11 @@ export function OpenProjectEntry({
       <button
         type="button"
         data-testid="open-project"
+        data-command-role="secondary"
+        data-command-phase={commandPhase}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-1.5 rounded border border-border px-2 py-1 text-left hover:bg-accent"
+        className="flex w-full items-center gap-1.5 rounded border border-border px-2 py-1 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
       >
         <FolderOpen className="h-3.5 w-3.5" />
         <span className="truncate">打开项目</span>
@@ -152,23 +160,25 @@ export function OpenProjectEntry({
           {!hasToken ? (
             <div
               data-testid="open-project-relaunch"
-              className="space-y-1.5 rounded border border-amber-500/40 bg-amber-500/10 p-2"
+              data-command-role="secondary"
+              className="space-y-1.5 rounded border border-border/70 bg-muted/30 p-2"
             >
-              <p className="font-medium">还没带上访问钥匙，对话暂时锁住了。</p>
+              <p className="font-medium">还没带上访问钥匙。</p>
+              <p className="opacity-70">
+                主路径在右侧「一键重开」。这里只是备用入口。
+              </p>
               <button
                 type="button"
                 data-testid="relaunch-with-token"
+                data-command-role="secondary"
                 disabled={busy}
                 onClick={() => void relaunch()}
-                className="w-full rounded border border-amber-700/50 bg-background px-2 py-1.5 text-left font-medium hover:bg-accent disabled:opacity-50"
+                className="w-full rounded border border-border bg-background px-2 py-1.5 text-left hover:bg-accent disabled:opacity-50"
               >
                 {openingPath === "__relaunch__"
                   ? "正在重开…"
-                  : "一键重开（带钥匙）"}
+                  : "备用：一键重开（带钥匙）"}
               </button>
-              <p className="opacity-70">
-                点一下即可进入可聊会话，不必手拷 Token，也不必先去终端。
-              </p>
             </div>
           ) : null}
 

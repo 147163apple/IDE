@@ -1,105 +1,100 @@
-import {
-  ArrowRight,
-  Files,
-  FolderOpen,
-  Sparkles,
-  Terminal,
-} from "lucide-react";
+import { ArrowRight, MessageSquare, KeyRound, Sparkles } from "lucide-react";
+import type { CommandWelcomeVariant } from "../../lib/command-surface";
 
 /**
- * 首屏欢迎区（Welcome / Empty Editor）。
+ * 首屏欢迎区（Welcome / Empty Editor）—— TASK-C.9a 三态单一指挥。
  *
- * 定位：**不假装有内容**。没有打开文件时，中央就是一块空编辑区，
- * 只摆三个真实可点的下一步，而不是塞一个默认打开的面板占住视野。
- *
- * 这里不写快捷键提示：当前并没有实现命令面板/快捷键注册，
- * 写了就是教用户按了没反应。
+ * 不再并排甩出「打开文件 / 终端 / Supervisor / 说需求」四条同级提示。
+ * 按指挥面变体只留一个主说明（+ 至多一个主 CTA）。
  */
 export interface WelcomePaneProps {
   repoName: string;
   baseBranch: string;
-  /** 有则显示「新建需求」按钮（走真实的合同创建流程） */
+  /** 有则显示「新建需求」按钮；仅 idle 且非指挥冲突时露出为次要 */
   onNewRequirement?: (() => void) | undefined;
   onOpenSupervisor: () => void;
-}
-
-function Hint({
-  icon,
-  title,
-  children,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <li className="flex gap-2 rounded border border-border/60 px-3 py-2">
-      <span className="mt-0.5 text-muted-foreground">{icon}</span>
-      <div className="min-w-0">
-        <p className="font-medium">{title}</p>
-        <p className="mt-0.5 text-xs leading-relaxed opacity-70">{children}</p>
-      </div>
-    </li>
-  );
+  /** C.9a：由指挥面决定欢迎区话术 */
+  welcomeVariant?: CommandWelcomeVariant | undefined;
 }
 
 export function WelcomePane({
   repoName,
   baseBranch,
   onNewRequirement,
-  onOpenSupervisor,
+  onOpenSupervisor: _onOpenSupervisor,
+  welcomeVariant = "speak_right",
 }: WelcomePaneProps) {
+  void _onOpenSupervisor;
   return (
     <div
       data-testid="welcome-pane"
-      className="mx-auto flex h-full max-w-2xl flex-col justify-center gap-5 p-8"
+      data-welcome-variant={welcomeVariant}
+      className="mx-auto flex h-full max-w-xl flex-col justify-center gap-4 p-8"
     >
       <header className="space-y-1">
         <h1 className="text-lg font-semibold">Stagent</h1>
         <p className="text-xs opacity-70">
-          {repoName} · {baseBranch} · 空编辑区
+          {repoName} · {baseBranch}
         </p>
       </header>
 
-      <ul className="space-y-2 text-sm">
-        <Hint icon={<Files className="h-4 w-4" />} title="打开文件">
-          左栏资源管理器点任意文件，就在这里以标签页打开，可并排多开。
-        </Hint>
-        <Hint icon={<Terminal className="h-4 w-4" />} title="看命令输出">
-          左下角终端图标展开 SmartTerminal，验证命令的原始输出都在那儿。
-        </Hint>
-        <Hint
-          icon={<Sparkles className="h-4 w-4" />}
-          title="先让 Supervisor 审一遍"
+      {welcomeVariant === "connect" ? (
+        <div
+          data-testid="welcome-command"
+          data-command-role="secondary"
+          className="space-y-2 rounded border border-border/70 bg-muted/20 px-4 py-3 text-sm leading-relaxed"
         >
-          点左下角 ✦ 打开 Supervisor：项目概览、影响范围、验证计划，
-          决定开工前都摆在同一页。
-        </Hint>
-        <Hint icon={<FolderOpen className="h-4 w-4" />} title="或者直接说需求">
-          在右侧对话里描述目标；生成的合同会出现在左栏， 点开即进合同操作台。
-        </Hint>
-      </ul>
+          <p className="flex items-center gap-2 font-medium">
+            <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />
+            先连上，再开始
+          </p>
+          <p className="text-xs opacity-80">
+            主按钮在<strong>右侧</strong>
+            ：一键重开，或去配置模型钥匙。这里不抢指挥。
+          </p>
+        </div>
+      ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {onNewRequirement ? (
-          <button
-            type="button"
-            data-testid="welcome-new-requirement"
-            onClick={onNewRequirement}
-            className="flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-xs text-primary-foreground"
-          >
-            新建需求 <ArrowRight className="h-3 w-3" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          data-testid="welcome-open-supervisor"
-          onClick={onOpenSupervisor}
-          className="rounded border px-3 py-1.5 text-xs hover:bg-accent"
+      {welcomeVariant === "speak_right" ? (
+        <div
+          data-testid="welcome-command"
+          className="space-y-2 rounded border border-sky-600/30 bg-sky-500/5 px-4 py-3 text-sm leading-relaxed"
         >
-          打开 Supervisor
-        </button>
-      </div>
+          <p className="flex items-center gap-2 font-medium">
+            <MessageSquare className="h-4 w-4 shrink-0 text-sky-800" />
+            下一步：在右侧说出你的需求
+          </p>
+          <p className="text-xs opacity-80">
+            质疑、新功能、小改都可以直接说。打开文件、终端、审阅都是次要入口，需要时再点左边图标。
+          </p>
+          {onNewRequirement ? (
+            <button
+              type="button"
+              data-testid="welcome-new-requirement"
+              data-command-role="secondary"
+              onClick={onNewRequirement}
+              className="mt-1 flex items-center gap-1 rounded border px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              或从这里新建需求 <ArrowRight className="h-3 w-3" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+
+      {welcomeVariant === "yield" ? (
+        <div
+          data-testid="welcome-command"
+          className="space-y-2 rounded border border-border/60 px-4 py-3 text-sm leading-relaxed"
+        >
+          <p className="flex items-center gap-2 font-medium">
+            <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+            进行中：请看右侧对话或中间确认
+          </p>
+          <p className="text-xs opacity-80">
+            欢迎页已让路，不再当指挥官。确认开改、三步台或回复都在当前主路径上。
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -2,15 +2,11 @@ import { GitBranch, Plus } from "lucide-react";
 import type { RunMode } from "./workspace-types";
 
 /**
- * 顶栏（极简）。
+ * 顶栏（极简 · TASK-C.9a）。
  *
  * 只回答三个问题：**在哪个项目 / 哪个分支 / 什么模式**，外加一个最小操作点。
- * 其余一切（连接地址、Token、实时流、网关受控、Worktree 绝对路径、刷新、
- * 模型 Key）都是「调试/控制项」，一律下沉到 ⚙️ 设置页 —— 那些东西常驻顶栏
- * 会把 IDE 变成运维后台，也会把 Token 输入框摆在视野里。
- *
- * 保留 `run-mode` 的点击行为：点模式徽标 = 打开合同操作台（模式真正按条目
- * 粒度调整在那边做，避免"点一下顶栏就全解锁"）。
+ * 模式徽标是**状态**，不是指挥官：PROTECTED 不再用工程师暗号抢视线，
+ * 白话「保护中 / 自由」；完整语义进 title / data-mode。
  */
 export interface WorkspaceHeaderProps {
   repoName: string;
@@ -21,6 +17,8 @@ export interface WorkspaceHeaderProps {
   onOpenStudio: () => void;
   /** 右侧唯一操作点：新建需求（走真实合同创建流程） */
   onNewRequirement?: (() => void) | undefined;
+  /** C.9a：顶栏徽标降噪（默认 true） */
+  quietBadge?: boolean | undefined;
 }
 
 export function WorkspaceHeader({
@@ -30,8 +28,16 @@ export function WorkspaceHeader({
   protectedCount = 0,
   onOpenStudio,
   onNewRequirement,
+  quietBadge = true,
 }: WorkspaceHeaderProps) {
   const protectedMode = runMode === "PROTECTED";
+  const modeLabel = protectedMode
+    ? quietBadge
+      ? "保护中"
+      : "🔒 PROTECTED"
+    : quietBadge
+      ? "自由"
+      : "🔓 VIBE";
   return (
     <header
       data-testid="workspace-header"
@@ -53,6 +59,7 @@ export function WorkspaceHeader({
         type="button"
         data-testid="run-mode"
         data-mode={runMode}
+        data-quiet={quietBadge ? "true" : "false"}
         data-locked-count={protectedMode ? protectedCount : 0}
         onClick={onOpenStudio}
         title={
@@ -62,17 +69,18 @@ export function WorkspaceHeader({
         }
         className={`rounded-full border px-2 py-0.5 ${
           protectedMode
-            ? "border-amber-500/50 bg-amber-500/10 text-amber-700"
+            ? "border-border bg-muted/60 text-muted-foreground"
             : "border-border text-muted-foreground"
         }`}
       >
-        {protectedMode ? "🔒 PROTECTED" : "🔓 VIBE"}
+        {modeLabel}
       </button>
 
       {onNewRequirement ? (
         <button
           type="button"
           data-testid="new-requirement"
+          data-command-role="secondary"
           onClick={onNewRequirement}
           className="ml-auto flex items-center gap-1 rounded border border-border px-2 py-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
         >

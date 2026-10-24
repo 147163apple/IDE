@@ -329,7 +329,8 @@ describe("TASK-C.2 结构化审阅与执行期控制", () => {
     render(<WorkspaceLayout {...layoutBase} protectedCount={3} />);
     const mode = screen.getByTestId("run-mode");
     // 顶栏收口：徽标压成紧凑胶囊，锁数只进 data 属性与 title
-    expect(mode).toHaveTextContent("🔒 PROTECTED");
+    expect(mode).toHaveTextContent("保护中");
+    expect(mode).toHaveAttribute("data-mode", "PROTECTED");
     expect(mode).not.toHaveTextContent("已锁 3 处");
     expect(mode).toHaveAttribute("data-locked-count", "3");
     expect(mode).toHaveAttribute("title", expect.stringContaining("已锁 3 处"));
@@ -340,7 +341,8 @@ describe("TASK-C.2 结构化审阅与执行期控制", () => {
 
     render(<WorkspaceLayout {...layoutBase} runMode="VIBE" />);
     const vibe = screen.getAllByTestId("run-mode")[1]!;
-    expect(vibe).toHaveTextContent("🔓 VIBE");
+    expect(vibe).toHaveTextContent("自由");
+    expect(vibe).toHaveAttribute("data-mode", "VIBE");
     expect(vibe).toHaveAttribute("data-locked-count", "0");
   });
 });

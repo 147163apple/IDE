@@ -86,6 +86,7 @@ import {
   type JourneyChatCard,
 } from "@/components/AgentChatPane";
 import { buildProposalFromContract } from "@/lib/journey/proposal-from-contract";
+import { resolveCommandSurface } from "@/lib/command-surface";
 import type { StudioViewportId } from "@/components/studio/viewport-routing";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
 import {
@@ -1494,6 +1495,26 @@ function Console() {
     </>
   );
 
+  // TASK-C.9a：三态单一指挥面（无钥匙 / 有钥匙空闲 / 进行中）
+  const needsProtectionConfirm =
+    admission != null && shouldConfirmAdmission(admission);
+  const commandSurface = resolveCommandSurface({
+    hasSession: connected,
+    keyReady: settings?.configured === true,
+    inProgress:
+      journeyBusy ||
+      bossMode ||
+      needsProtectionConfirm ||
+      journeyCards.length > 0,
+    inProgressCta: needsProtectionConfirm
+      ? "protection-confirm-approve"
+      : bossMode
+        ? "boss-fastpath-confirm"
+        : journeyBusy || journeyCards.length > 0
+          ? "journey-active"
+          : undefined,
+  });
+
   return (
     <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
       <WorkspaceLayout
@@ -1533,6 +1554,8 @@ function Console() {
             journeyBusy={journeyBusy}
             keyConfigured={settings?.configured === true}
             onConfigureKey={() => setSettingsNonce((n) => n + 1)}
+            commandPhase={commandSurface.phase}
+            primaryCtaTestId={commandSurface.primaryCtaTestId}
           />
         }
         supervisorContent={
@@ -1621,6 +1644,7 @@ function Console() {
         }
         openStudioRequest={studioNonce}
         openSettingsRequest={settingsNonce}
+        commandSurface={commandSurface}
         terminalPanel={
           // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
           <StructuredTerminal

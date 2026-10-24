@@ -34,6 +34,13 @@ export interface AgentChatPaneProps {
   onConfigureKey?: (() => void) | undefined;
   /** 模型钥匙是否已就绪（用于向导状态文案） */
   keyConfigured?: boolean | undefined;
+  /**
+   * TASK-C.9a：指挥面相位。用于给唯一主 CTA 打 data-primary-cta。
+   * 不传则按本地状态推断（无 transport / 缺钥匙 / 空闲）。
+   */
+  commandPhase?: "no_key" | "idle" | "in_progress" | undefined;
+  /** 与指挥面一致的主 CTA test id */
+  primaryCtaTestId?: string | undefined;
 }
 
 /** TASK-C.6 右栏 Coding Agent 会话：流式输出、工具卡片、停止、排队、会话续接 */
@@ -44,6 +51,8 @@ export function AgentChatPane({
   journeyBusy,
   onConfigureKey,
   keyConfigured,
+  commandPhase,
+  primaryCtaTestId,
 }: AgentChatPaneProps) {
   const chat = useAgentSession(transport);
   const [draft, setDraft] = useState("");
@@ -101,6 +110,11 @@ export function AgentChatPane({
         <button
           type="button"
           data-testid="chat-relaunch-with-token"
+          data-primary-cta={
+            !primaryCtaTestId || primaryCtaTestId === "chat-relaunch-with-token"
+              ? "true"
+              : undefined
+          }
           disabled={relaunchBusy}
           onClick={doRelaunch}
           className="mt-3 w-full rounded border border-amber-700/50 bg-background px-3 py-2 text-left font-medium hover:bg-accent disabled:opacity-50"
@@ -116,9 +130,8 @@ export function AgentChatPane({
             {relaunchError}
           </p>
         ) : null}
-        <p className="mt-3 opacity-80">
-          若按钮失败：可点左栏「打开项目」自救；或点左下角 ⚙️
-          设置，把钥匙粘贴进去再点「应用」。
+        <p className="mt-3 text-xs opacity-70">
+          若按钮失败：再到左栏「打开项目」备用入口，或左下角 ⚙️ 设置粘贴钥匙。
         </p>
       </div>
     );
@@ -146,11 +159,28 @@ export function AgentChatPane({
   const sendDisabled =
     routing || journeyBusy === true || (!onBeforeSend && !chat.sessionId);
 
+  const showJourneyActive =
+    commandPhase === "in_progress" ||
+    primaryCtaTestId === "journey-active" ||
+    journeyBusy === true;
+
   return (
     <div
       data-testid="agent-chat"
+      data-command-phase={commandPhase ?? (transport ? "idle" : "no_key")}
       className="flex h-full flex-col gap-2 text-xs"
     >
+      {showJourneyActive ? (
+        <div
+          data-testid="journey-active"
+          data-primary-cta={
+            primaryCtaTestId === "journey-active" ? "true" : undefined
+          }
+          className="rounded border border-sky-600/40 bg-sky-500/10 px-2 py-1 text-[11px] font-medium text-sky-950"
+        >
+          进行中：请看对话、中间确认或三步台
+        </div>
+      ) : null}
       <div className="flex flex-wrap items-center gap-1">
         <span className="font-semibold">AI 助手：</span>
         <select
@@ -192,9 +222,24 @@ export function AgentChatPane({
       </div>
       <p
         data-testid="journey-entry-hint"
-        className="rounded border border-border/60 bg-muted/30 px-2 py-1 text-[10px] leading-relaxed text-muted-foreground"
+        data-primary-cta={
+          primaryCtaTestId === "journey-entry-hint" ||
+          (commandPhase === "idle" && !primaryCtaTestId)
+            ? "true"
+            : undefined
+        }
+        data-command-role={
+          commandPhase === "idle" || !commandPhase ? "primary" : "secondary"
+        }
+        className={
+          commandPhase === "idle" || !commandPhase
+            ? "rounded border border-sky-600/40 bg-sky-500/10 px-2 py-1.5 text-[11px] leading-relaxed text-sky-950"
+            : "rounded border border-border/60 bg-muted/30 px-2 py-1 text-[10px] leading-relaxed text-muted-foreground"
+        }
       >
-        你只跟这里说话就行：质疑「做错了」、提新功能、或说「标题字号大一点」这类小事——系统会在背后分流，不必自己找别的对话框。
+        {commandPhase === "in_progress"
+          ? "进行中：请看下方对话、中间确认或三步台——这里继续补充说明即可。"
+          : "你只跟这里说话就行：质疑「做错了」、提新功能、或说「标题字号大一点」这类小事——系统会在背后分流，不必自己找别的对话框。"}
       </p>
       {!realReady && (
         <div
@@ -217,6 +262,13 @@ export function AgentChatPane({
             <button
               type="button"
               data-testid="open-key-settings"
+              data-primary-cta={
+                primaryCtaTestId === "open-key-settings" ||
+                (commandPhase === "no_key" &&
+                  primaryCtaTestId !== "chat-relaunch-with-token")
+                  ? "true"
+                  : undefined
+              }
               className="mt-1.5 rounded border border-sky-700/50 bg-background px-2 py-0.5 text-sky-900 hover:bg-sky-500/10"
               onClick={onConfigureKey}
             >

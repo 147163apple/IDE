@@ -13,6 +13,7 @@ import {
   type FileNode,
   type RunMode,
 } from "./workspace-types";
+import type { CommandSurface } from "../lib/command-surface";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
 /** Supervisor 审阅 Tab（左下角图标入口打开；中央阅读区，可关闭） */
@@ -87,6 +88,10 @@ export interface WorkspaceLayoutProps {
    * 保留这个 prop 只为显式 opt-in 的测试与并行对照场景。
    */
   defaultOpenStudio?: boolean;
+  /**
+   * TASK-C.9a：首屏单一指挥面。不传则按 idle（右侧说需求）降噪呈现。
+   */
+  commandSurface?: CommandSurface | undefined;
 }
 
 /**
@@ -100,7 +105,8 @@ export interface WorkspaceLayoutProps {
  * 1. 对话在**右侧**，是主要需求沟通入口；不搬去左栏；
  * 2. 顶栏只留状态胶囊，连接/Token/流诊断/网关受控全部下沉到 ⚙️ 设置 Tab；
  * 3. 首屏是**空编辑区**，Supervisor / 设置只在用户主动点击时开成可关闭 Tab；
- * 4. D4：无中心 Hub、无顶部 HUD、无成熟度气泡（本文件零相关实现）。
+ * 4. D4：无中心 Hub、无顶部 HUD、无成熟度气泡（本文件零相关实现）；
+ * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪。
  */
 export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const { contract } = props;
@@ -279,14 +285,21 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
       )}
     </div>
   );
+  const surface = props.commandSurface;
+  const welcomeVariant = surface?.welcomeVariant ?? "speak_right";
   const welcome = (
     <div data-testid="welcome-surface" className="h-full overflow-auto">
       {props.welcome ?? (
         <WelcomePane
           repoName={props.repoName}
           baseBranch={props.baseBranch}
-          onNewRequirement={props.onNewRequirement}
+          onNewRequirement={
+            welcomeVariant === "speak_right"
+              ? props.onNewRequirement
+              : undefined
+          }
           onOpenSupervisor={focusSupervisor}
+          welcomeVariant={welcomeVariant}
         />
       )}
     </div>
@@ -317,14 +330,28 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const lastFile = [...tabs].reverse().find((t) => !t.system)?.id ?? null;
 
   return (
-    <div data-testid="workspace-layout" className="flex h-screen flex-col">
+    <div
+      data-testid="workspace-layout"
+      data-command-phase={surface?.phase ?? "idle"}
+      data-primary-cta={surface?.primaryCtaTestId ?? "journey-entry-hint"}
+      className="flex h-screen flex-col"
+    >
+      <div
+        data-testid="command-surface"
+        data-phase={surface?.phase ?? "idle"}
+        data-primary-cta={surface?.primaryCtaTestId ?? "journey-entry-hint"}
+        hidden
+      />
       <WorkspaceHeader
         repoName={props.repoName}
         baseBranch={props.baseBranch}
         runMode={props.runMode}
         protectedCount={props.protectedCount ?? 0}
         onOpenStudio={openStudio}
-        onNewRequirement={props.onNewRequirement}
+        onNewRequirement={
+          surface?.phase === "in_progress" ? undefined : props.onNewRequirement
+        }
+        quietBadge={surface?.quietHeaderBadge ?? true}
       />
       {props.banner}
       {bound && onMainTree && (
@@ -383,6 +410,8 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
               <OpenProjectEntry
                 repoName={props.repoName}
                 repoPath={props.repoPath}
+                commandPhase={surface?.phase}
+                defaultExpanded={surface?.openProjectDefaultExpanded ?? false}
               />
               <div className="min-h-0 flex-1 overflow-auto">
                 {props.specsSection}
