@@ -21,6 +21,7 @@
 > 18. **状态回写（2026-10-24 · D.1d / D.1e 立卡 · 打开项目生产级文档）**：新增 **`TASK-D.1d` 修复同源控制台空白（生产可用单窗口）**（`[NEW_TASK]`）与 **`TASK-D.1e` 桌面壳/本机助手真·选文件夹**（`[NEW_TASK]`，**可 defer**）。登记 D.1b 已知缺陷：`dist/public/index.html` 静态壳无法驱动 TanStack Start 控制台 → `stagent open` 同源页空白；临时绕路 Vite + `#token=` / `#base=`。对照：`docs/reports/打开项目-愿景与现状.md`。**不改**产品代码；架构规范仅 §11 短注「控制台可同源托管 vs Demo 必须独立 Origin」；不推翻 D.1 loopback+#token；Demo 仍独立 Origin。
 > 19. **状态回写（2026-10-24 · Tina 口径对齐 · 打开项目施工合同）**：按产品负责人口径修订——`TASK-D.1d` 前置明确为 `TASK-D.1b` + `TASK-C.2`（均为 COMPLETED），状态 `[NEW_TASK]`，作为非技术可用性**当前最高优先** DX 修复；验收含四件套 + `dist` 静态可用性回归；`TASK-D.1e` 由「NEW 可 defer」改为 **`[DEFERRED → v0.2+]`**（P5.8，不阻塞 v0.1 / D.1d）；Sprint：D.1d 为非技术进门关键门禁，与已合入的 S.6 旅程串联形成优先/并行关系。架构规范仅轻量锚定（单窗口静态 SPA 可由 Daemon 服务；系统文件夹选择器 v0.2+ P5.8），**不推翻** ADR-008 / Demo 独立 Origin / loopback+#token。本轮仍**仅文档**。
 > 20. **状态回写（2026-10-24 · D.1d 合入）**：`TASK-D.1d` 由 `[IN_PROGRESS → 功能分支待合]` 更新为 **`[COMPLETED]`**（合入 main tip `b11d15b`，分支 `feat/task-d1d-same-origin-console` 快进；合后四件套 **1208 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：启用 `tanstackStart.spa`；`scripts/package-dist.mjs` 将预渲染 `_shell.html` 提升为 `dist/public/index.html`；`daemon/console/static-host.ts` 仅托管含 `$_TSR` + `index-*.js` 的可 hydrate 壳；新增 `console-dist-spa-shell` 等 dist 静态可用性回归。不推翻 D.1 loopback+#token/AUTH/Origin；Demo 仍独立 Origin。**本轮不改**架构规范 v1.6.1（已有 §4.4 / §11 注记 8 轻量锚定）。
+> 21. **状态回写（2026-10-24 · UX 走查 Top3 立卡）**：同源单窗口可用后，非技术走查发现「能开但不能舒服用」。新增 **`TASK-C.8a`**（老板模式文案与默认助手 / 消演示恐吓与 Key 向导）、**`TASK-C.8b`**（Fast Path 老板三步台）、**`TASK-C.8c`**（连接与打开死路自救：无钥匙一键重开 + 粘贴路径打开；**不含** D.1e 系统选择器）三张 `[NEW_TASK]`。前置均锚定 `TASK-D.1d` COMPLETED（`b11d15b` / 文档基线 `fea44e2`）；C.8b 另依赖 `TASK-S.6`；C.8c 依赖 D.1b/D.1c/D.1d 且不抢 D.1e。建议排期 **C.8a → C.8c → C.8b**；**当前首要**指向 C.8a。对照：`docs/reports/工作台交互走查-2026-10-24.md`。**本轮仅文档**；**不改**架构规范（老板模式文案层不改变鉴权 / Demo Origin）。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
@@ -68,6 +69,9 @@
 | **TASK-C.5** | 双栏 Diff 审阅器与结构化终端日志回放 | 前端呈现 | **[COMPLETED]**（components/diff/* + StructuredTerminal.tsx 在位；5 用例绿） | P3 差异终端 | 双栏/内联 Git Diff 审阅；结构化终端流式日志展示、ANSI 渲染、先脱敏后截断。 |
 | **TASK-C.6** | 右栏 Agent 流式会话与打断续接 | 前端呈现 | **[COMPLETED]**（AgentChatPane + use-agent-session 在位；8 用例绿） | P3 会话闭环 | 流式渲染、工具卡片、Stop/打断、排队追加、Adapter 切换、会话列表与 resume。 |
 | **TASK-C.7** | 业务功能树与 Task Graph 渐进点亮视口 | 工作台 UI | **[COMPLETED]**（2026-10-23 合入 main，merge `5117b27`；原交付于 `feat/task-c7-graph-engine`，基线 `main@05f090f`；干净环境四件套全绿：1032 passed / 6 skipped；新增 31 用例：24 单元 + 7 UI） | P4.5 拓扑点亮 (v1.6.1) | • `daemon/graph/graph-engine.ts`：Daemon 独占内存权威 + 原子落盘 `.stagent/specs/task_graph.json`，`revision` 单调递增、对外只给快照<br>• `SupervisorProposalV1` 以 `Omit<TaskNode, "state" \| "executed_at" \| "commit_sha">` 类型层剥离运行态；运行期夹带运行态字段直接 `E_PROPOSAL_INVALID`<br>• 七态严格对齐 §3.2.1；`illumination-verifier.ts` 要求「受控写入 + 退出码 0 + Commit SHA + 文件指纹」，空命令集/空结果集 `E_EMPTY_VERIFICATION_BLOCKED` 拒绝点亮（UI 警告灰，不假绿）<br>• `evidence-collector.ts`：文件 SHA-256、Scope、HEAD 由 Daemon 现算，HTTP 调用方不得自报证据<br>• 外部改码 `STALE_REVERIFY` 变灰并撤销指纹；AUDITED 合同同周期退回 VERIFYING<br>• `TASK_GRAPH_UPDATED` 帧 + `revision` 乱序保护；业务功能树 / 执行 DAG 双视图，100ms 翠绿过渡<br>• 左栏【规范与资产】专区展示需求 / 合同 / Demo 与真实点亮进度；文件树随图谱更新刷新 |
+| **TASK-C.8a** | 老板模式文案与默认助手（消演示恐吓 / Key 向导） | 工作台 UX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1d` COMPLETED<br>• 默认不恐吓：弱化/收起「演示 Agent · 不调用模型」大黄字与「右侧说需求」打架的口径<br>• 真助手未配 Key 时给一条龙白话向导（去哪配、配完怎么验），不甩工程师后台话术<br>• **不含**改鉴权 / Demo Origin / 新开桌面壳 |
+| **TASK-C.8b** | Fast Path 老板三步台（藏工程师合同细节） | 工作台 UX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1d` + `S.6` COMPLETED<br>• 小事 Fast Path 中栏收成老板三步：「改哪里 / 要不要动保护 / 确认开改」<br>• 默认折叠 src/**、npm、Daemon、保护解锁等合同工程细节；需要时再展开<br>• **不含**改 Fast Path 准入规则本体 / 状态机边 |
+| **TASK-C.8c** | 连接与打开死路自救（无钥匙一键重开 + 粘贴路径） | 工作台 UX / DX | **[NEW_TASK]** | P4 体验打磨 | • 前置 `D.1b`/`D.1c`/`D.1d` COMPLETED；**不抢** `D.1e`（系统选择器仍 DEFERRED）<br>• 无 token 冷开：一键重开带钥匙会话，不死锁对话<br>• 开新夹：粘贴绝对路径 + 一键重开/唤起，少催「去终端敲 npx stagent open」说明书<br>• **不含**系统文件夹选择器 / Electron·Tauri |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -89,7 +93,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                                                     │              ├──► TASK-D.1b (一键打开项目) [COMPLETED]
                                                                     │              │      └──► TASK-D.1c (最近项目一键重开) [COMPLETED]
                                                                     │              │             └──► TASK-D.1d (修复同源空白) [COMPLETED]
-                                                                    │              │                    └──► TASK-D.1e (真·选文件夹/桌面壳) [DEFERRED → v0.2+ / P5.8]
+                                                                    │              │                    ├──► TASK-D.1e (真·选文件夹/桌面壳) [DEFERRED → v0.2+ / P5.8]
+                                                                    │              │                    └──► TASK-C.8a / C.8c（UX 打磨；C.8b 另经 S.6）[NEW]
                                                                     │              │
                                                                     │              ├──► TASK-C.1 (三栏骨架)
                                                                     │              │      ├──► TASK-C.3 (Monaco 读写)
@@ -118,6 +123,14 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
               TASK-S.6 (非技术旅程串联)        TASK-E.1 ──► TASK-E.2
               （右侧分流 + 确认原型开工；       （v0.1 既有基线，已完成）
                前置 S.4/C.7/S.5/C.2/S.2/W.5a）
+                                    │
+                    ┌───────────────┼──────────────────────────────┐
+                    ▼               ▼                              ▼
+              TASK-C.8a        TASK-C.8c                      TASK-C.8b
+              （老板文案/默认助手） （无钥匙一键重开+粘贴路径）   （Fast Path 老板三步台）
+              前置 D.1d         前置 D.1b/D.1c/D.1d；不抢 D.1e   前置 D.1d + S.6
+              [NEW] 当前首要     [NEW]                             [NEW]
+              建议序：C.8a → C.8c → C.8b
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -176,7 +189,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-S.5", "to": "TASK-S.6" },
   { "from": "TASK-C.2", "to": "TASK-S.6" },
   { "from": "TASK-S.2", "to": "TASK-S.6" },
-  { "from": "TASK-W.5a", "to": "TASK-S.6" }
+  { "from": "TASK-W.5a", "to": "TASK-S.6" },
+  { "from": "TASK-D.1d", "to": "TASK-C.8a" },
+  { "from": "TASK-D.1d", "to": "TASK-C.8b" },
+  { "from": "TASK-S.6", "to": "TASK-C.8b" },
+  { "from": "TASK-D.1b", "to": "TASK-C.8c" },
+  { "from": "TASK-D.1c", "to": "TASK-C.8c" },
+  { "from": "TASK-D.1d", "to": "TASK-C.8c" }
 ]
 ```
 
@@ -944,7 +963,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-### 3.4 Cursor 式三栏 IDE 工作台与多维 Studio 视口（C.1/C.3 落 Sprint 1；C.2 落 Sprint 4 多维视口；C.4 推迟）
+### 3.4 Cursor 式三栏 IDE 工作台与多维 Studio 视口（C.1/C.3 落 Sprint 1；C.2 落 Sprint 4 多维视口；C.8a/b/c 为走查 UX 打磨立卡；C.4 推迟）
 
 #### 【Task C.1】Cursor 式三栏 IDE 响应式工作台骨架与 Studio 视口
 * **任务编号**：`TASK-C.1`
@@ -998,6 +1017,89 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 * **Pass/Fail 验收判定**：
   - **PASS**：用户可在 Demo 试玩、Task Graph 看板、质询自查台与合同代码之间平滑切换；状态流转自动切换主视口；保护清单命中白话卡片维持零弹窗/单卡标准。
   - **FAIL**：视口切换丢失已填表单或点亮状态；iframe 无法内嵌加载本地 Demo。
+
+---
+
+#### 【Task C.8a】老板模式文案与默认助手（消演示恐吓 / Key 向导）`[NEW_TASK · 2026-10-24]`
+* **任务编号**：`TASK-C.8a`
+* **前置依赖**：`TASK-D.1d` (COMPLETED，main tip `b11d15b`；文档基线含 `fea44e2`)
+* **任务状态**：**[NEW_TASK]**（走查 Top3 之「消恐吓感」；建议排期第一张；**当前首要**编码任务）
+* **对照痛点（走查）**：默认「演示 Agent」+ 大黄字「不调用模型、不读文件」与右栏「说需求」打架；真助手显示未配 Key 却无一条龙向导——老板会以为「不能干活」。
+* **v0.1 范围**：把工作台默认话术与助手选择收成**老板模式**：① 默认呈现不恐吓、与「可以提需求」一致；② 未配模型 Key 时给白话一步步向导（去哪配、配完怎么知道好了）；③ 演示/沙箱能力若仍保留，须降级为可折叠的次要说明，不得用整页黄条阻断心智。
+* **明确不包含**：
+  - 推翻 D.1 鉴权 / loopback / `#token=` / AUTH / Origin
+  - 改变 Demo 独立 Origin 隔离（ADR-008）
+  - 实现系统文件夹选择器或桌面壳（归 `TASK-D.1e`）
+  - 改 Fast Path 准入规则或状态机边（归 `TASK-C.8b` 只做呈现）
+* **核心目标**：
+  1. **消恐吓**：首屏/右栏不再用「不调用模型、不读文件」大黄条否定「右侧说需求」；演示态若存在，须明确是可选沙箱且可一键切到真助手路径。
+  2. **默认助手可预期**：默认选中的助手与文案一致（能干活或明确「还差一步」）；禁止「默认演示」与「请说需求」并存无解释。
+  3. **Key 向导一条龙**：真助手未配 Key 时，UI 给出配置入口/粘贴位置提示与「配完如何验证」的短路径，不甩终端堆栈或工程师后台术语墙。
+* **涉及核心文件（实施时以调查为准）**：右栏 Agent 选择器 / 欢迎或空态文案、Header 或会话横幅、Key/凭证配置入口相关组件与文案常量；测试以 UI 走查断言 + 组件快照/文案单测为主。
+* **Pass/Fail 验收断言（≤5，可测/可走查）**：
+  1. **不再恐吓**：冷开工作台后，主路径 10 秒内看不到「不调用模型 / 不读文件」级整页恐吓与「请说需求」并排打架；若演示态存在，须可折叠或明确次要。
+  2. **默认一致**：默认助手名称/状态与右栏可操作提示一致（能提需求，或明确「差 Key」并给出按钮）。
+  3. **Key 向导**：未配 Key 时，用户可不查 README，只靠 UI 完成「打开配置入口 → 填 Key（本卡不测真实云调用）→ 看见已就绪/可重试」白话闭环。
+  4. **安全不回退**：日志/UI 不打印 Token 或 API Key 明文；鉴权与 Demo Origin 回归仍绿。
+  5. **门禁**：四件套全绿；新增或扩展至少 1 条文案/空态 UI 回归（禁止恐吓文案与主 CTA 冲突）。
+* **Pass/Fail 验收判定**：
+  - **PASS**：断言 1–5 本地可复现；老板模式只改呈现与向导，不弱化鉴权。
+  - **FAIL**：仍默认演示恐吓却标完成；未配 Key 仍只有工程师报错无向导；打印密钥明文；夹带 D.1e 桌面壳冒充本卡。
+
+---
+
+#### 【Task C.8b】Fast Path 老板三步台（藏工程师合同细节）`[NEW_TASK · 2026-10-24]`
+* **任务编号**：`TASK-C.8b`
+* **前置依赖**：`TASK-D.1d` (COMPLETED), `TASK-S.6` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（走查 Top3 之「小事三步」；建议排在 C.8a、C.8c 之后）
+* **对照痛点（走查）**：右侧说一件小事后，中栏仍甩出合同台（`src/**`、npm、Daemon、保护解锁），像审批工单，不像「改哪里 → 确认开改」。
+* **v0.1 范围**：在**不改变** Fast Path 准入规则与状态机边的前提下，把小事确认台改成老板三步默认视图：「① 改哪里（白话文件/位置）② 要不要动保护（是/否白话）③ 确认开改」。工程师细节（Scope glob、npm、Daemon、解锁暗号等）默认折叠，需要时再展开。
+* **明确不包含**：
+  - 放宽/收紧 Fast Path 准入条件或改 Contract Schema / lifecycle 边
+  - 取消保护清单拦截或静默跳过保护区
+  - 重做整套 Studio 四视口（C.2 已 COMPLETED）
+  - 系统文件夹选择器（D.1e）
+* **核心目标**：
+  1. **三步默认**：小事 Fast Path 中栏默认只见三步白话卡，一眼能点「确认开改」。
+  2. **细节可展开**：原合同工程字段仍可「高级/详情」展开，不得物理删除审计所需信息。
+  3. **大事不变**：非 Fast Path / 大事草案仍可走既有合同/Graph 路径（S.6），本卡不把大事也强行三步化。
+* **涉及核心文件（实施时以调查为准）**：Fast Path / 合同审阅中栏组件、S.6 journey 接线的确认台、文案与折叠控件；测试：UI 走查 + 组件测「默认三步可见 / 细节默认隐藏」。
+* **Pass/Fail 验收断言（≤5，可测/可走查）**：
+  1. **三步可见**：对一条合格小事（走查脚本固定文案），中栏默认出现「改哪里 / 要不要动保护 / 确认开改」三步，无需滚动才能找到主按钮。
+  2. **细节默认藏**：`src/**`、npm、Daemon、保护解锁等工程字段默认不占主视线（折叠或次级区）；展开后仍可读。
+  3. **保护不哑火**：若小事命中保护清单，第二步必须白话问清楚，不得因折叠而跳过确认。
+  4. **大事不误伤**：非 Fast Path 路径仍可进入既有合同/Graph 体验（至少一条对照走查不过度三步化）。
+  5. **门禁**：四件套全绿；至少 1 条 UI 回归锁定「默认三步 / 细节折叠」。
+* **Pass/Fail 验收判定**：
+  - **PASS**：断言 1–5 成立；准入规则与保护拦截行为与改前一致（仅呈现变化）。
+  - **FAIL**：仍默认甩满工程师合同台却标完成；折叠导致保护区未确认即开改；借本卡改状态机却不另立卡。
+
+---
+
+#### 【Task C.8c】连接与打开死路自救（无钥匙一键重开 + 粘贴路径打开）`[NEW_TASK · 2026-10-24]`
+* **任务编号**：`TASK-C.8c`
+* **前置依赖**：`TASK-D.1b` (COMPLETED), `TASK-D.1c` (COMPLETED), `TASK-D.1d` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（走查 Top3 之「无钥匙/开新夹出路」；建议排在 C.8a 后、C.8b 前）
+* **对照痛点（走查）**：无 token 冷开锁死对话；开新文件夹仍大段催 `npx stagent open`（D.1e 已 DEFERRED，本卡**只做**文案 + 粘贴路径 / 一键重开，**不**实现系统选择器）。
+* **v0.1 范围**：给「连不上 / 要开新夹」两条死路自救：① 无钥匙或 Unauthorized 时，一键唤起/重开带 `#token=` 的合法会话（复用 D.1b/D.1c 能力），不死锁在空对话；② 「打开项目」支持粘贴本机绝对路径并一键 open/重开，文案少催终端说明书。**明确不抢** `TASK-D.1e`。
+* **明确不包含**：
+  - 系统级文件夹选择器 / Electron / Tauri / 本机助手选夹（**整段归 `TASK-D.1e`，本卡 FAIL 若夹带并标完成**）
+  - 取消 `#token=` / AUTH；把 Token 写入可分享 query 或长期明文 localStorage
+  - 将 Demo 改为与控制台同源
+* **核心目标**：
+  1. **无钥匙可自救**：冷开无 token / 鉴权失败时，主按钮是「一键重开（带钥匙）」或等价，而不是只显示 Unauthorized 说明书。
+  2. **粘贴路径可开**：打开项目面板可粘贴绝对路径 → 一点即走 open/唤起（成功则进已连接工作台）；失败给白话原因（如锁冲突）。
+  3. **少催终端**：主路径文案不再把「去终端敲 `npx tsx bin/stagent.ts open …`」当唯一出路；终端命令可留在「高级/仍失败时」。
+* **涉及核心文件（实施时以调查为准）**：`OpenProjectEntry`、无 AUTH/空态页、`daemon-api` 打开/最近项目接线、相关文案；测试：无 token 自救 UI、粘贴路径 open 冒烟（可用临时目录）、不打印 Token。
+* **Pass/Fail 验收断言（≤5，可测/可走查）**：
+  1. **无钥匙自救**：去掉 `#token=` 冷开后，可见一键重开/带钥匙入口；点后进入可聊会话（或明确正在唤起），不是永久锁死空输入框。
+  2. **粘贴路径**：在「打开项目」粘贴合法绝对路径并确认，能复用/启动会话进入工作台（与 `stagent open` 同权结果）；无需先手拷 Token。
+  3. **文案**：主路径不再把终端 `stagent open` 当唯一 CTA；终端说明可降级到高级区。
+  4. **不抢 D.1e / 不回退安全**：无系统选夹冒充完成；无钥匙仍不能旁路 AUTH；日志无 Token 明文；Demo Origin 不回退。
+  5. **门禁**：四件套全绿；至少 1 条打开/鉴权空态回归。
+* **Pass/Fail 验收判定**：
+  - **PASS**：断言 1–5 成立；D.1e 仍保持 DEFERRED 且本卡未伪称已交付系统选夹。
+  - **FAIL**：无钥匙仍锁死无按钮；开新夹仍只催终端却标完成；夹带系统选择器却标本卡（应开 D.1e）；打印 Token 明文。
 
 ---
 
@@ -1325,11 +1427,12 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
-> - **当前工程物理起点**：本地代码仓库 `main`@`b11d15b`（含 D.1d 同源 SPA 壳）；测试基线以合后四件套为准（**1208 passed / 6 skipped**）；已交付至 Contract Schema v1.3.0、D.3/C.2/S.1/S.6/S.6b、D.1b/D.1c/D.1d 打开路径。本轮为文档状态回写（D.1d → COMPLETED）。
-> - **当前首要编码任务**：`TASK-D.1d` 已 **`[COMPLETED]`**（main tip `b11d15b`）——同源单窗口打开路径不再阻塞 v0.1。**无阻塞打开路径**；按需选下一张（可选 Sprint 5：`TASK-W.5b` / `TASK-W.5c`，或其它 DAG 就绪项）。`TASK-D.1e` 仍正式 **`[DEFERRED → v0.2+]`（P5.8）**，不阻塞 v0.1。对照 `docs/reports/打开项目-愿景与现状.md`。
+> - **当前工程物理起点**：本地代码仓库 `main`@`b11d15b`（含 D.1d 同源 SPA 壳；文档基线含 `fea44e2` D.1d COMPLETED 回写）；测试基线以合后四件套为准（**1208 passed / 6 skipped**）；已交付至 Contract Schema v1.3.0、D.3/C.2/S.1/S.6/S.6b、D.1b/D.1c/D.1d 打开路径。本轮为 **UX 走查 Top3 立卡**（仅文档）。
+> - **当前首要编码任务**：**`TASK-C.8a`**（老板模式文案与默认助手）——同源能开后优先消恐吓感与 Key 向导。建议顺序 **`C.8a → C.8c → C.8b`**（先消恐吓与连接死路，再收 Fast Path 三步台；C.8b 依赖已合入的 S.6）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**；C.8c **不抢** D.1e。对照 `docs/reports/工作台交互走查-2026-10-24.md`。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
+> - **Sprint 4 体验打磨（立卡）**：打开路径 D.1d 已 COMPLETED 后，走查立卡 `TASK-C.8a` / `C.8c` / `C.8b`（建议序 C.8a→C.8c→C.8b）；属非技术可用性打磨，不新开 Sprint 编号。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -1407,3 +1510,4 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。
 - **P-28（口径对齐，2026-10-24）**：Tina 施工合同对齐——`TASK-D.1e` → **`[DEFERRED → v0.2+]`（P5.8）**；`TASK-D.1d` 前置 `D.1b`+`C.2`、最高优先 DX、验收补 dist 静态可用性回归；Sprint 将 D.1d 定为非技术进门关键门禁（相对 S.6 优先修打开路径）。版本头第 19 条；架构仅轻量锚定。**不改**产品代码。
 - **P-29（合入回写，2026-10-24）**：`TASK-D.1d` → **`[COMPLETED]`**（main tip `b11d15b` 快进合入；四件套 **1208 passed / 6 skipped**）。同步：版本头第 20 条、§1.1 矩阵、§2.1 ASCII、§3.1 详细卡、Sprint「当前首要」（打开路径无阻塞，按需选 W.5b/c 等）。交付要点：`tanstackStart.spa` + `_shell.html`→`index.html` + static-host 仅托管 `$_TSR` 壳 + dist 静态回归。**不改**产品代码（本条仅文档）；**不改**架构规范（已有注记 8）。
+- **P-30（立卡，2026-10-24）**：新增 `TASK-C.8a`（老板模式文案与默认助手）、`TASK-C.8b`（Fast Path 老板三步台）、`TASK-C.8c`（连接与打开死路自救）三张 `[NEW_TASK]`。同步：版本头第 21 条、§1.1 矩阵三行、§2.1 ASCII/JSON（`D.1d→C.8a`；`D.1d+S.6→C.8b`；`D.1b/D.1c/D.1d→C.8c`）、§3.4 详细卡、Sprint「当前首要」→ **C.8a**，建议序 **C.8a→C.8c→C.8b**；白话报告 `docs/reports/工作台交互走查-2026-10-24.md`。**不改**产品代码；**不改**架构规范（文案层不改变鉴权/Demo Origin）；C.8c **不抢** 已 DEFERRED 的 D.1e。
