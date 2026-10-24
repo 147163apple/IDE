@@ -36,6 +36,7 @@ import {
   executeContract,
   fetchArchGraph,
   fetchRepoTree,
+  deleteRepoPath,
   fetchDiff,
   fetchDiffFiles,
   fetchEvidence,
@@ -1539,6 +1540,10 @@ function Console() {
         protectedCount={protection?.entries.length ?? 0}
         files={fileTree}
         filesLoading={filesLoading}
+        onDeletePath={async (relPath) => {
+          await deleteRepoPath(conn, relPath);
+          await loadRepoTree();
+        }}
         confirmSlot={
           // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
           <ProtectionConfirmCard

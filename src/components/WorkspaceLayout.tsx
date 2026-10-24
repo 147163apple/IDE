@@ -50,6 +50,8 @@ export interface WorkspaceLayoutProps {
   files: FileNode[];
   /** C.10f 热修：文件树加载中 */
   filesLoading?: boolean | undefined;
+  /** C.10h：文件树确认后删除（父级调 API + 刷新树） */
+  onDeletePath?: ((path: string) => void | Promise<void>) | undefined;
   /** 以下为接入主页面用的插槽，均可选 */
   banner?: ReactNode;
   /**
@@ -144,6 +146,7 @@ export interface WorkspaceLayoutProps {
  * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪；
  * 6. C.10e：打开/切换项目在欢迎页（Cursor 式），不在 IDE 左栏；顶栏可「切换项目」回欢迎页。
  * 7. C.10f：资源管理器只展示纯文件树；规范与资产在「项目审阅」。
+ * 8. C.10h：文件树右键删除（确认 + P.1 门禁；尽量废纸篓）。
  */
 export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const { contract } = props;
@@ -502,6 +505,14 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                     loading={props.filesLoading}
                     onOpen={(p) =>
                       openTab({ id: p, title: p.split("/").pop() ?? p })
+                    }
+                    onDelete={
+                      props.onDeletePath
+                        ? async (p) => {
+                            await props.onDeletePath!(p);
+                            closeTab(p);
+                          }
+                        : undefined
                     }
                   />
                   {/* C.10f：leftExtra 不再渲染——合同/需求列表已迁项目审阅 */}

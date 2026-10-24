@@ -151,6 +151,7 @@ import {
   recordViolation,
   type FileAccessContext,
 } from "./editor/worktree-files";
+import { deleteRepoPath } from "./editor/repo-delete";
 import {
   assertSafeContractId,
   getWorktreePath,
@@ -2587,6 +2588,45 @@ export class StagentDaemon {
           ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
         const files = listRepoTreePaths(root);
         this.sendJson(res, 200, { root, files });
+      } catch (err) {
+        this.sendJson(res, 400, { error: (err as Error).message });
+      }
+      return;
+    }
+
+    // C.10h：资源管理器右键删除（鉴权 + P.1 保护清单；尽量废纸篓）
+    if (method === "POST" && pathname === "/api/repo/delete") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      try {
+        const body = (await this.readJsonBody(req)) as {
+          path?: string;
+          contract_id?: string;
+        };
+        const ctx = this.fileContext(body.contract_id ?? null);
+        const fileRoot =
+          ctx.contract && ctx.worktreePath ? ctx.worktreePath : ctx.repoRoot;
+        const outcome = deleteRepoPath({
+          protectionRoot: ctx.repoRoot,
+          fileRoot,
+          relPath: String(body.path ?? ""),
+        });
+        if (!outcome.ok) {
+          this.sendJson(res, outcome.httpStatus, {
+            error: outcome.message,
+            code: outcome.code,
+            message: outcome.message,
+          });
+          return;
+        }
+        this.sendJson(res, 200, {
+          deleted: true,
+          path: outcome.path,
+          method: outcome.method,
+          message: outcome.message,
+        });
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }

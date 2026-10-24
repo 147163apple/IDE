@@ -41,6 +41,12 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
     reason: "调起外部编辑器",
   },
   {
+    file: "daemon/editor/repo-delete.ts",
+    module: "daemon/editor",
+    reason:
+      "TASK-C.10h：仅 execFileSync 调用 /usr/bin/trash 或 osascript 移到废纸篓（固定系统二进制，非任意用户命令）",
+  },
+  {
     file: "daemon/server.ts",
     module: "daemon/server",
     reason: "Diff API 的 git diff（execFileSync）",

@@ -240,10 +240,15 @@ async function request<T>(
   const text = await res.text();
   const body = text ? (JSON.parse(text) as unknown) : {};
   if (!res.ok) {
-    const message =
-      typeof body === "object" && body && "error" in body
-        ? String((body as { error: unknown }).error)
-        : `HTTP ${res.status}`;
+    let message = `HTTP ${res.status}`;
+    if (typeof body === "object" && body) {
+      const rec = body as { message?: unknown; error?: unknown };
+      if (typeof rec.message === "string" && rec.message.trim()) {
+        message = rec.message;
+      } else if ("error" in rec) {
+        message = String(rec.error);
+      }
+    }
     throw new DaemonApiError(res.status, message);
   }
   return body as T;
@@ -583,6 +588,28 @@ export async function fetchRepoTree(
   if (contractId) q.set("contract_id", contractId);
   const suffix = q.toString() ? `?${q.toString()}` : "";
   return request<RepoTreePayload>(conn, `/api/repo/tree${suffix}`);
+}
+
+/** C.10h：资源管理器删除（废纸篓优先；保护清单拦则抛 DaemonApiError 白话） */
+export interface RepoDeleteResult {
+  deleted: boolean;
+  path: string;
+  method: "trash" | "unlink";
+  message: string;
+}
+
+export async function deleteRepoPath(
+  conn: DaemonConnection,
+  relPath: string,
+  contractId?: string | null,
+): Promise<RepoDeleteResult> {
+  return request<RepoDeleteResult>(conn, "/api/repo/delete", {
+    method: "POST",
+    body: JSON.stringify({
+      path: relPath,
+      ...(contractId ? { contract_id: contractId } : {}),
+    }),
+  });
 }
 
 export interface ModelSettings {
