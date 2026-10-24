@@ -27,12 +27,13 @@
 > 24. **状态回写（2026-10-24 · C.8b 合入）**：`TASK-C.8b` 由 `[NEW_TASK]`（`feat/task-c8b-boss-fastpath`）更新为 **`[COMPLETED]`**（合入 main tip `6d16939`，分支快进；合后四件套 **1224 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：小事 Fast Path 中栏默认老板三步「改哪里 / 要不要动保护 / 确认开改」；Scope glob、npm、Daemon、工程师合同细节收入可折叠高级详情；保护命中必须勾选才能开改；中/高风险大事仍走完整合同台。**不改** Fast Path 准入规则与状态机边；**不推翻** D.1 鉴权 / Demo Origin；**本轮不改**架构规范 v1.6.1。
 > 25. **状态回写（2026-10-24 · UX 第二轮走查立卡 · 页面逻辑指挥权）**：C.8 Top3 合入后二次走查发现「多个指挥官同时喊」。新增 **`TASK-C.9a`**（首屏单一主路径：无钥匙/有钥匙空闲/进行中三态只留一个指挥信号）、**`TASK-C.9b`**（助手模式互斥：练习 vs 真助手 vs 向导；发送键与中栏随模式）、**`TASK-C.9c`**（打开项目面板生命周期：默认收、成功即关、已连接降级为切换）、**`TASK-C.9d`**（进行中中栏让路：对话/三步台时收欢迎页；设置从向导深链并回跳）四张 `[NEW_TASK]`。前置均锚定 `TASK-C.8a`/`C.8b`/`C.8c` COMPLETED（main tip `15ef8e6` / `950e53e` / `6d16939`，文档基线 `4853823`）。建议排期 **C.9a → C.9b → C.9c → C.9d**；**当前首要**指向 **C.9a**。对照：`docs/reports/工作台交互走查-2026-10-24.md` §5（第二轮）。**本轮仅文档**；**不改**架构规范（呈现/面板生命周期不改变鉴权 / Demo Origin）。
 > 26. **状态回写（2026-10-24 · C.9a 合入）**：`TASK-C.9a` 由 `[NEW_TASK]`（`feat/task-c9a-single-command-surface`）更新为 **`[COMPLETED]`**（合入 main tip `ef0e1a7`，分支快进；合后四件套 **1231 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：`resolveCommandSurface` 三态（no_key / idle / in_progress）单一主 CTA；欢迎区/打开面板/顶栏徽标降级；UI+单元回归。**不推翻**鉴权 / Demo Origin；架构规范仅 §11 注记 9 轻量锚定（呈现纪律；不改变鉴权/Demo Origin）。
+> 27. **状态回写（2026-10-24 · C.9b 合入）**：`TASK-C.9b` 由 `[NEW_TASK]`（`feat/task-c9b-assistant-mode-mutex`）更新为 **`[COMPLETED]`**（合入 main tip `c4818fa`，分支快进；合后四件套 **1239 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：`resolveAssistantMode` 三态互斥（wizard / practice / real）；向导态发送禁用+唯一去配置；练习横幅；中栏随模式；`assistant-mode.ts` + UI/单元回归。**不推翻**鉴权 / 真实云调用门禁；架构规范仅 §11 注记 9 轻量锚定延续（呈现层）。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 `main`@`ef0e1a7`（C.9a）为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1231 passed / 6 skipped**）；后续实施前应在实际工作树重跑并归档结果。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 `main`@`c4818fa`（C.9b）为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1239 passed / 6 skipped**）；后续实施前应在实际工作树重跑并归档结果。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -78,7 +79,7 @@
 | **TASK-C.8b** | Fast Path 老板三步台（藏工程师合同细节） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `6d16939`；合后四件套 1224 passed / 6 skipped） | P4 体验打磨 | • 前置 `D.1d` + `S.6` COMPLETED<br>• 小事 Fast Path 中栏收成老板三步：「改哪里 / 要不要动保护 / 确认开改」<br>• 默认折叠 src/**、npm、Daemon、保护解锁等合同工程细节；需要时再展开<br>• **不含**改 Fast Path 准入规则本体 / 状态机边 |
 | **TASK-C.8c** | 连接与打开死路自救（无钥匙一键重开 + 粘贴路径） | 工作台 UX / DX | **[COMPLETED]**（2026-10-24 合入 main，tip `950e53e`；合后四件套 1217 passed / 6 skipped） | P4 体验打磨 | • 前置 `D.1b`/`D.1c`/`D.1d` COMPLETED；**不抢** `D.1e`（系统选择器仍 DEFERRED）<br>• 无 token 冷开：一键重开带钥匙会话，不死锁对话<br>• 开新夹：粘贴绝对路径 + 一键重开/唤起，少催「去终端敲 npx stagent open」说明书<br>• **不含**系统文件夹选择器 / Electron·Tauri |
 | **TASK-C.9a** | 首屏单一主路径（三态只留一个指挥信号） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `ef0e1a7`；合后四件套 1231 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.8a`/`C.8b`/`C.8c` COMPLETED<br>• `resolveCommandSurface`：no_key / idle / in_progress 单一主 CTA<br>• 欢迎区/打开面板默认收/顶栏徽标降级<br>• **不含**改鉴权 / Demo Origin / 新开桌面壳 |
-| **TASK-C.9b** | 助手模式互斥（练习 vs 真助手 vs 向导） | 工作台 UX | **[NEW_TASK]**（2026-10-24 立卡；建议序②） | P4 体验打磨 | • 前置 `C.9a` + `C.8a` COMPLETED<br>• 练习沙箱 / 真助手 / Key 向导三态互斥；发送键与中栏随模式切换<br>• 禁止「一边说还差钥匙、一边还能发消息假装干活」<br>• **不含**改鉴权 / 真实云调用门禁本体 |
+| **TASK-C.9b** | 助手模式互斥（练习 vs 真助手 vs 向导） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `c4818fa`；合后四件套 1239 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.9a` + `C.8a` COMPLETED<br>• `resolveAssistantMode`：wizard / practice / real 互斥；向导发送禁用<br>• 练习横幅 + 中栏随模式；禁止缺钥匙装忙<br>• **不含**改鉴权 / 真实云调用门禁本体 |
 | **TASK-C.9c** | 打开项目面板生命周期（默认收 / 成功即关） | 工作台 UX / DX | **[NEW_TASK]**（2026-10-24 立卡；建议序③） | P4 体验打磨 | • 前置 `C.9a` + `C.8c` COMPLETED；**不抢** `D.1e`<br>• 打开项目面板默认收起；打开/切换成功即关闭；已连接时降级为「切换项目」而非再盖首屏<br>• **不含**系统文件夹选择器 |
 | **TASK-C.9d** | 进行中中栏让路（收欢迎页 / 设置深链回跳） | 工作台 UX | **[NEW_TASK]**（2026-10-24 立卡；建议序④） | P4 体验打磨 | • 前置 `C.9a` + `C.9b` + `C.8b` COMPLETED<br>• 对话进行中或小事三步台出现时，中栏收 IDE 欢迎页/空页签堆叠，让路给对话或三步台<br>• 设置从 Key 向导深链进入，配完可一键回跳；避免设置叠罗汉<br>• **不含**重做 Studio 四视口路由本体 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
@@ -103,7 +104,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                                                     │              │      └──► TASK-D.1c (最近项目一键重开) [COMPLETED]
                                                                     │              │             └──► TASK-D.1d (修复同源空白) [COMPLETED]
                                                                     │              │                    ├──► TASK-D.1e (真·选文件夹/桌面壳) [DEFERRED → v0.2+ / P5.8]
-                                                                    │              │                    └──► TASK-C.8a / C.8b / C.8c [COMPLETED] ──► TASK-C.9a [COMPLETED] → C.9b→C.9c→C.9d [NEW]（第二轮指挥权）
+                                                                    │              │                    └──► TASK-C.8a / C.8b / C.8c [COMPLETED] ──► TASK-C.9a/C.9b [COMPLETED] → C.9c→C.9d [NEW]（第二轮指挥权）
                                                                     │              │
                                                                     │              ├──► TASK-C.1 (三栏骨架)
                                                                     │              │      ├──► TASK-C.3 (Monaco 读写)
@@ -146,8 +147,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
               TASK-C.9a ──► TASK-C.9b ──► TASK-C.9c ──► TASK-C.9d
               （首屏单一主路径） （助手模式互斥） （打开面板生命周期） （进行中中栏让路）
               前置 C.8a/b/c     前置 C.9a+C.8a   前置 C.9a+C.8c     前置 C.9a+C.9b+C.8b
-              [COMPLETED]       [NEW_TASK] 当前首要 [NEW_TASK]         [NEW_TASK]
-              建议序：C.9a（已合）→ C.9b → C.9c → C.9d · **当前首要 C.9b**
+              [COMPLETED]       [COMPLETED]      [NEW_TASK] 当前首要  [NEW_TASK]
+              建议序：C.9a/C.9b（已合）→ C.9c → C.9d · **当前首要 C.9c**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -1158,10 +1159,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 ---
 
-#### 【Task C.9b】助手模式互斥（练习 vs 真助手 vs 向导）`[NEW_TASK · 2026-10-24]`
+#### 【Task C.9b】助手模式互斥（练习 vs 真助手 vs 向导）`[COMPLETED · 2026-10-24]`
 * **任务编号**：`TASK-C.9b`
-* **前置依赖**：`TASK-C.9a` (NEW→实施时须 COMPLETED 或同批可联调), `TASK-C.8a` (COMPLETED)
-* **任务状态**：**[NEW_TASK]**（2026-10-24 立卡；建议序②）
+* **前置依赖**：`TASK-C.9a` (COMPLETED), `TASK-C.8a` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，tip `c4818fa`，分支 `feat/task-c9b-assistant-mode-mutex` 快进；合后四件套 **1239 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。交付：`resolveAssistantMode` wizard/practice/real；向导发送禁用+去配置；练习横幅；中栏随模式；`src/lib/assistant-mode.ts` + `AgentChatPane` / `routes/index`；单元+UI 回归。**不推翻**鉴权 / 真实云调用门禁）
 * **对照痛点（第二轮走查）**：一边提示「还差钥匙 / 练习沙箱」，一边发送键仍可点、中栏仍像在干活——信号互斥失败，老板以为系统在装忙或装坏。
 * **v0.1 范围**：把右栏助手收成三态**互斥机**：① **练习沙箱**（明确不可当真干活）；② **真助手就绪**；③ **Key 向导**（未配钥匙）。发送键可用性、占位文案、中栏提示必须随模式切换，禁止「缺钥匙还能发消息假装干活」。
 * **明确不包含**：
@@ -1563,12 +1564,12 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
-> - **当前工程物理起点**：本地代码仓库 `main`@`ef0e1a7`（含 C.9a 首屏单一指挥面；此前 C.8b tip `6d16939` / C.8c `950e53e` / C.8a `15ef8e6`）；测试基线以合后四件套为准（**1231 passed / 6 skipped**）；已交付至 Contract Schema v1.3.0、D.3/C.2/S.1/S.6/S.6b、D.1b/D.1c/D.1d 打开路径、C.8a/C.8b/C.8c、C.9a 首屏指挥权。
-> - **当前首要编码任务**：**`TASK-C.9b`**（助手模式互斥）；建议序 **C.9a（COMPLETED）→ C.9b → C.9c → C.9d**。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照 `docs/reports/工作台交互走查-2026-10-24.md` §5。
+> - **当前工程物理起点**：本地代码仓库 `main`@`c4818fa`（含 C.9b 助手模式互斥；此前 C.9a tip `ef0e1a7` / C.8b `6d16939` / C.8c `950e53e` / C.8a `15ef8e6`）；测试基线以合后四件套为准（**1239 passed / 6 skipped**）；已交付至 Contract Schema v1.3.0、D.3/C.2/S.1/S.6/S.6b、D.1b/D.1c/D.1d 打开路径、C.8a/C.8b/C.8c、C.9a/C.9b。
+> - **当前首要编码任务**：**`TASK-C.9c`**（打开项目面板生命周期）；建议序 **C.9a/C.9b（COMPLETED）→ C.9c → C.9d**。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照 `docs/reports/工作台交互走查-2026-10-24.md` §5。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
-> - **Sprint 4 体验打磨**：`TASK-C.8a` / `C.8c` / `C.8b` 均已 **COMPLETED**；**第二轮** `TASK-C.9a` 已 **COMPLETED**（main tip `ef0e1a7`）；余 `C.9b`/`C.9c`/`C.9d`（建议序 C.9b→C.9c→C.9d，首要 C.9b）；属非技术可用性打磨，不新开 Sprint 编号。
+> - **Sprint 4 体验打磨**：`TASK-C.8a` / `C.8c` / `C.8b` 均已 **COMPLETED**；**第二轮** `TASK-C.9a`/`C.9b` 已 **COMPLETED**（main tip `ef0e1a7` / `c4818fa`）；余 `C.9c`/`C.9d`（建议序 C.9c→C.9d，首要 C.9c）；属非技术可用性打磨，不新开 Sprint 编号。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
@@ -1652,3 +1653,4 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-33（合入回写，2026-10-24）**：`TASK-C.8b` → **`[COMPLETED]`**（main tip `6d16939` 快进合入；四件套 **1224 passed / 6 skipped**）。同步：版本头第 24 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ Top3 收口；走查报告状态回写。交付要点：`BossFastPathDesk` 三步台、高级详情折叠、保护命中需勾选、大事仍完整合同台。**不改**准入规则/状态机边；**不改**架构规范（不改变鉴权/Demo Origin）。
 - **P-34（立卡，2026-10-24）**：新增 `TASK-C.9a`（首屏单一主路径）、`TASK-C.9b`（助手模式互斥）、`TASK-C.9c`（打开项目面板生命周期）、`TASK-C.9d`（进行中中栏让路）四张 `[NEW_TASK]`。同步：版本头第 25 条、§1.1 矩阵四行、§2.1 ASCII/JSON（`C.8a/b/c→C.9a`；`C.9a+C.8a→C.9b`；`C.9a+C.8c→C.9c`；`C.9a+C.9b+C.8b→C.9d`）、§3.4 详细卡、Sprint「当前首要」→ **C.9a**，建议序 **C.9a→C.9b→C.9c→C.9d**；走查报告续写 §5 第二轮。**不改**产品代码；**不改**架构规范（呈现/面板生命周期不改变鉴权/Demo Origin）；**不抢** D.1e。
 - **P-35（合入回写，2026-10-24）**：`TASK-C.9a` → **`[COMPLETED]`**（main tip `ef0e1a7` 快进合入；四件套 **1231 passed / 6 skipped**）。同步：版本头第 26 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ **C.9b**；走查报告状态回写。交付要点：`resolveCommandSurface` 三态单一主 CTA、欢迎/打开面板/顶栏降噪。架构规范仅 §11 注记 9 轻量锚定（呈现层不改变鉴权/Demo Origin）。
+- **P-36（合入回写，2026-10-24）**：`TASK-C.9b` → **`[COMPLETED]`**（main tip `c4818fa` 快进合入；四件套 **1239 passed / 6 skipped**）。同步：版本头第 27 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ **C.9c**；走查报告状态回写。交付要点：`resolveAssistantMode` 三态互斥、向导发送禁用、练习横幅、中栏随模式。架构规范仅 §11 注记 9 轻量锚定延续（呈现层）。
