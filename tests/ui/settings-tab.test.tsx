@@ -172,3 +172,64 @@ describe("设置页：Token 粘贴的脏字符防线", () => {
     expect(screen.queryByTestId("token-non-ascii-warning")).toBeNull();
   });
 });
+
+describe("设置页 C.10b：老板主路径", () => {
+  it("模型钥匙在高级之前；高级默认折叠", () => {
+    renderSettings({
+      modelKeySlot: <div data-testid="settings-model-key-slot">key</div>,
+    });
+    const tab = screen.getByTestId("settings-tab");
+    const model = screen.getByTestId("settings-model-key");
+    const advanced = screen.getByTestId("settings-advanced");
+    expect(
+      tab.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_CONTAINED_BY,
+    ).toBeTruthy();
+    // model precedes advanced
+    expect(
+      model.compareDocumentPosition(advanced) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(advanced).not.toHaveAttribute("open");
+    expect(screen.getByTestId("settings-advanced-summary")).toHaveTextContent(
+      "高级",
+    );
+  });
+
+  it("Daemon / Session Token 控件在高级内，不在主视线顶栏文案里", () => {
+    renderSettings();
+    const advanced = screen.getByTestId("settings-advanced");
+    expect(advanced.querySelector('[data-testid="daemon-url"]')).not.toBeNull();
+    expect(
+      advanced.querySelector('[data-testid="session-token"]'),
+    ).not.toBeNull();
+    expect(screen.getByTestId("settings-tab").textContent).toMatch(/模型钥匙/);
+    expect(screen.getByTestId("settings-tab").textContent).toMatch(
+      /先配好模型钥匙/,
+    );
+    // 主头不再用 Daemon 作标题词
+    const header = screen.getByTestId("settings-tab").querySelector("header");
+    expect(header?.textContent ?? "").not.toMatch(
+      /Daemon|Session Token|GATEWAY/,
+    );
+  });
+
+  it("配完了返回对话仍可用（C.9d 保留）", () => {
+    const onReturnToChat = vi.fn();
+    renderSettings({ onReturnToChat });
+    fireEvent.click(screen.getByTestId("settings-return-to-chat"));
+    expect(onReturnToChat).toHaveBeenCalledTimes(1);
+  });
+
+  it("展开高级后仍能改连接并应用", () => {
+    const { onConnChange } = renderSettings();
+    fireEvent.click(screen.getByTestId("settings-advanced-summary"));
+    fireEvent.change(screen.getByTestId("daemon-url"), {
+      target: { value: "http://127.0.0.1:4001" },
+    });
+    fireEvent.click(screen.getByTestId("apply-connection"));
+    expect(onConnChange).toHaveBeenCalledWith({
+      baseUrl: "http://127.0.0.1:4001",
+      token: "t-0",
+    });
+  });
+});
