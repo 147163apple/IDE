@@ -44,3 +44,4 @@ coverage/
 
 # Stray mkstemp-style artifact left by an editor/atomic-write test (4-byte, unreferenced)
 /uyrvtqhd
+.stagent-walkthrough-tmp/

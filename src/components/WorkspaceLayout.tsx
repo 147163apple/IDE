@@ -21,13 +21,14 @@ import {
 } from "../lib/middle-yield";
 import { shouldRenderMiddleYieldShell } from "../lib/in-progress-lifecycle";
 import type { InProgressCta } from "../lib/command-surface";
+import { WORKBENCH_LABEL } from "../lib/workbench-labels";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
 /** Supervisor 审阅 Tab（左下角图标入口打开；中央阅读区，可关闭） */
 export const SUPERVISOR_TAB_ID = "system:supervisor";
 /** 设置 Tab（⚙️ 图标入口；连接/诊断/开关全在这一页） */
 export const SETTINGS_TAB_ID = "system:settings";
-/** Task Graph Tab（业务功能导图 / 执行 DAG，TASK-C.7） */
+/** @deprecated C.10c：独立图谱 Tab 不再作为日常主路径；保留 id 仅兼容旧会话/测试。日常入口改开合同操作台内视口。 */
 export const GRAPH_TAB_ID = "system:task-graph";
 
 interface Tab {
@@ -52,13 +53,19 @@ export interface WorkspaceLayoutProps {
   supervisorContent?: ReactNode;
   /** 设置 Tab 内容（由主页面注入，连接与模型 Key 面板在那里） */
   settingsContent?: ReactNode;
-  /** Task Graph Tab 内容（业务功能导图 / 执行 DAG，TASK-C.7） */
+  /** @deprecated C.10c 独立图谱 Tab；日常请用 studio 内图谱视口 */
   graphContent?: ReactNode;
+  /**
+   * C.10c：左栏图谱入口 → 打开合同操作台并切到图谱视口（由主页面设 viewport）。
+   */
+  onOpenStudioGraph?: (() => void) | undefined;
+  /** C.10c：合同操作台当前是否停在图谱视口（点亮 ActivityBar 图谱图标） */
+  studioGraphActive?: boolean | undefined;
   /** 左栏文件树上方的【规范与资产】专区（需求文档 / 合同 / Demo 原型） */
   specsSection?: ReactNode;
   /** 右栏：AI 对话（主要需求沟通入口） */
   rightPanel?: ReactNode;
-  /** 底栏 SmartTerminal 抽屉内容 */
+  /** 底栏验证输出抽屉内容（原 SmartTerminal） */
   terminalPanel?: ReactNode;
   footer?: ReactNode;
   /** 首屏欢迎区；不传则用内置极简版（仍然只有真实入口） */
@@ -70,7 +77,7 @@ export interface WorkspaceLayoutProps {
   /** 外部请求打开文件（例如 Agent 刚改了它）；nonce 变化即触发 */
   openRequest?: { path: string; nonce: number } | null;
   /**
-   * 外部请求切到 Supervisor Studio 标签；nonce 变化即触发。
+   * 外部请求切到合同操作台标签；nonce 变化即触发。
    * 供 Supervisor Tab 里的「打开合同操作台」使用——Tab 由布局自己持有，
    * 页面无法直接 setActiveTab，所以用信号替代共享状态。
    */
@@ -99,7 +106,7 @@ export interface WorkspaceLayoutProps {
   /** 顶栏「已锁 N 处」（C.2） */
   protectedCount?: number | undefined;
   /**
-   * 首次打开即显示 Supervisor Studio。
+   * 首次打开即显示合同操作台。
    * **页面已不再传它**：首屏必须是空编辑区/欢迎页，Studio 由用户点合同或点模式徽标才开。
    * 保留这个 prop 只为显式 opt-in 的测试与并行对照场景。
    */
@@ -115,7 +122,7 @@ export interface WorkspaceLayoutProps {
  *
  *   顶栏（项目 / 分支 / 模式 + 一个「新建需求」）
  *   ├ Activity Bar │ 文件树（可折叠 / 可拖宽） │ 代码标签页（中） │ AI 对话（可折叠 / 可拖宽）
- *   └ 底栏：抽屉式 SmartTerminal（可收起）
+ *   └ 底栏：抽屉式验证输出（可收起）
  *
  * 四条边界（本轮）：
  * 1. 对话在**右侧**，是主要需求沟通入口；不搬去左栏；
@@ -137,7 +144,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
       ? [
           {
             id: STUDIO_TAB_ID,
-            title: "Supervisor Studio",
+            title: WORKBENCH_LABEL.studio,
             system: true,
             closable: true,
           },
@@ -182,7 +189,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const openStudio = () =>
     openTab({
       id: STUDIO_TAB_ID,
-      title: "Supervisor Studio",
+      title: WORKBENCH_LABEL.studio,
       system: true,
       closable: true,
     });
@@ -204,7 +211,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             ...t,
             {
               id: SUPERVISOR_TAB_ID,
-              title: "Supervisor",
+              title: WORKBENCH_LABEL.supervisor,
               system: true,
               closable: true,
             },
@@ -212,22 +219,13 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     );
     setActiveTab(SUPERVISOR_TAB_ID);
   };
-  /** 任务图谱图标：打开/聚焦 Graph Tab（与 Supervisor 一样不 toggle） */
+  /**
+   * C.10c：左栏图谱 → 打开/聚焦合同操作台，并通知主页面切到图谱视口。
+   * 不再新建独立「任务图谱」系统 Tab（收双入口）。
+   */
   const openGraph = () => {
-    setTabs((t) =>
-      t.some((x) => x.id === GRAPH_TAB_ID)
-        ? t
-        : [
-            ...t,
-            {
-              id: GRAPH_TAB_ID,
-              title: "任务图谱",
-              system: true,
-              closable: true,
-            },
-          ],
-    );
-    setActiveTab(GRAPH_TAB_ID);
+    openStudio();
+    props.onOpenStudioGraph?.();
   };
   /** 左下角齿轮：打开设置 Tab（同样不做 toggle，避免误触关掉正在填的表单） */
   const openSettings = () => {
@@ -289,7 +287,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     >
       {props.studioContent ?? (
         <div className="p-3">
-          Supervisor Studio（合同审阅区，TASK-C.2 实装）
+          {WORKBENCH_LABEL.studio}（合同审阅区，TASK-C.2 实装）
         </div>
       )}
     </div>
@@ -301,7 +299,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     >
       {props.supervisorContent ?? (
         <div className="p-3 text-sm opacity-60">
-          Supervisor 需要主页面注入合同与保护清单数据。
+          {WORKBENCH_LABEL.supervisor}需要主页面注入合同与保护清单数据。
         </div>
       )}
     </div>
@@ -423,7 +421,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
           onToggleExplorer={() => setLeftOpen((v) => !v)}
           supervisorOpen={isSupervisor}
           onOpenSupervisor={focusSupervisor}
-          graphOpen={isGraph}
+          graphOpen={isStudio && !!props.studioGraphActive}
           onOpenGraph={openGraph}
           settingsOpen={isSettings}
           onOpenSettings={openSettings}
@@ -619,14 +617,14 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         )}
       </div>
 
-      {/* 底栏：抽屉式 SmartTerminal，默认收起，只有要看退出码时才占高度 */}
+      {/* 底栏：验证输出抽屉，默认收起，只有要看退出码时才占高度 */}
       <CollapsibleSection
         testId="terminal-drawer"
-        title="SmartTerminal"
+        title={WORKBENCH_LABEL.terminal}
         open={terminalOpen}
         onToggle={() => setTerminalOpen((v) => !v)}
         summary="验证命令原始输出（点开看退出码）"
-        toggleLabel={{ open: "收起终端", closed: "展开终端" }}
+        toggleLabel={{ open: "收起输出", closed: "展开输出" }}
         className="max-h-64 shrink-0 border-t"
       >
         <div data-testid="terminal-drawer-body" className="h-56 overflow-auto">

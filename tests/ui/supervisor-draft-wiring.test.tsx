@@ -272,9 +272,10 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     await screen.findByTestId("draft-ready");
 
     // 新建需求时 Studio 就是当前 Tab
-    expect(
-      screen.getByRole("tab", { name: "Supervisor Studio" }),
-    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getAllByTestId("rationale-item").length).toBe(
       draftResponse.draft.rationale.length,
     );

@@ -73,9 +73,10 @@ export function WelcomePane({
               data-testid="welcome-new-requirement"
               data-command-role="secondary"
               onClick={onNewRequirement}
-              className="mt-1 flex items-center gap-1 rounded border px-3 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground/80 underline-offset-2 hover:underline hover:text-muted-foreground"
             >
-              或从这里新建需求 <ArrowRight className="h-3 w-3" />
+              也可以用顶栏「新建需求」打开表单{" "}
+              <ArrowRight className="h-3 w-3" />
             </button>
           ) : null}
         </div>

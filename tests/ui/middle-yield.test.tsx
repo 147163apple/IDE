@@ -39,9 +39,10 @@ describe("TASK-C.9d 中栏让路 / 设置回跳", () => {
     });
     render(<WorkspaceLayout {...base} commandSurface={surface} />);
     await waitFor(() => {
-      expect(
-        screen.getByRole("tab", { name: "Supervisor Studio" }),
-      ).toHaveAttribute("aria-selected", "true");
+      expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
     });
     expect(screen.getByTestId("studio-pane")).toBeInTheDocument();
     expect(screen.queryByTestId("welcome-pane")).toBeNull();

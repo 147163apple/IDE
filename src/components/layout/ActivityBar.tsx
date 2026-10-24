@@ -5,18 +5,13 @@ import {
   Sparkles,
   TerminalSquare,
 } from "lucide-react";
+import { WORKBENCH_LABEL } from "../../lib/workbench-labels";
 
 /**
  * Activity Bar（Cursor / VS Code 式左窄条）。
  *
- * 只放**真实可用**的入口，不放装饰图标：
- * - 上：文件树开关；
- * - 上：任务图谱（业务功能导图 / 执行 DAG，TASK-C.7）；
- * - 下：Supervisor（常驻左下角，点开在中央打开可关闭的 Tab）；
- * - 下：设置（紧挨 Supervisor，连接/诊断/开关全在那一页）；
- * - 下：SmartTerminal 抽屉开关。
- *
- * 没有搜索 / 源码管理 / 扩展入口——这些能力当前不存在，画成图标就是假入口。
+ * TASK-C.10c：title / aria-label 只用白话，不甩英文暗号。
+ * 图谱入口打开合同操作台内「任务图谱」视口（由布局转发），不再独立系统 Tab 主路径。
  */
 export interface ActivityBarProps {
   explorerOpen: boolean;
@@ -83,7 +78,7 @@ export function ActivityBar({
       className="flex w-12 shrink-0 flex-col items-center gap-1 border-r bg-muted/30 py-2"
     >
       <BarButton
-        label="资源管理器（文件树）"
+        label={WORKBENCH_LABEL.explorer}
         testId="activity-explorer"
         active={explorerOpen}
         onClick={onToggleExplorer}
@@ -91,7 +86,7 @@ export function ActivityBar({
         <Files className="h-5 w-5" />
       </BarButton>
       <BarButton
-        label="任务图谱（业务功能 / 执行拓扑）"
+        label={`${WORKBENCH_LABEL.graph}（在${WORKBENCH_LABEL.studio}里看）`}
         testId="activity-graph"
         active={graphOpen}
         onClick={onOpenGraph}
@@ -100,7 +95,7 @@ export function ActivityBar({
       </BarButton>
       <div className="mt-auto flex flex-col items-center gap-1">
         <BarButton
-          label="Supervisor（工程审阅）"
+          label={WORKBENCH_LABEL.supervisor}
           testId="activity-supervisor"
           active={supervisorOpen}
           onClick={onOpenSupervisor}
@@ -108,7 +103,7 @@ export function ActivityBar({
           <Sparkles className="h-5 w-5" />
         </BarButton>
         <BarButton
-          label="设置（连接 / 诊断 / 开关）"
+          label={WORKBENCH_LABEL.settings}
           testId="activity-settings"
           active={settingsOpen}
           onClick={onOpenSettings}
@@ -116,7 +111,7 @@ export function ActivityBar({
           <Settings className="h-5 w-5" />
         </BarButton>
         <BarButton
-          label="SmartTerminal（命令输出）"
+          label={WORKBENCH_LABEL.terminal}
           testId="activity-terminal"
           active={terminalOpen}
           onClick={onToggleTerminal}

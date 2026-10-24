@@ -100,7 +100,7 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     expect(screen.getByTestId("workspace-layout")).toBeInTheDocument();
     expect(screen.getByTestId("run-mode")).toHaveAttribute("data-mode", "VIBE");
     // 新交互：首屏不再默认打开 Supervisor Studio，中央是欢迎/空编辑区
-    expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "合同操作台" })).toBeNull();
     expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
     // 顶栏收口：右侧只有一个最小操作点（欢迎区另有自己的入口，故用 testid 定位）
     expect(screen.getByTestId("new-requirement")).toHaveTextContent("新建需求");
@@ -136,9 +136,10 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
   it("点需求才打开合同操作台，旧控制台功能仍在", async () => {
     render(<Console />);
     fireEvent.click(await screen.findByText("主页面接线测试"));
-    expect(
-      screen.getByRole("tab", { name: "Supervisor Studio" }),
-    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByText("运行 Worker")).toBeInTheDocument();
     expect(screen.getByText("执行验证")).toBeInTheDocument();
     expect(screen.getByText(/查看 Diff/)).toBeInTheDocument();

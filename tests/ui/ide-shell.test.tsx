@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { WorkspaceLayout } from "../../src/components/WorkspaceLayout";
 
@@ -123,7 +123,7 @@ describe("Supervisor：左下角入口 + 中央可关闭 Tab", () => {
     );
     expect(screen.queryByTestId("supervisor-content")).toBeNull();
     fireEvent.click(screen.getByTestId("activity-supervisor"));
-    const tab = screen.getByRole("tab", { name: "Supervisor" });
+    const tab = screen.getByRole("tab", { name: "项目审阅" });
     expect(tab).toHaveAttribute("data-system", "true");
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("supervisor-pane")).toBeInTheDocument();
@@ -139,10 +139,10 @@ describe("Supervisor：左下角入口 + 中央可关闭 Tab", () => {
     );
     fireEvent.click(screen.getByTestId("activity-supervisor"));
     fireEvent.click(screen.getByTestId("close-tab-system:supervisor"));
-    expect(screen.queryByRole("tab", { name: "Supervisor" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "项目审阅" })).toBeNull();
     expect(screen.queryByTestId("supervisor-content")).toBeNull();
     fireEvent.click(screen.getByTestId("activity-supervisor"));
-    expect(screen.getByRole("tab", { name: "Supervisor" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "项目审阅" })).toBeInTheDocument();
     expect(screen.getByTestId("supervisor-content")).toBeInTheDocument();
   });
 
@@ -177,9 +177,10 @@ describe("Supervisor：左下角入口 + 中央可关闭 Tab", () => {
       />,
     );
     expect(screen.getByTestId("studio-content")).toBeInTheDocument();
-    expect(
-      screen.getByRole("tab", { name: "Supervisor Studio" }),
-    ).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 });
 
@@ -215,7 +216,7 @@ describe("设置入口：Activity Bar 齿轮", () => {
   });
 });
 
-describe("SmartTerminal：底栏抽屉", () => {
+describe("验证输出：底栏抽屉", () => {
   it("默认收起，展开后才占高度并渲染命令输出", () => {
     render(<WorkspaceLayout {...base} terminalPanel={<div>exit 0</div>} />);
     const drawer = screen.getByTestId("terminal-drawer");
@@ -237,6 +238,56 @@ describe("SmartTerminal：底栏抽屉", () => {
     expect(screen.getByTestId("terminal-drawer")).toHaveAttribute(
       "data-state",
       "open",
+    );
+  });
+});
+
+describe("TASK-C.10c：白话命名与图谱单入口", () => {
+  it("ActivityBar / Tab / 底栏用白话名，不含 Supervisor Studio / SmartTerminal", () => {
+    render(
+      <WorkspaceLayout
+        {...base}
+        defaultOpenStudio
+        studioContent={<div data-testid="studio-content">台</div>}
+        terminalPanel={<div>exit 0</div>}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
+    expect(screen.getByTestId("activity-supervisor")).toHaveAttribute(
+      "aria-label",
+      "项目审阅",
+    );
+    expect(screen.getByTestId("activity-terminal")).toHaveAttribute(
+      "aria-label",
+      "验证输出",
+    );
+    expect(screen.getByTestId("terminal-drawer")).toHaveTextContent("验证输出");
+  });
+
+  it("左栏图谱入口打开合同操作台并回调 onOpenStudioGraph，不新建独立任务图谱 Tab", () => {
+    const onOpenStudioGraph = vi.fn();
+    render(
+      <WorkspaceLayout
+        {...base}
+        studioContent={<div data-testid="studio-content">台</div>}
+        graphContent={<div data-testid="graph-legacy">旧图谱页</div>}
+        onOpenStudioGraph={onOpenStudioGraph}
+        studioGraphActive
+      />,
+    );
+    fireEvent.click(screen.getByTestId("activity-graph"));
+    expect(onOpenStudioGraph).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("tab", { name: "任务图谱" })).toBeNull();
+    expect(screen.queryByTestId("graph-legacy")).toBeNull();
+    expect(screen.getByTestId("studio-content")).toBeInTheDocument();
+    expect(screen.getByTestId("activity-graph")).toHaveAttribute(
+      "aria-pressed",
+      "true",
     );
   });
 });

@@ -42,7 +42,7 @@ describe("TASK-C.1 三栏工作台", () => {
 
   it("首屏是空编辑区：不自动打开 Studio，中央是欢迎区", () => {
     render(<WorkspaceLayout {...base} />);
-    expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "合同操作台" })).toBeNull();
     expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
   });
 
@@ -74,7 +74,7 @@ describe("TASK-C.1 三栏工作台", () => {
   it("Supervisor 入口（模式徽标）打开系统 Studio 标签", () => {
     render(<WorkspaceLayout {...base} />);
     fireEvent.click(screen.getByTestId("run-mode"));
-    const tab = screen.getByRole("tab", { name: "Supervisor Studio" });
+    const tab = screen.getByRole("tab", { name: "合同操作台" });
     expect(tab).toHaveAttribute("data-system", "true");
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("studio-pane")).toBeInTheDocument();

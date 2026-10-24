@@ -4,6 +4,7 @@ import {
   RUN_MODE_LABEL,
   type RunMode,
 } from "./workspace-types";
+import { WORKBENCH_LABEL } from "../lib/workbench-labels";
 import type {
   StudioDraftView,
   StudioExecutionView,
@@ -11,7 +12,7 @@ import type {
 } from "./supervisor-view-model";
 
 /**
- * TASK-C.2 中栏「Supervisor Studio」——视口 4：合同与 Diff 审阅。
+ * TASK-C.2 中栏合同审阅视口（C.10c 用户可见名：合同操作台）。
  *
  * 四视口切换与状态自适应由 `studio/StudioViewportShell` 承担；本组件只负责合同
  * 结构化审阅，作为外壳的 `contract` 插槽挂载（切换走 hidden，勾选状态不丢）。
@@ -97,7 +98,7 @@ export function SupervisorStudioPane(props: SupervisorStudioPaneProps) {
     <div data-testid="supervisor-studio" className="space-y-3 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <h2 data-testid="studio-title" className="text-sm font-semibold">
-          Supervisor Studio
+          {WORKBENCH_LABEL.studio}
         </h2>
         <span
           data-testid="studio-mode"

@@ -1526,7 +1526,7 @@ function Console() {
   });
 
   return (
-    <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
+    <div className="flex h-screen flex-col bg-background text-sm text-foreground">
       <WorkspaceLayout
         repoName={repoName}
         repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
@@ -1658,12 +1658,17 @@ function Console() {
           />
         }
         openStudioRequest={studioNonce}
+        onOpenStudioGraph={() => {
+          setStudioViewportOverride("graph");
+          setStudioNonce((n) => n + 1);
+        }}
+        studioGraphActive={studioViewportOverride === "graph"}
         openSettingsRequest={settingsNonce}
         settingsDeepFocus={settingsDeepFocus}
         closeSettingsRequest={closeSettingsNonce}
         commandSurface={commandSurface}
         terminalPanel={
-          // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
+          // 底栏验证输出抽屉，数据源与合同操作台内终端一致
           <StructuredTerminal
             lines={stream.terminal
               .filter((t) => !selected || t.contractId === selected.contract_id)
@@ -2048,8 +2053,8 @@ function Console() {
         }
         footer={
           <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">
-            <span>Daemon: {conn.baseUrl}</span>
-            <span className="ml-auto">v0.1 · Evidence-gated</span>
+            <span>本机服务：{conn.baseUrl}</span>
+            <span className="ml-auto">v0.1 · 有证据才合入</span>
           </footer>
         }
       />
