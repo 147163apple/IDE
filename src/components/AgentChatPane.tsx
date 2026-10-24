@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   useAgentSession,
   type AgentSessionTransport,
+  type UseAgentSession,
 } from "@/hooks/use-agent-session";
 import {
   hasRealAssistantAvailable,
@@ -22,6 +23,11 @@ export interface JourneyChatCard {
 
 export interface AgentChatPaneProps {
   transport: AgentSessionTransport | null;
+  /**
+   * C.10l：父级注入的共享会话（与设置「高级」同实例）。
+   * 未传时组件自管（UI 单测仍可只传 transport）。
+   */
+  session?: UseAgentSession | undefined;
   /**
    * TASK-S.6：发送前分流。返回 `handled` 则不再发给 Worker；
    * 返回 `passthrough`（或未提供）则走原会话。
@@ -58,6 +64,7 @@ export interface AgentChatPaneProps {
  */
 export function AgentChatPane({
   transport,
+  session: injectedSession,
   onBeforeSend,
   journeyCards,
   journeyBusy,
@@ -67,7 +74,9 @@ export function AgentChatPane({
   primaryCtaTestId,
   onAssistantModeChange,
 }: AgentChatPaneProps) {
-  const chat = useAgentSession(transport);
+  // C.10l：有注入则复用父级实例；否则自管（测试路径）
+  const owned = useAgentSession(injectedSession ? null : transport);
+  const chat = injectedSession ?? owned;
   const [draft, setDraft] = useState("");
   const [routing, setRouting] = useState(false);
   const [relaunchBusy, setRelaunchBusy] = useState(false);

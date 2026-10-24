@@ -3,6 +3,7 @@ import {
   Activity,
   ChevronDown,
   KeyRound,
+  MessagesSquare,
   Plug,
   Radio,
   RefreshCw,
@@ -16,14 +17,26 @@ import {
   SETTINGS_MODEL_KEY_TEST_ID,
   type SettingsDeepFocus,
 } from "@/lib/middle-yield";
+import type { ChatAdapterInfo, ChatSessionSummary } from "@/lib/chat-events";
+import { pickPreferredAdapterId } from "@/lib/pick-chat-adapter";
 
 /**
  * 设置页（中央 Tab）。
  *
  * C.10b：主视线是「模型钥匙」；Daemon / Session Token / 运行诊断 / 工作区
  * 收进默认折叠的「高级」。C.9d 深链到钥匙区与「配完了，返回对话」保留。
+ * C.10l：可选「对话助手」（适配器 / 新会话 / 历史会话）也只在「高级」内，
+ * 不回潮右栏主视线；会话元信息与工具 JSON 仍不展示。
  * 不改鉴权语义，也不取消 token 能力——只调文案层级。
  */
+export interface SettingsChatSessionControls {
+  adapters: ChatAdapterInfo[];
+  sessions: ChatSessionSummary[];
+  sessionId: string | null;
+  newSession: (adapterId: string) => Promise<void>;
+  selectSession: (id: string) => Promise<void>;
+}
+
 export interface SettingsTabProps {
   conn: DaemonConnection;
   onConnChange: (next: DaemonConnection) => void;
@@ -49,6 +62,8 @@ export interface SettingsTabProps {
   focusSection?: SettingsDeepFocus | null | undefined;
   /** C.9d：配完钥匙一键回跳右栏主路径 */
   onReturnToChat?: (() => void) | undefined;
+  /** C.10l：与右栏共享的会话控件（仅高级内展示） */
+  chatSession?: SettingsChatSessionControls | null | undefined;
 }
 
 function Section({
@@ -105,10 +120,33 @@ export function SettingsTab({
   onRefresh,
   focusSection = null,
   onReturnToChat,
+  chatSession = null,
 }: SettingsTabProps) {
   const [draft, setDraft] = useState(conn);
+  const [adapterId, setAdapterId] = useState("");
   // 外部连接被换掉（例如 Token 从 URL fragment 注入）时同步草稿
   useEffect(() => setDraft(conn), [conn]);
+
+  useEffect(() => {
+    setAdapterId("");
+  }, [chatSession?.sessionId]);
+
+  const currentChat = chatSession?.sessions.find(
+    (s) => s.id === chatSession.sessionId,
+  );
+  const currentAdapterAvailable = Boolean(
+    chatSession?.adapters.some(
+      (a) => a.id === currentChat?.adapter_id && a.available,
+    ),
+  );
+  const adapterChoice =
+    adapterId ||
+    (chatSession
+      ? pickPreferredAdapterId(
+          chatSession.adapters,
+          currentAdapterAvailable ? (currentChat?.adapter_id ?? null) : null,
+        )
+      : "");
 
   useEffect(() => {
     if (focusSection !== "model-key") return;
@@ -179,7 +217,7 @@ export function SettingsTab({
           <ChevronDown className="h-4 w-4 opacity-60 [[open]_&]:rotate-180" />
           高级
           <span className="ml-1 text-xs font-normal opacity-60">
-            后台连接 · 诊断 · 工作区
+            后台连接 · 诊断 · 工作区 · 对话助手
           </span>
         </summary>
         <div className="space-y-3 border-t border-border p-3 pt-3">
@@ -357,6 +395,71 @@ export function SettingsTab({
               </button>
             ) : null}
           </Section>
+
+          {chatSession ? (
+            <Section
+              title="对话助手"
+              icon={<MessagesSquare className="h-4 w-4" />}
+              testId="settings-chat-session"
+            >
+              <p className="opacity-60">
+                右栏只说话；换助手或历史会话在这里选。不显示会话元信息或工具细节。
+              </p>
+              <Row label="助手">
+                <select
+                  aria-label="选择 Agent"
+                  data-testid="settings-chat-adapter"
+                  value={adapterChoice}
+                  onChange={(e) => setAdapterId(e.target.value)}
+                  className="w-full rounded border border-border bg-background px-2 py-1 outline-none"
+                >
+                  {chatSession.adapters.map((a) => (
+                    <option key={a.id} value={a.id} disabled={!a.available}>
+                      {a.label}
+                      {a.control_mode === "UNCONTROLLED_EXTERNAL"
+                        ? "（未受控）"
+                        : ""}
+                      {a.available
+                        ? ""
+                        : `（${a.unavailable_reason ?? "不可用"}）`}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="settings-chat-new-session"
+                  disabled={!adapterChoice}
+                  onClick={() => void chatSession.newSession(adapterChoice)}
+                  className="rounded border border-border px-2 py-1 hover:bg-accent disabled:opacity-50"
+                >
+                  新会话
+                </button>
+              </div>
+              <Row label="历史会话">
+                <select
+                  aria-label="历史会话"
+                  data-testid="settings-chat-history"
+                  value={chatSession.sessionId ?? ""}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    if (id) void chatSession.selectSession(id);
+                  }}
+                  className="w-full rounded border border-border bg-background px-2 py-1 outline-none"
+                >
+                  {!chatSession.sessionId && (
+                    <option value="">（无会话）</option>
+                  )}
+                  {chatSession.sessions.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.title} · {s.adapter_id}
+                    </option>
+                  ))}
+                </select>
+              </Row>
+            </Section>
+          ) : null}
         </div>
       </details>
 

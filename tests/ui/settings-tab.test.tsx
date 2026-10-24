@@ -233,3 +233,75 @@ describe("设置页 C.10b：老板主路径", () => {
     });
   });
 });
+
+describe("设置页 C.10l：高级里可选会话/适配器", () => {
+  const chatSession = {
+    adapters: [
+      {
+        id: "claude-code",
+        label: "Claude Code",
+        available: true,
+        control_mode: "GATEWAY_ENFORCED" as const,
+        verified_on: "2026-10-01",
+      },
+      {
+        id: "demo",
+        label: "练习沙箱",
+        available: true,
+        control_mode: "GATEWAY_ENFORCED" as const,
+        verified_on: "",
+      },
+    ],
+    sessions: [
+      {
+        id: "s1",
+        title: "会话一",
+        adapter_id: "claude-code",
+        created_at: "2026-10-24T00:00:00.000Z",
+        updated_at: "2026-10-24T00:00:00.000Z",
+        native_session_id: null,
+        busy: false,
+      },
+    ],
+    sessionId: "s1" as string | null,
+    newSession: vi.fn(async () => {}),
+    selectSession: vi.fn(async () => {}),
+  };
+
+  it("高级默认折叠；对话助手仅在高级内，不在模型钥匙主视线", () => {
+    renderSettings({ chatSession });
+    const advanced = screen.getByTestId("settings-advanced");
+    expect(advanced).not.toHaveAttribute("open");
+    // details 折叠时节点仍在 DOM，但必须挂在高级内
+    expect(
+      advanced.querySelector('[data-testid="settings-chat-session"]'),
+    ).not.toBeNull();
+    expect(
+      screen
+        .getByTestId("settings-model-key")
+        .querySelector('[data-testid="settings-chat-session"]'),
+    ).toBeNull();
+    fireEvent.click(screen.getByTestId("settings-advanced-summary"));
+    expect(screen.getByTestId("settings-chat-adapter")).toBeTruthy();
+    expect(screen.getByTestId("settings-chat-new-session")).toHaveTextContent(
+      "新会话",
+    );
+    expect(screen.getByLabelText("历史会话")).toBeTruthy();
+    expect(screen.getByTestId("settings-advanced-summary")).toHaveTextContent(
+      "对话助手",
+    );
+  });
+
+  it("点新会话会调用注入的 newSession", () => {
+    renderSettings({ chatSession });
+    fireEvent.click(screen.getByTestId("settings-advanced-summary"));
+    fireEvent.click(screen.getByTestId("settings-chat-new-session"));
+    expect(chatSession.newSession).toHaveBeenCalled();
+  });
+
+  it("未注入 chatSession 时高级内不出现对话助手区", () => {
+    renderSettings();
+    fireEvent.click(screen.getByTestId("settings-advanced-summary"));
+    expect(screen.queryByTestId("settings-chat-session")).toBeNull();
+  });
+});

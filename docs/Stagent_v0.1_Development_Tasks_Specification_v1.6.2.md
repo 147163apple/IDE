@@ -1,4 +1,5 @@
 
+- **P-59（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10l`**（设置「高级」加回可选会话/适配器：助手下拉、新会话、历史会话；**不**回潮右栏主视线；会话元信息/工具 JSON 仍不展示）。同步：版本头第 49 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10k→C.10l`）、§3.4 详细卡、Sprint「当前首要」→ **C.10l**；走查报告 §6.21；架构规范 §11 注记 9 轻量续写；v0.2 附录 B 标注本项已落地高级。**不改**鉴权；**不抢** D.1e。
 - **P-58（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10k`**（右栏 AI 对话老板主视线：删除多余信息，只留双方对话；Cursor 右侧对话对齐能力写入 v0.2+ RFC 附录 B，**不实施整页复刻**）。同步：版本头第 48 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10j→C.10k`）、§3.4 详细卡、Sprint「当前首要」→ **C.10k**；走查报告 §6.20；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-57（C.10j 后打开文件无法关闭热修，2026-10-24）**：Tina 打开文件后无法关闭标签。根因：**不是** Markdown 预览挡住关按钮——文件 Tab 在 `FileTree.onOpen` / `openRequest` / 重命名重开时未设 `closable: true`，顶栏 × 根本不渲染（系统 Tab 才显式 closable）。热修：`fileTab()` 统一补 closable；渲染侧非系统 Tab 默认可关 `(closable ?? !system)`；补 UI 用例。合入 tip `09fdcfd`；四件套 **1313 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.19。**不改**鉴权；不抢 D.1e。
 - **P-56（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10j`**（中栏 Markdown 预览阅读：打开 `.md` 默认好看预览含标题/引用/GFM/代码高亮；可切源码编辑；对齐 Cursor 阅读感，不做完整 VS Code）。同步：版本头第 46 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10i→C.10j`）、§3.4 详细卡、Sprint「当前首要」→ **C.10j**；走查报告 §6.18；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e；不重做 Monaco 保存门禁。
@@ -70,7 +71,9 @@
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1313 passed / 6 skipped**；C.10k 合入后回写）。
+> 49. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10l · 设置高级可选会话/适配器）**：Tina 授权（t671u）——适配器/新会话/历史会话放回设置「高级」，不进右栏主路径。新增 **`TASK-C.10l`** 并收口为 **`[COMPLETED]`**（合入 tip `TBD`；四件套 **TBD**）。交付：`settings-chat-session` 于 `settings-advanced`；Console 上提 `useAgentSession` 与右栏共享；右栏仍无工程师控件（C.10k 保持）。会话元信息/工具 JSON **不**进设置。前置：`TASK-C.10k` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.21。架构规范仅 §11 注记 9 轻量锚定延续。
+
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1313 passed / 6 skipped**；C.10k 合入后回写；C.10l 合入后以四件套实数为准）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -130,6 +133,7 @@
 | **TASK-C.10i** | 文件树第一批（折叠整树 / 新建 / Finder·复制·重命名·删除） | 工作台 UX | **[COMPLETED]**（tip `5388f9c`；**1305 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10h` COMPLETED<br>• 点顶栏路径折叠整树；新建文件/文件夹；右键 Finder/复制路径/重命名/删除<br>• 写操作经鉴权 API + P.1；**不改**鉴权；不抢 D.1e<br>• Cursor 其余右键 → v0.2+ RFC 锚定（不实施） |
 | **TASK-C.10j** | 中栏 Markdown 预览阅读（默认预览 / 可切源码） | 工作台 UX | **[COMPLETED]**（tip `836ad6e`；**1311 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10i` COMPLETED<br>• `.md` 默认好看预览（标题/引用/GFM/代码高亮）；「预览|源码」切换<br>• 源码仍 Monaco + 既有保存门禁；非 md 无切换<br>• **不含**分栏预览/完整面包屑/完整 VS Code；不改鉴权；不抢 D.1e |
 | **TASK-C.10k** | 右栏只留双方对话（去工程师噪声；Cursor 右栏进 v0.2） | 工作台 UX | **[COMPLETED]**（tip `0da870c`；**1313 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10j` COMPLETED<br>• 去掉适配器/历史/元信息/说明书条/工具 JSON<br>• 保留对话+旅程卡+门禁提示；自动开会话<br>• Cursor 右栏对齐 → v0.2 附录 B（不实施）<br>• **不含**整页复刻 Cursor；不改鉴权；不抢 D.1e |
+| **TASK-C.10l** | 设置「高级」可选会话/适配器（不回潮右栏） | 工作台 UX | **[COMPLETED]**（tip `TBD`；四件套 TBD） | P4 体验打磨 | • 前置 `C.10k` COMPLETED<br>• 高级内：助手下拉 / 新会话 / 历史会话；与右栏共享会话实例<br>• 右栏保持 C.10k 只留对话；元信息/工具 JSON 仍不展示<br>• **不含**改鉴权；不抢 D.1e；不整页复刻 Cursor |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -200,11 +204,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g ──► TASK-C.10h ──► TASK-C.10i ──► TASK-C.10j ──► TASK-C.10k ──► TASK-C.10l
               │                │                             │              │              │              │
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
-              建议序：C.10k 已合 · **右栏只留双方对话收口**
+              建议序：C.10l 已合 · **设置高级可选会话/适配器收口**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -293,7 +297,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10g", "to": "TASK-C.10h" },
   { "from": "TASK-C.10h", "to": "TASK-C.10i" },
   { "from": "TASK-C.10i", "to": "TASK-C.10j" },
-  { "from": "TASK-C.10j", "to": "TASK-C.10k" }
+  { "from": "TASK-C.10j", "to": "TASK-C.10k" },
+  { "from": "TASK-C.10k", "to": "TASK-C.10l" }
 ]
 ```
 
@@ -1596,6 +1601,34 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   5. 四件套全绿；不打印 token。
 * **FAIL**：右栏仍堆工程师控件；或借机整页复刻 Cursor；或破坏鉴权/指挥面。
 
+
+
+#### 【Task C.10l】设置「高级」可选会话/适配器（不回潮右栏）`[COMPLETED]`
+* **任务编号**：`TASK-C.10l`
+* **前置依赖**：`TASK-C.10k` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main tip `TBD`；Tina 授权 t671u；四件套 **TBD**；tsc 0 / eslint 0 errors / build 通过）
+* **对照痛点**：C.10k 从右栏去掉适配器/新会话/历史后，工程师偶发仍需换助手或切历史；不宜塞回右栏主视线，也不宜塞进老板设置主路径。
+* **v0.1 范围（施工合同）**：
+  1. **位置**：设置页「高级」（`settings-advanced`）内新增「对话助手」区（`settings-chat-session`）。
+  2. **控件**：助手（适配器）下拉、新会话、历史会话下拉——语义对齐 C.10k 移除前右栏能力。
+  3. **共享状态**：Console 上提 `useAgentSession`，注入右栏与设置，保证换会话两边一致。
+  4. **右栏纪律**：保持 C.10k——主视线只留双方对话；不回潮工程师控件。
+  5. **仍不展示**：会话元信息（adapter id / 原生会话 / 首字耗时）、工具调用 JSON——不进设置、不进右栏。
+  6. **纪律**：不改鉴权；不抢 D.1e；不打印 token。
+* **明确不包含**：把说明书条/工具 JSON/会话元信息塞进设置；右栏恢复适配器条；整页复刻 Cursor 右栏。
+* **涉及核心文件（预期）**：
+  - `src/components/settings/SettingsTab.tsx`
+  - `src/components/AgentChatPane.tsx`（可选 `session` 注入）
+  - `src/routes/index.tsx`（上提共享会话）
+  - UI：`tests/ui/settings-tab.test.tsx`（并回归 `agent-chat-pane.test.tsx`）
+* **Pass/Fail 验收判定**（≤5）：
+  1. 设置高级展开可见「对话助手」；模型钥匙主视线无适配器/历史控件。
+  2. 右栏仍不可见「选择 Agent」/「历史会话」/「新会话」按钮。
+  3. 高级内点「新会话」会创建并切到新会话（与右栏同实例）。
+  4. 未注入时高级不出现对话助手区（单测 Settings 独立渲染）。
+  5. 四件套全绿；不打印 token。
+* **FAIL**：控件回潮右栏；或高级与右栏各管一份会话不同步；或改鉴权。
+
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
@@ -1921,7 +1954,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：C.10k 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.20。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
+> - **当前首要编码任务**：C.10l 已收口（合入后）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.21。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。

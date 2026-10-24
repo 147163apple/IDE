@@ -132,7 +132,10 @@ import {
 } from "@/components/supervisor-view-model";
 import { BossFastPathDesk } from "@/components/studio/BossFastPathDesk";
 import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
-import type { AgentSessionTransport } from "@/hooks/use-agent-session";
+import {
+  useAgentSession,
+  type AgentSessionTransport,
+} from "@/hooks/use-agent-session";
 import type { ChatEvent } from "@/lib/chat-events";
 import {
   APPROVED_STATES,
@@ -546,6 +549,9 @@ function Console() {
         : null,
     [connected, conn],
   );
+
+  // C.10l：右栏与设置「高级」共用同一会话实例
+  const chatSession = useAgentSession(chatTransport);
 
   /** 把 Daemon 质疑报告压成控制台视图（TASK-S.6 / S.5） */
   const toDisputeView = useCallback(
@@ -1572,6 +1578,7 @@ function Console() {
           // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
           <AgentChatPane
             transport={chatTransport}
+            session={chatSession}
             onBeforeSend={handleJourneyBeforeSend}
             journeyCards={journeyCards}
             journeyBusy={journeyBusy}
@@ -1854,6 +1861,17 @@ function Console() {
                     setSettingsDeepFocus(null);
                   }
                 : undefined
+            }
+            chatSession={
+              chatTransport
+                ? {
+                    adapters: chatSession.adapters,
+                    sessions: chatSession.sessions,
+                    sessionId: chatSession.sessionId,
+                    newSession: chatSession.newSession,
+                    selectSession: chatSession.selectSession,
+                  }
+                : null
             }
           />
         }
