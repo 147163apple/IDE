@@ -294,6 +294,41 @@ export async function openRecentProject(
   });
 }
 
+/**
+ * TASK-C.8c：粘贴绝对路径打开（与 openRecentProject 同权；需已持有 Token）。
+ * Daemon 侧允许「当前 / 最近 / 已存在目录」；不含系统选择器。
+ */
+export async function openWorkspaceByPath(
+  conn: DaemonConnection,
+  projectPath: string,
+): Promise<OpenRecentProjectResult> {
+  return openRecentProject(conn, projectPath);
+}
+
+/**
+ * TASK-C.8c：无钥匙冷开自救——不带 Authorization，仅唤起「当前」Daemon 工作区。
+ * 成功后用返回的 launchUrl（含 #token=）整页跳转；调用方勿把 Token 打进日志/UI。
+ */
+export async function relaunchCurrentSession(
+  baseUrl?: string,
+): Promise<OpenRecentProjectResult> {
+  const url = `${normalizeBaseUrl(baseUrl ?? loadConnection().baseUrl)}/api/session/relaunch`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+  });
+  const textBody = await res.text();
+  const body = textBody ? (JSON.parse(textBody) as unknown) : {};
+  if (!res.ok) {
+    const message =
+      typeof body === "object" && body && "error" in body
+        ? String((body as { error: unknown }).error)
+        : `HTTP ${res.status}`;
+    throw new DaemonApiError(res.status, message);
+  }
+  return body as OpenRecentProjectResult;
+}
+
 export async function listContracts(
   conn: DaemonConnection,
 ): Promise<SoftwareContract[]> {

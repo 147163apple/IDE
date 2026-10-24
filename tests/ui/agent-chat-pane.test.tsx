@@ -144,7 +144,44 @@ describe("TASK-C.6 右栏 AgentChatPane", () => {
 
   it("未连接时显示提示", () => {
     render(<AgentChatPane transport={null} />);
-    expect(screen.getByTestId("agent-chat")).toHaveTextContent("还没连上工作台");
+    expect(screen.getByTestId("agent-chat")).toHaveTextContent(
+      "还没连上工作台",
+    );
+  });
+
+  it("C.8c：一点重开会打 /api/session/relaunch 并跳转（不打印 token）", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          path: "/tmp/x",
+          port: 3001,
+          reused: true,
+          sameOrigin: true,
+          uiUrl: "http://127.0.0.1:3001",
+          launchUrl: "http://127.0.0.1:3001/#token=secretrescue",
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    sessionStorage.setItem("stagent.baseUrl", "http://127.0.0.1:3001");
+
+    render(<AgentChatPane transport={null} />);
+    fireEvent.click(screen.getByTestId("chat-relaunch-with-token"));
+    await waitFor(() => {
+      expect(assign).toHaveBeenCalledWith(
+        "http://127.0.0.1:3001/#token=secretrescue",
+      );
+    });
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      "/api/session/relaunch",
+    );
+    const init = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+    const headers = init?.headers as Record<string, string> | undefined;
+    expect(headers?.authorization ?? headers?.Authorization).toBeUndefined();
+    vi.unstubAllGlobals();
   });
 });
 
@@ -176,12 +213,13 @@ describe("foldChatEvents", () => {
   });
 });
 
-describe("TASK-C.6 未连接与可见标签（白话）", () => {
-  it("未连接时给出白话提示：用带钥匙的链接打开，或去设置粘贴", () => {
+describe("TASK-C.6 / C.8c 未连接与可见标签（白话）", () => {
+  it("未连接时给一键重开，而不是只甩说明书", () => {
     render(<AgentChatPane transport={null} />);
     const box = screen.getByRole("status");
     expect(box.textContent).toContain("还没连上工作台");
     expect(box.textContent).toContain("钥匙");
+    expect(screen.getByTestId("chat-relaunch-with-token")).toBeInTheDocument();
     expect(box.textContent).toContain("设置");
   });
   it("Agent 下拉框旁有可见文字「AI 助手：」", async () => {

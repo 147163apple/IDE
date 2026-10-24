@@ -2015,9 +2015,60 @@ export class StagentDaemon {
   }
 
   /**
-   * TASK-D.1c：最近项目列表与一点重开。
+   * TASK-C.8c：无钥匙冷开自救。
+   * POST /api/session/relaunch —— 不要求 Bearer（调用方恰恰没有钥匙）。
+   * 仅返回「当前」Daemon 工作区的带 #token= launchUrl；不开放任意路径；
+   * 不打印 Token；Daemon 本就只听 127.0.0.1。
+   */
+  private handleSessionRelaunch(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+  ): void {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    const token = this.getSessionToken();
+    if (!token || this.currentPort === null) {
+      this.sendJson(res, 503, {
+        error: "当前工作台尚未就绪，请稍后再试。",
+        code: "E_SESSION_NOT_READY",
+      });
+      return;
+    }
+    const launch = buildWorkspaceLaunchUrl(
+      { port: this.currentPort, token },
+      {
+        forceUiUrl: process.env["STAGENT_UI_URL"] !== undefined,
+        ...(process.env["STAGENT_UI_URL"]
+          ? { uiUrl: process.env["STAGENT_UI_URL"] }
+          : {}),
+      },
+    );
+    try {
+      recordRecentProject(this.repoRoot);
+    } catch {
+      // ignore
+    }
+    // 响应含 launchUrl（fragment 带 token）；仅本机回环可达；实现不得把 token 打进日志
+    this.sendJson(res, 200, {
+      path: this.repoRoot,
+      port: this.currentPort,
+      reused: true,
+      sameOrigin: launch.sameOrigin,
+      uiUrl: launch.uiUrl,
+      launchUrl: launch.launchUrl,
+    });
+  }
+
+  /**
+   * TASK-D.1c / C.8c：最近项目列表与打开。
    * - GET  /api/recent-projects
-   * - POST /api/recent-projects/open  { path }（仅允许最近列表内路径；不含任意路径选择器）
+   * - POST /api/recent-projects/open  { path }
+   *   · 当前工作区 / 最近列表：一点重开（D.1c）
+   *   · 其它已存在的绝对目录：粘贴路径打开（C.8c；仍需 AUTH + 回环）
+   *   · 明确不含系统文件夹选择器（D.1e）
    */
   private async handleRecentProjects(
     req: http.IncomingMessage,
@@ -2051,15 +2102,27 @@ export class StagentDaemon {
         return;
       }
       const resolved = path.resolve(rawPath);
-      // 当前工作区始终允许；其余必须已在最近列表（防浏览器任意开盘）
+      // 当前工作区 / 最近列表：D.1c 一点重开；其它路径：C.8c 粘贴打开（须存在且为目录）
       const isCurrent = resolved === this.repoRoot;
       if (!isCurrent && !isRecentProjectPath(resolved)) {
-        this.sendJson(res, 400, {
-          error:
-            "只能重开「最近项目」里的路径。新文件夹请先在终端执行：npx stagent open <路径>",
-          code: "E_NOT_RECENT_PROJECT",
-        });
-        return;
+        try {
+          if (
+            !fs.existsSync(resolved) ||
+            !fs.statSync(resolved).isDirectory()
+          ) {
+            this.sendJson(res, 400, {
+              error: `找不到这个文件夹：${resolved}`,
+              code: "E_PATH_NOT_FOUND",
+            });
+            return;
+          }
+        } catch {
+          this.sendJson(res, 400, {
+            error: `打不开这个路径：${resolved}`,
+            code: "E_PATH_NOT_FOUND",
+          });
+          return;
+        }
       }
 
       try {
@@ -2491,6 +2554,12 @@ export class StagentDaemon {
         activeContracts: [...this.activeContracts],
       };
       this.sendJson(res, 200, payload);
+      return;
+    }
+
+    // TASK-C.8c：无钥匙一键重开（故意不要求 AUTH）
+    if (pathname === "/api/session/relaunch") {
+      this.handleSessionRelaunch(req, res, method);
       return;
     }
 

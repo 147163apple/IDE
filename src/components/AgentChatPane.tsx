@@ -7,6 +7,7 @@ import {
   hasRealAssistantAvailable,
   pickPreferredAdapterId,
 } from "@/lib/pick-chat-adapter";
+import { relaunchCurrentSession } from "@/lib/daemon-api";
 
 export interface JourneyChatCard {
   id: string;
@@ -48,6 +49,8 @@ export function AgentChatPane({
   const [draft, setDraft] = useState("");
   const [adapterId, setAdapterId] = useState<string>("");
   const [routing, setRouting] = useState(false);
+  const [relaunchBusy, setRelaunchBusy] = useState(false);
+  const [relaunchError, setRelaunchError] = useState<string | null>(null);
   const current = chat.sessions.find((s) => s.id === chat.sessionId);
   // 下拉框默认跟随「当前打开的会话」所用的助手；否则优先真助手，演示仅兜底（C.8a）
   const currentAdapterAvailable = chat.adapters.some(
@@ -69,6 +72,21 @@ export function AgentChatPane({
   }, [chat.sessionId]);
 
   if (!transport) {
+    const doRelaunch = () => {
+      setRelaunchBusy(true);
+      setRelaunchError(null);
+      void relaunchCurrentSession()
+        .then((result) => {
+          window.location.assign(result.launchUrl);
+        })
+        .catch((err) => {
+          setRelaunchError(
+            (err as Error).message ||
+              "一键重开失败。可点左栏「打开项目」，或到设置粘贴钥匙。",
+          );
+          setRelaunchBusy(false);
+        });
+    };
     return (
       <div
         data-testid="agent-chat"
@@ -77,10 +95,29 @@ export function AgentChatPane({
       >
         <p className="font-semibold">还没连上工作台，暂时不能和助手对话。</p>
         <p className="mt-2">
-          请用打开项目时自动弹出的链接进入（地址里会带着本次访问钥匙）。
+          多半是这个标签页没带上访问钥匙。先点下面一键重开——不必去终端，也不必手拷
+          Token。
         </p>
-        <p className="mt-2 opacity-80">
-          为了安全，钥匙只在当前这个浏览器标签页里有效。也可以点左下角 ⚙️
+        <button
+          type="button"
+          data-testid="chat-relaunch-with-token"
+          disabled={relaunchBusy}
+          onClick={doRelaunch}
+          className="mt-3 w-full rounded border border-amber-700/50 bg-background px-3 py-2 text-left font-medium hover:bg-accent disabled:opacity-50"
+        >
+          {relaunchBusy ? "正在重开…" : "一键重开（带钥匙）"}
+        </button>
+        {relaunchError ? (
+          <p
+            role="alert"
+            data-testid="chat-relaunch-error"
+            className="mt-2 text-destructive"
+          >
+            {relaunchError}
+          </p>
+        ) : null}
+        <p className="mt-3 opacity-80">
+          若按钮失败：可点左栏「打开项目」自救；或点左下角 ⚙️
           设置，把钥匙粘贴进去再点「应用」。
         </p>
       </div>

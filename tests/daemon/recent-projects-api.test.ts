@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import http from "node:http";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
-import { recordRecentProject } from "../../daemon/core/recent-projects";
 
 function requestJson<T>(
   url: string,
@@ -125,7 +124,7 @@ describe("TASK-D.1c recent-projects API", () => {
     expect(opened.body.launchUrl).toContain(token!);
   });
 
-  it("非最近路径拒绝；锁冲突白话 409", async () => {
+  it("C.8c：粘贴已存在目录可打开；不存在则 E_PATH_NOT_FOUND；锁冲突白话 409", async () => {
     daemon = createDaemon({
       repoRoot: repo,
       startPort: 3621,
@@ -140,22 +139,21 @@ describe("TASK-D.1c recent-projects API", () => {
       "content-type": "application/json",
     };
 
+    const missing = path.join(os.tmpdir(), `stagent-missing-${Date.now()}`);
+    const denied = await requestJson<{ error: string; code?: string }>(
+      `${base}/api/recent-projects/open`,
+      {
+        method: "POST",
+        headers: auth,
+        body: JSON.stringify({ path: missing }),
+      },
+    );
+    expect(denied.status).toBe(400);
+    expect(denied.body.code).toBe("E_PATH_NOT_FOUND");
+
     const other = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-d1c-other-"));
     try {
-      const denied = await requestJson<{ error: string; code?: string }>(
-        `${base}/api/recent-projects/open`,
-        {
-          method: "POST",
-          headers: auth,
-          body: JSON.stringify({ path: other }),
-        },
-      );
-      expect(denied.status).toBe(400);
-      expect(denied.body.code).toBe("E_NOT_RECENT_PROJECT");
-      expect(denied.body.error).toMatch(/最近项目|stagent open/);
-
-      // 写入最近列表后，制造「进程在跑但不健康」的锁 → 409
-      recordRecentProject(other, { homeDir: home });
+      // 制造「进程在跑但不健康」的锁 → 409（无需先入最近列表；C.8c 允许粘贴）
       const stagentDir = path.join(other, ".stagent");
       fs.mkdirSync(stagentDir, { recursive: true });
       fs.writeFileSync(
@@ -185,5 +183,32 @@ describe("TASK-D.1c recent-projects API", () => {
     } finally {
       fs.rmSync(other, { recursive: true, force: true });
     }
+  });
+
+  it("C.8c：无钥匙可 POST /api/session/relaunch 拿到 launchUrl", async () => {
+    daemon = createDaemon({
+      repoRoot: repo,
+      startPort: 3631,
+      endPort: 3640,
+      consolePublicDir: null,
+    });
+    const info = await daemon.start();
+    const token = daemon.getSessionToken()!;
+    const base = `http://127.0.0.1:${info.port}`;
+
+    const relaunch = await requestJson<{
+      launchUrl: string;
+      path: string;
+      reused: boolean;
+    }>(`${base}/api/session/relaunch`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+    });
+    expect(relaunch.status).toBe(200);
+    expect(relaunch.body.path).toBe(path.resolve(repo));
+    expect(relaunch.body.reused).toBe(true);
+    expect(relaunch.body.launchUrl).toContain("#token=");
+    expect(relaunch.body.launchUrl).not.toContain("?token=");
+    expect(relaunch.body.launchUrl).toContain(token);
   });
 });
