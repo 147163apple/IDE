@@ -82,7 +82,11 @@ function Node({
         <ContextMenuItem
           data-testid={`file-tree-delete-${node.path}`}
           className="text-destructive focus:text-destructive"
-          onSelect={() => onRequestDelete(node.path, kind)}
+          onSelect={() => {
+            // Radix ContextMenu 关闭时会短暂给 body 加 pointer-events:none；
+            // 若同步打开 AlertDialog，确认/取消会点不了。延后一帧等菜单卸完。
+            window.setTimeout(() => onRequestDelete(node.path, kind), 0);
+          }}
         >
           {menuLabel}
         </ContextMenuItem>
