@@ -1,4 +1,5 @@
 
+- **P-57（C.10j 后打开文件无法关闭热修，2026-10-24）**：Tina 打开文件后无法关闭标签。根因：**不是** Markdown 预览挡住关按钮——文件 Tab 在 `FileTree.onOpen` / `openRequest` / 重命名重开时未设 `closable: true`，顶栏 × 根本不渲染（系统 Tab 才显式 closable）。热修：`fileTab()` 统一补 closable；渲染侧非系统 Tab 默认可关 `(closable ?? !system)`；补 UI 用例。合入 tip `09fdcfd`；四件套 **1313 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.19。**不改**鉴权；不抢 D.1e。
 - **P-56（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10j`**（中栏 Markdown 预览阅读：打开 `.md` 默认好看预览含标题/引用/GFM/代码高亮；可切源码编辑；对齐 Cursor 阅读感，不做完整 VS Code）。同步：版本头第 46 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10i→C.10j`）、§3.4 详细卡、Sprint「当前首要」→ **C.10j**；走查报告 §6.18；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e；不重做 Monaco 保存门禁。
 - **P-55（立卡+实现，2026-10-24）**：新增 **`TASK-C.10i`**（文件树第一批：顶栏路径折叠整树；新建文件/文件夹；右键「在 Finder 显示 / 复制路径 / 重命名 / 删除」）。Cursor 其余右键（Chat/终端/对比/时间线/浏览器打开等）**仅**写入 v0.2+ RFC 锚定，**不实施**、不推翻现架构。同步：版本头第 45 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10h→C.10i`）、§3.4 详细卡、Sprint「当前首要」→ **C.10i**；走查报告 §6.17；架构规范 §11 注记 9 轻量续写。**不改**鉴权；**不抢** D.1e。
 - **P-54（C.10h 删除 Not Found 热修，2026-10-24）**：Tina 确认删除后对话框显示「Not Found」、文件未删。根因：**不是**前后端路径不一致——源码双方都是 `POST /api/repo/delete`；而是 Daemon 于 C.10h 合入前（~13:14）启动，`stagent open` 健康检查通过后**复用旧进程**，路由未挂到活进程（活探针：`/api/repo/tree` 200、`/api/repo/delete` 404）。热修：① `isDaemonCodeStale` + `tryReuseRunningDaemon` 发现 `daemon/server.ts` / `repo-delete.ts` mtime 新于 `startedAt` 则 shutdown/SIGTERM 退役再启；② 前端 404 改白话「本机服务还是旧版…重新打开」；③ 实测删除走废纸篓。四件套 **1295 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。对照走查 §6.16。
@@ -60,13 +61,14 @@
 > 44. **状态回写（2026-10-24 · C.10h 删除 Not Found 热修）**：确认删除回「Not Found」——活 Daemon 复用旧进程致 `POST /api/repo/delete` 未挂（路径在源码一致）。退役偏斜 Daemon + 404 白话；四件套 **1295 passed / 6 skipped**。对照走查 §6.16。
 > 45. **状态回写（2026-10-24 · 立卡并实现 TASK-C.10i · 文件树第一批）**：Tina 授权第一批——点顶栏路径折叠整树；顶栏右侧新建文件/文件夹；右键含「在 Finder 中显示 / 复制路径 / 重命名 / 删除（已有）」。新增 **`TASK-C.10i`**（**COMPLETED**，tip `5388f9c`）。Cursor 其余右键菜单项（加进 Chat、在集成终端中打开、选择以进行比较、打开时间线、在浏览器中打开等）写入 **v0.2+ RFC 锚定（不实施）**，不推翻现架构。前置：`TASK-C.10h` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.17。架构规范仅 §11 注记 9 轻量锚定延续。
 > 46. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10j · 中栏 Markdown 预览阅读）**：Tina 授权（t666u）复刻 Cursor 式 Markdown 阅读。新增 **`TASK-C.10j`** 并收口为 **`[COMPLETED]`**（合入 tip `836ad6e`；四件套 **1311 passed / 6 skipped**）。交付：打开 `.md`/`.markdown`/`.mdx` 默认好看预览（标题/引用/GFM 表格/代码高亮）；顶栏「预览|源码」切换；源码仍走 Monaco + 既有保存门禁；非 Markdown 不出现切换。前置：`TASK-C.10i` COMPLETED。**不改**鉴权；**不抢** D.1e；不做分栏预览/完整面包屑/完整 VS Code。对照走查报告 §6.18。架构规范仅 §11 注记 9 轻量锚定延续。
+> 47. **状态回写（2026-10-24 · 打开文件无法关闭热修）**：文件 Tab 漏设 `closable`，× 不渲染；与 C.10j Markdown 预览无关。合入 tip `09fdcfd`；四件套 **1313 passed / 6 skipped**。对照走查 §6.19。
 > 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1311 passed / 6 skipped**）。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1313 passed / 6 skipped**）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
