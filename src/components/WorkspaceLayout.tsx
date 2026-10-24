@@ -14,6 +14,12 @@ import {
   type RunMode,
 } from "./workspace-types";
 import type { CommandSurface } from "../lib/command-surface";
+import {
+  CHAT_VS_EDIT_PLAIN,
+  shouldAutoOpenStudioForProgress,
+  shouldYieldMiddleWelcome,
+  type SettingsDeepFocus,
+} from "../lib/middle-yield";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
 /** Supervisor 审阅 Tab（左下角图标入口打开；中央阅读区，可关闭） */
@@ -73,6 +79,15 @@ export interface WorkspaceLayoutProps {
    * nonce 变化即触发，与 openStudioRequest 同模式。
    */
   openSettingsRequest?: number;
+  /**
+   * C.9d：从 Key 向导打开设置时深链到模型钥匙区。
+   * 与 openSettingsRequest 同次递增时生效。
+   */
+  settingsDeepFocus?: SettingsDeepFocus | null | undefined;
+  /**
+   * C.9d：外部请求关闭设置 Tab（配完钥匙一键回跳）。
+   */
+  closeSettingsRequest?: number | undefined;
   /** 中栏顶部横幅（Evidence STALE 等） */
   middleBanner?: ReactNode;
   /**
@@ -237,6 +252,38 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     openSettings();
   }, [settingsReq]);
 
+  const closeSettingsReq = props.closeSettingsRequest;
+  useEffect(() => {
+    if (!closeSettingsReq) return;
+    setTabs((t) => {
+      const next = t.filter((x) => x.id !== SETTINGS_TAB_ID);
+      setActiveTab((cur) =>
+        cur === SETTINGS_TAB_ID ? (next.at(-1)?.id ?? null) : cur,
+      );
+      return next;
+    });
+    setRightOpen(true);
+  }, [closeSettingsReq]);
+
+  // C.9d：三步台/保护确认进行中 → 自动打开 Studio，欢迎页让路
+  const progressCta = props.commandSurface?.primaryCtaTestId;
+  const progressPhase = props.commandSurface?.phase;
+  useEffect(() => {
+    if (progressPhase !== "in_progress") return;
+    if (
+      !shouldAutoOpenStudioForProgress(
+        progressCta === "boss-fastpath-confirm" ||
+          progressCta === "protection-confirm-approve"
+          ? progressCta
+          : undefined,
+      )
+    ) {
+      return;
+    }
+    openStudio();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅相位/CTA 变化时开 Studio
+  }, [progressPhase, progressCta]);
+
   const studio = (
     <div
       data-testid="studio-pane"
@@ -264,6 +311,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const settings = (
     <div
       data-testid="settings-pane"
+      data-deep-focus={props.settingsDeepFocus ?? undefined}
       className="h-full min-h-0 flex-1 overflow-auto"
     >
       {props.settingsContent ?? (
@@ -441,6 +489,14 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         >
           {props.middleBanner}
           {props.confirmSlot}
+          {props.runMode === "PROTECTED" ? (
+            <p
+              data-testid="chat-vs-edit-plain"
+              className="border-b border-border/60 bg-muted/20 px-3 py-1 text-[11px] leading-relaxed text-muted-foreground"
+            >
+              {CHAT_VS_EDIT_PLAIN}
+            </p>
+          ) : null}
           <div role="tablist" className="flex gap-1 border-b px-2 text-sm">
             {tabs.map((t) => (
               <span key={t.id} className="flex items-center">
@@ -485,7 +541,20 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
             className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
             {showWelcome ? (
-              welcome
+              shouldYieldMiddleWelcome(surface?.phase) ? (
+                <div
+                  data-testid="middle-yield"
+                  data-command-phase="in_progress"
+                  className="mx-auto flex h-full max-w-xl flex-col justify-center gap-3 p-8 text-sm leading-relaxed"
+                >
+                  <p className="font-medium">进行中：中栏已让路</p>
+                  <p className="text-xs opacity-80">
+                    请看上方确认卡、中间三步台，或右侧对话。欢迎页不再占主视线。
+                  </p>
+                </div>
+              ) : (
+                welcome
+              )
             ) : split ? (
               <SplitPaneContainer left={editorFor(lastFile)} right={studio} />
             ) : isStudio ? (

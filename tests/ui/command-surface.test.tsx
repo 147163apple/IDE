@@ -161,12 +161,9 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
       "data-phase",
       "in_progress",
     );
-    expect(screen.getByTestId("welcome-pane")).toHaveAttribute(
-      "data-welcome-variant",
-      "yield",
-    );
-    expect(screen.getByTestId("welcome-command")).toHaveTextContent("进行中");
-    expect(screen.queryByTestId("welcome-new-requirement")).toBeNull();
+    // C.9d：进行中中栏让路，不再渲染 IDE 欢迎页
+    expect(screen.getByTestId("middle-yield")).toBeInTheDocument();
+    expect(screen.queryByTestId("welcome-pane")).toBeNull();
     expect(screen.getByTestId("command-surface")).toHaveAttribute(
       "data-primary-cta",
       "journey-active",

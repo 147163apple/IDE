@@ -11,6 +11,10 @@ import {
 import type { DaemonConnection } from "@/lib/daemon-api";
 import { normalizeSessionToken } from "@/lib/daemon-api";
 import type { RunMode, WorkerControl } from "@/components/workspace-types";
+import {
+  SETTINGS_MODEL_KEY_TEST_ID,
+  type SettingsDeepFocus,
+} from "@/lib/middle-yield";
 
 /**
  * 设置页（中央 Tab）。
@@ -42,6 +46,10 @@ export interface SettingsTabProps {
   onUndoRound?: (() => void) | undefined;
   undoBusy?: boolean;
   onRefresh?: (() => void) | undefined;
+  /** C.9d：从 Key 向导深链到模型钥匙区 */
+  focusSection?: SettingsDeepFocus | null | undefined;
+  /** C.9d：配完钥匙一键回跳右栏主路径 */
+  onReturnToChat?: (() => void) | undefined;
 }
 
 function Section({
@@ -96,10 +104,25 @@ export function SettingsTab({
   onUndoRound,
   undoBusy = false,
   onRefresh,
+  focusSection = null,
+  onReturnToChat,
 }: SettingsTabProps) {
   const [draft, setDraft] = useState(conn);
   // 外部连接被换掉（例如 Token 从 URL fragment 注入）时同步草稿
   useEffect(() => setDraft(conn), [conn]);
+
+  useEffect(() => {
+    if (focusSection !== "model-key") return;
+    const el = document.querySelector(
+      `[data-testid="${SETTINGS_MODEL_KEY_TEST_ID}"]`,
+    );
+    if (el && typeof (el as HTMLElement).scrollIntoView === "function") {
+      (el as HTMLElement).scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [focusSection]);
 
   const enforced = workerControl === "GATEWAY_ENFORCED";
   const dirty = draft.baseUrl !== conn.baseUrl || draft.token !== conn.token;
@@ -122,6 +145,16 @@ export function SettingsTab({
         <p className="text-xs opacity-70">
           连接、诊断与开关都在这里；顶栏只保留项目名、分支与模式。
         </p>
+        {onReturnToChat ? (
+          <button
+            type="button"
+            data-testid="settings-return-to-chat"
+            onClick={onReturnToChat}
+            className="mt-1 rounded border border-border bg-background px-2 py-1 text-xs hover:bg-accent"
+          >
+            配完了，返回对话
+          </button>
+        ) : null}
       </header>
 
       <Section

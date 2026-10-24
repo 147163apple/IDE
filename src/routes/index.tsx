@@ -254,6 +254,11 @@ function Console() {
    */
   const [studioNonce, setStudioNonce] = useState(0);
   const [settingsNonce, setSettingsNonce] = useState(0);
+  const [settingsDeepFocus, setSettingsDeepFocus] = useState<
+    "model-key" | null
+  >(null);
+  const [settingsReturnArmed, setSettingsReturnArmed] = useState(false);
+  const [closeSettingsNonce, setCloseSettingsNonce] = useState(0);
   /** TASK-C.9b：右栏助手模式 → 中栏同口径提示 */
   const [assistantMode, setAssistantMode] =
     useState<AssistantModeSurface | null>(null);
@@ -1557,7 +1562,11 @@ function Console() {
             journeyCards={journeyCards}
             journeyBusy={journeyBusy}
             keyConfigured={settings?.configured === true}
-            onConfigureKey={() => setSettingsNonce((n) => n + 1)}
+            onConfigureKey={() => {
+              setSettingsDeepFocus("model-key");
+              setSettingsReturnArmed(true);
+              setSettingsNonce((n) => n + 1);
+            }}
             commandPhase={commandSurface.phase}
             primaryCtaTestId={commandSurface.primaryCtaTestId}
             onAssistantModeChange={setAssistantMode}
@@ -1649,6 +1658,8 @@ function Console() {
         }
         openStudioRequest={studioNonce}
         openSettingsRequest={settingsNonce}
+        settingsDeepFocus={settingsDeepFocus}
+        closeSettingsRequest={closeSettingsNonce}
         commandSurface={commandSurface}
         terminalPanel={
           // 底栏抽屉式 SmartTerminal，数据源与 Studio 内终端一致
@@ -1755,6 +1766,16 @@ function Console() {
             }
             undoBusy={protectionBusy}
             onRefresh={() => void refresh()}
+            focusSection={settingsDeepFocus}
+            onReturnToChat={
+              settingsReturnArmed
+                ? () => {
+                    setCloseSettingsNonce((n) => n + 1);
+                    setSettingsReturnArmed(false);
+                    setSettingsDeepFocus(null);
+                  }
+                : undefined
+            }
           />
         }
         banner={
