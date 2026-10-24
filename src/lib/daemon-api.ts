@@ -603,13 +603,25 @@ export async function deleteRepoPath(
   relPath: string,
   contractId?: string | null,
 ): Promise<RepoDeleteResult> {
-  return request<RepoDeleteResult>(conn, "/api/repo/delete", {
-    method: "POST",
-    body: JSON.stringify({
-      path: relPath,
-      ...(contractId ? { contract_id: contractId } : {}),
-    }),
-  });
+  try {
+    return await request<RepoDeleteResult>(conn, "/api/repo/delete", {
+      method: "POST",
+      body: JSON.stringify({
+        path: relPath,
+        ...(contractId ? { contract_id: contractId } : {}),
+      }),
+    });
+  } catch (err) {
+    // C.10h 热修：旧 Daemon 被复用时路由未挂，服务端回 {error:"Not Found"}。
+    // 给老板一句能照着做的话，而不是裸 Not Found。
+    if (err instanceof DaemonApiError && err.status === 404) {
+      throw new DaemonApiError(
+        404,
+        "本机服务还是旧版，还没有删除接口。请关掉后重新打开项目，再试一次。",
+      );
+    }
+    throw err;
+  }
 }
 
 export interface ModelSettings {

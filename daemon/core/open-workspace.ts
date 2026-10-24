@@ -5,7 +5,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { isProcessRunning, PidLockError, readPidLock } from "./pid-lock";
+import {
+  isProcessRunning,
+  PidLockError,
+  readPidLock,
+  releasePidLock,
+} from "./pid-lock";
 import { readSessionToken } from "./session-token";
 import {
   canHostConsoleLocally,
@@ -20,8 +25,82 @@ export interface WorkspaceSession {
 
 export type FetchLike = (
   input: string,
-  init?: { signal?: AbortSignal },
+  init?: {
+    method?: string;
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
+  },
 ) => Promise<Response>;
+
+/**
+ * C.10h 热修：若 Daemon 源码比进程启动时间新，复用会把旧进程留下的缺口
+ * （例如缺 POST /api/repo/delete）暴露成前端「Not Found」。
+ * 探针选关键路由文件；mtime > startedAt 则视为需退役。
+ */
+export const DAEMON_CODE_SKEW_PROBE_FILES = [
+  "daemon/server.ts",
+  "daemon/editor/repo-delete.ts",
+] as const;
+
+export function isDaemonCodeStale(args: {
+  packageRoot: string;
+  startedAt: string;
+}): boolean {
+  const startedMs = Date.parse(args.startedAt);
+  if (!Number.isFinite(startedMs)) return false;
+  for (const rel of DAEMON_CODE_SKEW_PROBE_FILES) {
+    const abs = path.join(args.packageRoot, rel);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      if (fs.statSync(abs).mtimeMs > startedMs) return true;
+    } catch {
+      // ignore unreadable probe
+    }
+  }
+  return false;
+}
+
+async function retireStaleDaemon(args: {
+  repo: string;
+  port: number;
+  pid: number;
+  token: string;
+  fetchImpl: FetchLike;
+}): Promise<void> {
+  try {
+    await args.fetchImpl(`http://127.0.0.1:${args.port}/api/shutdown`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${args.token}`,
+        "content-type": "application/json",
+      },
+      signal: AbortSignal.timeout(2000),
+    });
+  } catch {
+    // 关机请求失败仍继续 SIGTERM
+  }
+  const deadline = Date.now() + 4_000;
+  while (Date.now() < deadline && isProcessRunning(args.pid)) {
+    await sleep(200);
+  }
+  if (isProcessRunning(args.pid)) {
+    try {
+      process.kill(args.pid, "SIGTERM");
+    } catch {
+      // ignore
+    }
+    await sleep(500);
+  }
+  if (isProcessRunning(args.pid)) {
+    try {
+      process.kill(args.pid, "SIGKILL");
+    } catch {
+      // ignore
+    }
+    await sleep(200);
+  }
+  await releasePidLock(args.repo, true);
+}
 
 export type SpawnLike = (
   command: string,
@@ -40,6 +119,7 @@ export type SpawnLike = (
 export async function tryReuseRunningDaemon(
   repo: string,
   fetchImpl: FetchLike = fetch,
+  options: { packageRoot?: string } = {},
 ): Promise<{ port: number; token: string } | null> {
   const lock = readPidLock(repo);
   if (!lock || !isProcessRunning(lock.pid)) {
@@ -49,6 +129,24 @@ export async function tryReuseRunningDaemon(
   if (!token) {
     return null;
   }
+
+  const packageRoot = options.packageRoot ?? resolvePackageRoot();
+  if (
+    isDaemonCodeStale({
+      packageRoot,
+      startedAt: lock.startedAt,
+    })
+  ) {
+    await retireStaleDaemon({
+      repo,
+      port: lock.port,
+      pid: lock.pid,
+      token,
+      fetchImpl,
+    });
+    return null;
+  }
+
   try {
     const res = await fetchImpl(`http://127.0.0.1:${lock.port}/health`, {
       signal: AbortSignal.timeout(1500),
@@ -95,7 +193,10 @@ export async function ensureWorkspaceSession(
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const reused = await tryReuseRunningDaemon(resolved, fetchImpl);
+  const packageRoot = options.packageRoot ?? resolvePackageRoot();
+  const reused = await tryReuseRunningDaemon(resolved, fetchImpl, {
+    packageRoot,
+  });
   if (reused) {
     return { port: reused.port, token: reused.token, reused: true };
   }
@@ -109,8 +210,6 @@ export async function ensureWorkspaceSession(
       repoRoot: lock.repoRoot,
     });
   }
-
-  const packageRoot = options.packageRoot ?? resolvePackageRoot();
   const entry = path.join(packageRoot, "bin", "stagent.ts");
   if (!fs.existsSync(entry)) {
     throw new Error(`找不到 Stagent 入口：${entry}`);
@@ -134,7 +233,9 @@ export async function ensureWorkspaceSession(
   const deadline = Date.now() + (options.waitTimeoutMs ?? 20_000);
   const interval = options.pollIntervalMs ?? 250;
   while (Date.now() < deadline) {
-    const session = await tryReuseRunningDaemon(resolved, fetchImpl);
+    const session = await tryReuseRunningDaemon(resolved, fetchImpl, {
+      packageRoot,
+    });
     if (session) {
       return { port: session.port, token: session.token, reused: false };
     }
