@@ -192,3 +192,74 @@ export function seedDraftForm(draft: {
         : ["验证命令通过"],
   };
 }
+
+// ---------------------------------------------------------------------------
+// TASK-C.8b：Fast Path 老板三步台（仅呈现；不改准入/状态机）
+// ---------------------------------------------------------------------------
+
+/** 适合收成老板三步的合同：低风险、尚未进入执行期（或系统 Fast Path 签发） */
+export function isBossFastPathPresentation(
+  contract: SoftwareContract | null | undefined,
+): boolean {
+  if (!contract) return false;
+  // 只在确认前收成三步；执行期仍用完整台看进度 / 暂停
+  const preExec =
+    contract.lifecycle_state === "DRAFT" ||
+    contract.lifecycle_state === "PENDING_APPROVAL";
+  if (!preExec) return false;
+  return (
+    contract.intent.risk_level === "LOW" ||
+    contract.creator === "system:fast-path"
+  );
+}
+
+export interface BossFastPathStepSummary {
+  /** ① 改哪里（白话位置，非 Scope 工单） */
+  whereLabel: string;
+  wherePaths: string[];
+  /** ② 要不要动保护 */
+  touchesProtection: boolean;
+  protectionNames: string[];
+  protectionFiles: string[];
+  /** ③ 主按钮文案 */
+  confirmLabel: string;
+}
+
+/**
+ * 从合同/草案事实拼老板三步摘要。只搬字段，不改准入。
+ * 保护命中优先用草案 plan；否则用 admission / 空。
+ */
+export function buildBossFastPathSummary(input: {
+  title: string;
+  writablePaths: string[];
+  needsProtectionApproval?: boolean | undefined;
+  protectedEntryNames?: string[] | undefined;
+  protectedFiles?: string[] | undefined;
+}): BossFastPathStepSummary {
+  const paths = input.writablePaths.map(humanizePathForBoss).filter(Boolean);
+  const names = [...(input.protectedEntryNames ?? [])];
+  const files = [...(input.protectedFiles ?? [])];
+  const touches =
+    input.needsProtectionApproval === true ||
+    names.length > 0 ||
+    files.length > 0;
+  return {
+    whereLabel: input.title.trim() || "这次小改",
+    wherePaths: paths.length > 0 ? paths : ["（范围待确认）"],
+    touchesProtection: touches,
+    protectionNames: names,
+    protectionFiles: files,
+    confirmLabel: "确认开改",
+  };
+}
+
+/** 把 `src/pages/**` 收成老板能扫一眼的位置，不删审计原值（原值仍在高级区） */
+export function humanizePathForBoss(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // 去掉末尾 /** 或 /*
+  const bare = trimmed.replace(/\/\*\*$/, "").replace(/\/\*$/, "");
+  if (bare === "src" || bare === ".") return "项目源码";
+  const leaf = bare.split("/").filter(Boolean).pop() ?? bare;
+  return leaf;
+}

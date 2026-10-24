@@ -112,11 +112,14 @@ import {
 } from "@/components/FileTreeSpecsSection";
 import type { TaskGraph } from "@/lib/graph/task-graph";
 import {
+  buildBossFastPathSummary,
+  isBossFastPathPresentation,
   shouldConfirmAdmission,
   seedDraftForm,
   toStudioDraft,
   toSupervisorContractView,
 } from "@/components/supervisor-view-model";
+import { BossFastPathDesk } from "@/components/studio/BossFastPathDesk";
 import type { WorktreeFileIO } from "@/hooks/useWorktreeFile";
 import type { AgentSessionTransport } from "@/hooks/use-agent-session";
 import type { ChatEvent } from "@/lib/chat-events";
@@ -616,7 +619,8 @@ function Console() {
 
         if (result.draft) {
           setDraft(result.draft);
-          setShowForm(true);
+          // 小事 Fast Path：默认不甩工程师合同表单，改由老板三步台确认开改
+          setShowForm(kind !== "FAST_PATH");
           setStudioNonce((n) => n + 1);
         }
 
@@ -1139,6 +1143,357 @@ function Console() {
       ? toSupervisorContractView(selected)
       : null;
 
+  /** TASK-C.8b：小事默认老板三步；大事仍走完整合同台（只看合同风险/态，不改准入） */
+  const bossSourceContract = draft?.contract ?? selected ?? null;
+  const bossMode = isBossFastPathPresentation(bossSourceContract);
+  const bossSummary =
+    bossMode && bossSourceContract
+      ? buildBossFastPathSummary({
+          title: bossSourceContract.intent.title,
+          writablePaths:
+            draft?.plan.writable_paths ??
+            bossSourceContract.authorization.file_system_scope.writable_paths,
+          needsProtectionApproval:
+            draft?.plan.needs_protection_approval === true ||
+            admission?.decision === "NEEDS_APPROVAL",
+          protectedEntryNames:
+            draft?.plan.protected_entry_names ?? admission?.entryNames ?? [],
+          protectedFiles:
+            draft?.plan.protected_files ?? admission?.protectedFiles ?? [],
+        })
+      : null;
+
+  const confirmBossFastPath = () => {
+    if (draft) {
+      const built = softwareContractSchema.parse({
+        ...draft.contract,
+        lifecycle_state: "PENDING_APPROVAL",
+        approval: { status: "PENDING_REVIEW" },
+        intent: {
+          ...draft.contract.intent,
+          risk_level: "LOW",
+        },
+      });
+      void runAction("create", async () => {
+        const saved = await createContractWithAdmission(conn, built);
+        setSelectedId(saved.contract.contract_id);
+        setShowForm(false);
+        setDraft(null);
+        applyAdmission(saved.admission);
+      });
+      return;
+    }
+    if (selected && selected.lifecycle_state === "PENDING_APPROVAL") {
+      void runAction("approve", async () => {
+        await approveContract(conn, selected.contract_id, "local-user");
+      });
+    }
+  };
+
+  const renderEngineerContractDesk = () => (
+    <>
+      <SupervisorStudioPane
+        runMode={
+          protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+        }
+        protectedEntries={protection?.entries ?? []}
+        draft={
+          draft
+            ? // 未提交草案优先：`toStudioDraft` 读的就是 `supervisor_metadata`，
+              // 所以白话理由 / 未决问题在这里同样不再是「（无）」
+              toStudioDraft(draft.contract)
+            : selected
+              ? toStudioDraft(selected)
+              : null
+        }
+        execution={
+          selected
+            ? {
+                contractId: selected.contract_id,
+                status: toExecutionStatus(selected.lifecycle_state),
+                workerControl: selected.worker_spec.control_mode,
+              }
+            : null
+        }
+        busy={busy !== null || protectionBusy}
+        onEmergencyPause={() => {
+          if (!selected) return;
+          void runAction("abort", async () => {
+            await abortContract(
+              conn,
+              selected.contract_id,
+              "local-user",
+              "Studio 紧急暂停",
+            );
+            setAdmission(null);
+          });
+        }}
+        onUnlockEntry={(id) => void onUnlockProtection(id)}
+      />
+      {showForm && (
+        <ContractForm
+          busy={busy === "create"}
+          initialPaths={scopeDraft}
+          draft={draft}
+          draftBusy={busy === "draft"}
+          onRequestDraft={requestDraft}
+          onCreate={(contract) =>
+            runAction("create", async () => {
+              const saved = await createContractWithAdmission(conn, contract);
+              setSelectedId(saved.contract.contract_id);
+              setShowForm(false);
+              // 草案已落盘成合同：清掉内存草案，避免与真实合同双份显示
+              setDraft(null);
+              applyAdmission(saved.admission);
+            })
+          }
+        />
+      )}
+
+      {!selected ? (
+        <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
+          选择左侧合同查看详情，或在雷达中圈选文件后新建合同
+        </div>
+      ) : (
+        <div className="space-y-4 p-4">
+          <ContractCard
+            contract={selected}
+            busy={busy === "approve"}
+            onApprove={(id) =>
+              void runAction("approve", async () => {
+                await approveContract(conn, id, "local-user");
+              })
+            }
+          />
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <ScopeList scope={selected.authorization.file_system_scope} />
+            <BudgetVisualizer
+              costLimits={selected.authorization.cost_limits}
+              budgetLimits={selected.authorization.budget_limits}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              disabled={
+                busy !== null || selected.lifecycle_state !== "EXECUTING"
+              }
+              onClick={() =>
+                runAction("worker", async () => {
+                  const result = await runWorker(conn, selected.contract_id);
+                  setWorkerResult(result);
+                })
+              }
+              className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+            >
+              {busy === "worker" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ShieldCheck className="h-3.5 w-3.5" />
+              )}
+              运行 Worker
+            </button>
+            <button
+              disabled={
+                busy !== null || selected.lifecycle_state !== "EXECUTING"
+              }
+              onClick={() =>
+                runAction("execute", async () => {
+                  const outcome = await executeContract(
+                    conn,
+                    selected.contract_id,
+                  );
+                  setEvidence(outcome.evidence);
+                })
+              }
+              className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+            >
+              {busy === "execute" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
+              执行验证
+            </button>
+            <button
+              disabled={
+                busy !== null || selected.lifecycle_state !== "PENDING_RESUME"
+              }
+              onClick={() =>
+                void runAction("resume", async () => {
+                  await resumeContract(conn, selected.contract_id);
+                })
+              }
+              className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
+            >
+              {busy === "resume" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              恢复执行
+            </button>
+            <button
+              disabled={
+                busy !== null ||
+                selected.lifecycle_state === "MERGED" ||
+                selected.lifecycle_state === "ABORTED"
+              }
+              onClick={() => {
+                const confirmed = window.confirm(
+                  `确认中止合同 ${selected.contract_id}？\n` +
+                    "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
+                );
+                if (!confirmed) return;
+                void runAction("abort", async () => {
+                  await abortContract(conn, selected.contract_id, "local-user");
+                  setEvidence(null);
+                });
+              }}
+              className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
+            >
+              {busy === "abort" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" />
+              )}
+              {selected.lifecycle_state === "PENDING_APPROVAL"
+                ? "驳回合同"
+                : "中止任务"}
+            </button>
+            <button
+              onClick={() =>
+                void runAction("diff", async () => {
+                  const [patch, files] = await Promise.all([
+                    fetchDiff(conn, selected.contract_id),
+                    fetchDiffFiles(conn, selected.contract_id).catch(
+                      () => null,
+                    ),
+                  ]);
+                  setDiff(patch);
+                  setDiffFiles(files);
+                })
+              }
+              className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
+            >
+              <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
+            </button>
+            <EditorOpener conn={conn} contractId={selected.contract_id} />
+            {busy && (
+              <span className="text-[10px] text-muted-foreground">
+                正在{busy}…
+              </span>
+            )}
+          </div>
+
+          {workerResult && (
+            <section className="rounded border border-border bg-card p-3">
+              <h3 className="text-sm font-semibold">Worker 执行记录</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                应用 {workerResult.changes.length} 个文件 · tokens{" "}
+                {workerResult.usage.inputTokens}↑ /{" "}
+                {workerResult.usage.outputTokens}↓
+              </p>
+              <ul className="mt-2 space-y-0.5 text-[11px]">
+                {workerResult.log.map((line) => (
+                  <li key={line} className="text-chart-2">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {selectedLogs.length > 0 && (
+            <section
+              data-testid="live-log"
+              className="rounded border border-border bg-card p-3"
+            >
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold">实时日志</h3>
+                <span className="text-[10px] text-muted-foreground">
+                  {selectedLogs.length} 行 · WebSocket 推送（保留最近 500 行）
+                </span>
+                <button
+                  onClick={stream.clearLogs}
+                  className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  清空
+                </button>
+              </div>
+              <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
+                {selectedLogs.map((line, i) => (
+                  <div key={`${line.at}-${i}`}>
+                    <span className="text-zinc-500">
+                      {line.at.slice(11, 19)}{" "}
+                    </span>
+                    {line.line}
+                  </div>
+                ))}
+              </pre>
+            </section>
+          )}
+
+          {diff && (
+            <DiffViewer
+              patch={diff.patch}
+              files={diffFiles?.files}
+              truncatedList={diffFiles?.truncatedList}
+            />
+          )}
+          {selected && (
+            <StructuredTerminal
+              lines={stream.terminal
+                .filter((t) => t.contractId === selected.contract_id)
+                .map((t) => ({
+                  stream: t.stream,
+                  line: t.line,
+                  at: t.at,
+                }))}
+            />
+          )}
+          {evidence && (
+            <>
+              <EvidenceChecklist
+                evidence={evidence}
+                busy={busy === "merge"}
+                onMerge={() =>
+                  void runAction("merge", async () => {
+                    const result = await mergeContract(
+                      conn,
+                      selected.contract_id,
+                      evidence.evidence_id,
+                      "local-user",
+                    );
+                    setMergeInfo(
+                      result.nothingToMerge
+                        ? (result.message ??
+                            "本轮改动与你的修改冲突，已全部以你为准")
+                        : `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
+                            result.worktreeRemoved ? "已清理" : "保留"
+                          }${
+                            result.conflictResolution === "USER_FIRST_DISCARD"
+                              ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
+                              : ""
+                          }`,
+                    );
+                  })
+                }
+              />
+              {mergeInfo && (
+                <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
+                  {mergeInfo}
+                </div>
+              )}
+              <EvidenceView evidence={evidence} />
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="flex h-screen flex-col bg-background font-mono text-sm text-foreground">
       <WorkspaceLayout
@@ -1590,328 +1945,15 @@ function Console() {
                 data-testid="studio-contract-slot"
                 className="flex h-full min-h-0 min-w-0 flex-col overflow-auto"
               >
-                <SupervisorStudioPane
-                  runMode={
-                    protection && protection.mode !== "VIBE"
-                      ? "PROTECTED"
-                      : "VIBE"
-                  }
-                  protectedEntries={protection?.entries ?? []}
-                  draft={
-                    draft
-                      ? // 未提交草案优先：`toStudioDraft` 读的就是 `supervisor_metadata`，
-                        // 所以白话理由 / 未决问题在这里同样不再是「（无）」
-                        toStudioDraft(draft.contract)
-                      : selected
-                        ? toStudioDraft(selected)
-                        : null
-                  }
-                  execution={
-                    selected
-                      ? {
-                          contractId: selected.contract_id,
-                          status: toExecutionStatus(selected.lifecycle_state),
-                          workerControl: selected.worker_spec.control_mode,
-                        }
-                      : null
-                  }
-                  busy={busy !== null || protectionBusy}
-                  onEmergencyPause={() => {
-                    if (!selected) return;
-                    void runAction("abort", async () => {
-                      await abortContract(
-                        conn,
-                        selected.contract_id,
-                        "local-user",
-                        "Studio 紧急暂停",
-                      );
-                      setAdmission(null);
-                    });
-                  }}
-                  onUnlockEntry={(id) => void onUnlockProtection(id)}
-                />
-                {showForm && (
-                  <ContractForm
-                    busy={busy === "create"}
-                    initialPaths={scopeDraft}
-                    draft={draft}
-                    draftBusy={busy === "draft"}
-                    onRequestDraft={requestDraft}
-                    onCreate={(contract) =>
-                      runAction("create", async () => {
-                        const saved = await createContractWithAdmission(
-                          conn,
-                          contract,
-                        );
-                        setSelectedId(saved.contract.contract_id);
-                        setShowForm(false);
-                        // 草案已落盘成合同：清掉内存草案，避免与真实合同双份显示
-                        setDraft(null);
-                        applyAdmission(saved.admission);
-                      })
-                    }
+                {bossMode && bossSummary ? (
+                  <BossFastPathDesk
+                    summary={bossSummary}
+                    busy={busy === "create" || busy === "approve"}
+                    onConfirm={confirmBossFastPath}
+                    advanced={renderEngineerContractDesk()}
                   />
-                )}
-
-                {!selected ? (
-                  <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-                    选择左侧合同查看详情，或在雷达中圈选文件后新建合同
-                  </div>
                 ) : (
-                  <div className="space-y-4 p-4">
-                    <ContractCard
-                      contract={selected}
-                      busy={busy === "approve"}
-                      onApprove={(id) =>
-                        void runAction("approve", async () => {
-                          await approveContract(conn, id, "local-user");
-                        })
-                      }
-                    />
-
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <ScopeList
-                        scope={selected.authorization.file_system_scope}
-                      />
-                      <BudgetVisualizer
-                        costLimits={selected.authorization.cost_limits}
-                        budgetLimits={selected.authorization.budget_limits}
-                      />
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        disabled={
-                          busy !== null ||
-                          selected.lifecycle_state !== "EXECUTING"
-                        }
-                        onClick={() =>
-                          runAction("worker", async () => {
-                            const result = await runWorker(
-                              conn,
-                              selected.contract_id,
-                            );
-                            setWorkerResult(result);
-                          })
-                        }
-                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                      >
-                        {busy === "worker" ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <ShieldCheck className="h-3.5 w-3.5" />
-                        )}
-                        运行 Worker
-                      </button>
-                      <button
-                        disabled={
-                          busy !== null ||
-                          selected.lifecycle_state !== "EXECUTING"
-                        }
-                        onClick={() =>
-                          runAction("execute", async () => {
-                            const outcome = await executeContract(
-                              conn,
-                              selected.contract_id,
-                            );
-                            setEvidence(outcome.evidence);
-                          })
-                        }
-                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                      >
-                        {busy === "execute" ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Play className="h-3.5 w-3.5" />
-                        )}
-                        执行验证
-                      </button>
-                      <button
-                        disabled={
-                          busy !== null ||
-                          selected.lifecycle_state !== "PENDING_RESUME"
-                        }
-                        onClick={() =>
-                          void runAction("resume", async () => {
-                            await resumeContract(conn, selected.contract_id);
-                          })
-                        }
-                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-40"
-                      >
-                        {busy === "resume" ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                        恢复执行
-                      </button>
-                      <button
-                        disabled={
-                          busy !== null ||
-                          selected.lifecycle_state === "MERGED" ||
-                          selected.lifecycle_state === "ABORTED"
-                        }
-                        onClick={() => {
-                          const confirmed = window.confirm(
-                            `确认中止合同 ${selected.contract_id}？\n` +
-                              "在途进程将被强杀，Worktree 与任务分支会被清理，合同进入终态 ABORTED，不可撤销。",
-                          );
-                          if (!confirmed) return;
-                          void runAction("abort", async () => {
-                            await abortContract(
-                              conn,
-                              selected.contract_id,
-                              "local-user",
-                            );
-                            setEvidence(null);
-                          });
-                        }}
-                        className="flex items-center gap-1 rounded border border-destructive/50 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/10 disabled:opacity-40"
-                      >
-                        {busy === "abort" ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5" />
-                        )}
-                        {selected.lifecycle_state === "PENDING_APPROVAL"
-                          ? "驳回合同"
-                          : "中止任务"}
-                      </button>
-                      <button
-                        onClick={() =>
-                          void runAction("diff", async () => {
-                            const [patch, files] = await Promise.all([
-                              fetchDiff(conn, selected.contract_id),
-                              fetchDiffFiles(conn, selected.contract_id).catch(
-                                () => null,
-                              ),
-                            ]);
-                            setDiff(patch);
-                            setDiffFiles(files);
-                          })
-                        }
-                        className="flex items-center gap-1 rounded border border-border px-3 py-1.5 text-xs hover:bg-accent"
-                      >
-                        <GitCompare className="h-3.5 w-3.5" /> 查看 Diff
-                      </button>
-                      <EditorOpener
-                        conn={conn}
-                        contractId={selected.contract_id}
-                      />
-                      {busy && (
-                        <span className="text-[10px] text-muted-foreground">
-                          正在{busy}…
-                        </span>
-                      )}
-                    </div>
-
-                    {workerResult && (
-                      <section className="rounded border border-border bg-card p-3">
-                        <h3 className="text-sm font-semibold">
-                          Worker 执行记录
-                        </h3>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          应用 {workerResult.changes.length} 个文件 · tokens{" "}
-                          {workerResult.usage.inputTokens}↑ /{" "}
-                          {workerResult.usage.outputTokens}↓
-                        </p>
-                        <ul className="mt-2 space-y-0.5 text-[11px]">
-                          {workerResult.log.map((line) => (
-                            <li key={line} className="text-chart-2">
-                              {line}
-                            </li>
-                          ))}
-                        </ul>
-                      </section>
-                    )}
-
-                    {selectedLogs.length > 0 && (
-                      <section
-                        data-testid="live-log"
-                        className="rounded border border-border bg-card p-3"
-                      >
-                        <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-semibold">实时日志</h3>
-                          <span className="text-[10px] text-muted-foreground">
-                            {selectedLogs.length} 行 · WebSocket 推送（保留最近
-                            500 行）
-                          </span>
-                          <button
-                            onClick={stream.clearLogs}
-                            className="ml-auto text-[10px] text-muted-foreground hover:text-foreground"
-                          >
-                            清空
-                          </button>
-                        </div>
-                        <pre className="mt-2 max-h-48 overflow-auto rounded bg-black/80 p-2 text-[10px] leading-relaxed text-zinc-300">
-                          {selectedLogs.map((line, i) => (
-                            <div key={`${line.at}-${i}`}>
-                              <span className="text-zinc-500">
-                                {line.at.slice(11, 19)}{" "}
-                              </span>
-                              {line.line}
-                            </div>
-                          ))}
-                        </pre>
-                      </section>
-                    )}
-
-                    {diff && (
-                      <DiffViewer
-                        patch={diff.patch}
-                        files={diffFiles?.files}
-                        truncatedList={diffFiles?.truncatedList}
-                      />
-                    )}
-                    {selected && (
-                      <StructuredTerminal
-                        lines={stream.terminal
-                          .filter((t) => t.contractId === selected.contract_id)
-                          .map((t) => ({
-                            stream: t.stream,
-                            line: t.line,
-                            at: t.at,
-                          }))}
-                      />
-                    )}
-                    {evidence && (
-                      <>
-                        <EvidenceChecklist
-                          evidence={evidence}
-                          busy={busy === "merge"}
-                          onMerge={() =>
-                            void runAction("merge", async () => {
-                              const result = await mergeContract(
-                                conn,
-                                selected.contract_id,
-                                evidence.evidence_id,
-                                "local-user",
-                              );
-                              setMergeInfo(
-                                result.nothingToMerge
-                                  ? (result.message ??
-                                      "本轮改动与你的修改冲突，已全部以你为准")
-                                  : `已合并 ${result.commitSha.slice(0, 8)} · worktree ${
-                                      result.worktreeRemoved ? "已清理" : "保留"
-                                    }${
-                                      result.conflictResolution ===
-                                      "USER_FIRST_DISCARD"
-                                        ? " · 有冲突：已保留你的版本，AI 需基于最新代码重做冲突部分"
-                                        : ""
-                                    }`,
-                              );
-                            })
-                          }
-                        />
-                        {mergeInfo && (
-                          <div className="rounded border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-700">
-                            {mergeInfo}
-                          </div>
-                        )}
-                        <EvidenceView evidence={evidence} />
-                      </>
-                    )}
-                  </div>
+                  renderEngineerContractDesk()
                 )}
               </div>
             }
