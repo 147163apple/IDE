@@ -22,6 +22,11 @@ import {
 import { shouldRenderMiddleYieldShell } from "../lib/in-progress-lifecycle";
 import type { InProgressCta } from "../lib/command-surface";
 import { WORKBENCH_LABEL } from "../lib/workbench-labels";
+import {
+  LEFT_CHAT_HINT,
+  resolveLeftProjectFilesDefaultOpen,
+  shouldShowLeftChatHint,
+} from "../lib/left-panel-boss";
 
 export const STUDIO_TAB_ID = "system:supervisor-studio";
 /** Supervisor 审阅 Tab（左下角图标入口打开；中央阅读区，可关闭） */
@@ -129,7 +134,8 @@ export interface WorkspaceLayoutProps {
  * 2. 顶栏只留状态胶囊，连接/Token/流诊断/网关受控全部下沉到 ⚙️ 设置 Tab；
  * 3. 首屏是**空编辑区**，Supervisor / 设置只在用户主动点击时开成可关闭 Tab；
  * 4. D4：无中心 Hub、无顶部 HUD、无成熟度气泡（本文件零相关实现）；
- * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪。
+ * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪；
+ * 6. C.10d：左栏默认主视线是打开/切换项目；规范与资产 + 文件树默认收进「项目文件」。
  */
 export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   const { contract } = props;
@@ -457,17 +463,42 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                 commandPhase={surface?.phase}
                 defaultExpanded={surface?.openProjectDefaultExpanded ?? false}
               />
-              <div className="min-h-0 flex-1 overflow-auto">
-                {props.specsSection}
-                <FileTree
-                  nodes={props.files}
-                  rootLabel={root}
-                  onOpen={(p) =>
-                    openTab({ id: p, title: p.split("/").pop() ?? p })
-                  }
-                />
-                {props.leftExtra}
-              </div>
+              {shouldShowLeftChatHint(surface?.phase) ? (
+                <p
+                  data-testid="left-chat-hint"
+                  className="border-b border-border/60 px-2 py-1.5 text-[11px] leading-relaxed text-muted-foreground"
+                >
+                  {LEFT_CHAT_HINT}
+                </p>
+              ) : null}
+              <details
+                data-testid="left-project-files"
+                className="flex min-h-0 flex-1 flex-col open:min-h-0"
+                {...(resolveLeftProjectFilesDefaultOpen()
+                  ? { open: true }
+                  : {})}
+              >
+                <summary
+                  data-testid="left-project-files-summary"
+                  className="flex cursor-pointer list-none items-center gap-1.5 border-b px-2 py-1.5 text-xs font-semibold [&::-webkit-details-marker]:hidden"
+                >
+                  项目文件
+                  <span className="ml-1 text-[10px] font-normal opacity-60">
+                    规范与资产 · 源码树
+                  </span>
+                </summary>
+                <div className="min-h-0 flex-1 overflow-auto">
+                  {props.specsSection}
+                  <FileTree
+                    nodes={props.files}
+                    rootLabel={root}
+                    onOpen={(p) =>
+                      openTab({ id: p, title: p.split("/").pop() ?? p })
+                    }
+                  />
+                  {props.leftExtra}
+                </div>
+              </details>
             </aside>
             <div
               data-testid="resizer-left"

@@ -201,7 +201,7 @@ function Console() {
   const [taskGraph, setTaskGraph] = useState<TaskGraph | null>(null);
   const [taskGraphLoading, setTaskGraphLoading] = useState(false);
   const [taskGraphError, setTaskGraphError] = useState<string | null>(null);
-  const [specsOpen, setSpecsOpen] = useState(true);
+  const [specsOpen, setSpecsOpen] = useState(false); // C.10d：规范与资产默认收
 
   /** TASK-C.2：Daemon 权威展示态（STATE_CHANGED），驱动 Studio 默认视口 */
   const [presentationByContract, setPresentationByContract] = useState<
