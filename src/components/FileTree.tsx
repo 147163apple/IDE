@@ -1,4 +1,10 @@
+import { useEffect, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import type { FileNode } from "./workspace-types";
+import {
+  initialExpandedDirPaths,
+  toggleExpandedPath,
+} from "../lib/file-tree-expand";
 
 export interface FileTreeProps {
   nodes: FileNode[];
@@ -11,33 +17,83 @@ export interface FileTreeProps {
 function Node({
   node,
   onOpen,
+  expanded,
+  onToggleDir,
 }: {
   node: FileNode;
   onOpen?: ((p: string) => void) | undefined;
+  expanded: ReadonlySet<string>;
+  onToggleDir: (path: string) => void;
 }) {
   if (node.children) {
+    const open = expanded.has(node.path);
     return (
       <li>
-        <span>{node.name}/</span>
-        <ul className="pl-3">
-          {node.children.map((c) => (
-            <Node key={c.path} node={c} onOpen={onOpen} />
-          ))}
-        </ul>
+        <button
+          type="button"
+          data-testid={`file-tree-dir-${node.path}`}
+          aria-expanded={open}
+          onClick={() => onToggleDir(node.path)}
+          className="flex w-full items-center gap-0.5 rounded px-0.5 text-left hover:bg-muted"
+        >
+          {open ? (
+            <ChevronDown
+              className="h-3.5 w-3.5 shrink-0 opacity-70"
+              aria-hidden
+            />
+          ) : (
+            <ChevronRight
+              className="h-3.5 w-3.5 shrink-0 opacity-70"
+              aria-hidden
+            />
+          )}
+          <span>{node.name}/</span>
+        </button>
+        {open ? (
+          <ul className="pl-3">
+            {node.children.map((c) => (
+              <Node
+                key={c.path}
+                node={c}
+                onOpen={onOpen}
+                expanded={expanded}
+                onToggleDir={onToggleDir}
+              />
+            ))}
+          </ul>
+        ) : null}
       </li>
     );
   }
   return (
     <li>
-      <button type="button" onClick={() => onOpen?.(node.path)}>
+      <button
+        type="button"
+        data-testid={`file-tree-file-${node.path}`}
+        onClick={() => onOpen?.(node.path)}
+        className="w-full rounded px-0.5 pl-4 text-left hover:bg-muted"
+      >
         {node.name}
       </button>
     </li>
   );
 }
 
-/** TASK-C.1 左栏文件树（rootLabel 显示当前绑定的工作树根路径） */
+/** TASK-C.1 左栏文件树；C.10g 可点文件夹展开/折叠，默认只展开第一层 */
 export function FileTree({ nodes, rootLabel, onOpen, loading }: FileTreeProps) {
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    initialExpandedDirPaths(nodes),
+  );
+
+  // 树数据换了（换项目 / 重新拉树）时按默认第一层重置
+  useEffect(() => {
+    setExpanded(initialExpandedDirPaths(nodes));
+  }, [nodes]);
+
+  const onToggleDir = (path: string) => {
+    setExpanded((prev) => toggleExpandedPath(prev, path));
+  };
+
   return (
     <nav data-testid="file-tree" className="overflow-auto p-2 text-sm">
       <div data-testid="file-tree-root" className="mb-1 text-xs opacity-70">
@@ -61,7 +117,13 @@ export function FileTree({ nodes, rootLabel, onOpen, loading }: FileTreeProps) {
       ) : null}
       <ul>
         {nodes.map((n) => (
-          <Node key={n.path} node={n} onOpen={onOpen} />
+          <Node
+            key={n.path}
+            node={n}
+            onOpen={onOpen}
+            expanded={expanded}
+            onToggleDir={onToggleDir}
+          />
         ))}
       </ul>
     </nav>

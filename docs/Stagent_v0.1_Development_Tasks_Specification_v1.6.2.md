@@ -2,6 +2,7 @@
 - **P-43（合入回写，2026-10-24）**：`TASK-C.10c` → **`[COMPLETED]`**（main tip `6811f44` 快进合入；四件套 **1267 passed / 6 skipped**）。同步：版本头第 34 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 第三轮含暗号清扫收口；走查报告 §6.5/§6.7 回写。交付要点：白话标签、图谱单入口、页脚/欢迎降噪。架构规范仅 §11 注记 9 轻量锚定延续。# Stagent v0.1 研发任务拆解与工程执行规范 (v1.6.2 代码事实对齐与卡片净化版)
 - **P-45（合入回写，2026-10-24）**：`TASK-C.10d` → **`[COMPLETED]`**（main tip `51ae8ae` 快进合入；四件套 **1273 passed / 6 skipped**）。同步：版本头第 36 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 左栏老板主路径收口；走查报告 §6.9/§6.10 回写。交付要点：换项目主视线、`left-project-files` 默认折叠、跟右侧说话提示。架构规范仅 §11 注记 9 轻量锚定延续。
 - **P-46（立卡+实现，2026-10-24）**：新增 **`TASK-C.10e`**（Cursor 式欢迎页承载打开/切换项目）与 **`TASK-C.10f`**（资源管理器纯文件树 + 规范与资产进项目审阅）两张卡（Tina 产品定稿三条）。同步：版本头第 37 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10d→C.10e→C.10f`）、§3.4 详细卡、Sprint「当前首要」→ **C.10e→C.10f**；走查报告 §6.11。**不改**鉴权；**保留** C.8c 无钥匙重开/粘贴迁到欢迎页；**不抢** D.1e。架构规范仅 §11 注记 9 轻量续写。
+- **P-50（立卡+实现+合入，2026-10-24）**：新增 **`TASK-C.10g`**（文件树点文件夹展开/折叠、默认只展开第一层）并由 `[NEW_TASK]` 收口为 **`[COMPLETED]`**（合入 tip 待四件套后回填）。同步：版本头第 40 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10f→C.10g`）、§3.4 详细卡、Sprint「当前首要」→ 文件树可折叠收口；走查报告 §6.15。交付要点：`file-tree-expand` + `FileTree` 可点目录；默认展开根下第一层；文件仍可打开。**不改**鉴权；**不抢** D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
 - **P-47（合入回写，2026-10-24）**：`TASK-C.10e` / `TASK-C.10f` → **`[COMPLETED]`**（main tip `592f825` 快进合入；四件套 **1274 passed / 6 skipped**）。同步：版本头第 38 条、§1.1 矩阵、§2.1 ASCII、§3.4 详细卡、Sprint「当前首要」→ 欢迎页开项目/纯树/资产进审阅收口；走查报告 §6.11/§6.12。交付要点：`ProjectWelcomePage` + `OpenProjectEntry` page 变体；左栏 `left-explorer` 纯树；`SupervisorTab.specsSection`；顶栏「切换项目」；保留 C.8c；不抢 D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
 - **P-49（C.10f 空文件树热修，2026-10-24）**：Tina 点资源管理器只见「文件」+ 路径、无树节点。根因：左栏 `files` 仍绑架构图 `graph.nodes`，而建连故意不自动拉 AST（缺口 4.2）→ 空数组。非 C.10d 折叠、非 leftExtra。热修：新增轻量 `GET /api/repo/tree` + `listRepoTreePaths`（无 AST）；建连自动灌树；Demo 就绪改看真实目录。四件套 **1277 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。
 - **P-48（C.10f 漏接线热修，2026-10-24）**：Tina 打开工作台见左栏仍有「需求（合同 N）」列表——C.10e/f 已迁开项目与规范资产，但 `routes` 仍经 `leftExtra` 把合同列表塞进 `left-explorer`。热修：停渲染左栏 `leftExtra`；合同列表迁 `SupervisorTab.requirementList`（项目审阅）；欢迎/切换项目仍在中栏欢迎页（Tina 粘贴含中栏属整页选中，非左栏再塞）。四件套 **1275 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过。
@@ -46,13 +47,14 @@
 > 37. **状态回写（2026-10-24 · 立卡 TASK-C.10e / C.10f · 欢迎页开项目 + 纯文件树 + 资产进审阅）**：Tina 产品定稿三条——① 规范与资产绑进「项目审阅」；② 资源管理器只展示纯文件树；③ 打开/切换项目不放 IDE 左栏，单独 Cursor 式欢迎页（最近一键重开 + 粘贴路径；保留 C.8c；不抢 D.1e）。新增 **`TASK-C.10e`**、**`TASK-C.10f`**（`[NEW_TASK]`）。前置：`C.10d` COMPLETED；建议序 **C.10e → C.10f**。**当前首要**→ **C.10e**。对照：走查报告 §6.11。架构规范仅 §11 注记 9 轻量续写（呈现位置，不改变鉴权/Demo Origin）。
 > 38. **状态回写（2026-10-24 · C.10e/f 合入）**：`TASK-C.10e` / `TASK-C.10f` 由 `[NEW_TASK]`（`feat/task-c10e-f-welcome-explorer`）更新为 **`[COMPLETED]`**（合入 main tip `592f825`，分支快进；合后四件套 **1274 passed / 6 skipped**；tsc 0 / eslint 0 errors / build 通过）。交付：欢迎页承载开项目（page 变体 + 顶栏切换项目）；左栏纯文件树；规范与资产进项目审阅；C.8c 能力保留；不抢 D.1e。架构规范仅 §11 注记 9 轻量锚定延续。
 > 39. **状态回写（2026-10-24 · C.10f 空文件树热修）**：资源管理器空树根因是 `files` 绑未自动加载的架构图；改为 `/api/repo/tree` 轻量列举并建连加载。对照走查 §6.14。**不改**鉴权；不回潮缺口 4.2 自动 AST。
+> 40. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10g · 文件树展开/折叠）**：Tina 反馈文件树整棵摊开、无法折叠文件夹。新增 **`TASK-C.10g`** 并 **`[COMPLETED]`**（合入 tip 待回填；四件套待回填）。交付：点文件夹展开/折叠；默认只展开根下第一层目录；更深目录默认收起；点文件仍打开编辑。前置：`TASK-C.10f` COMPLETED。**不改**鉴权；**不抢** D.1e；不拆多路由。对照走查报告 §6.15。架构规范仅 §11 注记 9 轻量锚定（呈现交互，不改变鉴权/Demo Origin）。
 > 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
 ### 1.1 研发任务与规范 §10 路线映射表 (v1.6.2：完成状态与新增待办分离)
 
-> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（**1275 passed / 6 skipped**）。
+> **测试数量口径（v1.6.2）**：任务卡中的历史文件/用例数仅供溯源；当前物理代码 HEAD 以 C.10f 热修 tip 为准；文档基线以本条回写 tip 为准。测试基线以最近代码合入四件套为准（C.10g 合入后回填；此前热修 **1277 passed / 6 skipped**）。
 
 | 任务编号 | 任务名称 | 归属模块 | 状态 | 规范 §10 里程碑 | 关键变动与工程闭环要点 (v1.6.1) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -107,6 +109,7 @@
 | **TASK-C.10d** | 左栏老板主路径（换项目主视线 / 文件与资产进折叠） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `51ae8ae`；合后四件套 1273 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10c` COMPLETED<br>• 默认主视线：打开/切换项目 + 空闲「跟右侧说话」；规范与资产、文件树默认收进「项目文件」<br>• **不取消**能力；不改鉴权；不抢 D.1e；不拆多路由<br>• `left-panel-boss` + UI 回归 |
 | **TASK-C.10e** | Cursor 式欢迎页承载打开/切换项目 | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `592f825`；合后四件套 1274 passed / 6 skipped） | P4 体验打磨 | • 前置 `C.10d` COMPLETED<br>• 开项目迁出 IDE 左栏；欢迎页：最近一键重开 + 粘贴路径（保留 C.8c）<br>• 顶栏「切换项目」回欢迎页；**不抢** D.1e；不改鉴权 |
 | **TASK-C.10f** | 资源管理器纯文件树 + 规范与资产进项目审阅 | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `592f825`；合后四件套 1274 passed / 6 skipped） | P4 体验打磨 | • 与 C.10e 同 tip 合入<br>• 左栏只留纯文件树；`FileTreeSpecsSection` 挂「项目审阅」<br>• **不取消**能力；不改鉴权；不拆多路由 |
+| **TASK-C.10g** | 文件树展开/折叠（默认只展开第一层） | 工作台 UX | **[COMPLETED]**（2026-10-24 合入 main，tip `PENDING`；合后四件套 PENDING） | P4 体验打磨 | • 前置 `C.10f` COMPLETED<br>• 点文件夹展开/折叠；默认根下第一层展开；更深默认收起<br>• 点文件仍打开；不改鉴权；不抢 D.1e<br>• `file-tree-expand` + UI 回归 |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
 | **TASK-D.2b** | 未跟踪文件合并门禁与 Contract v1.3 零静默迁移接入 | 通信核销 | **[COMPLETED]**（提交 `150dc47` 锁定；合并前未跟踪门禁、零静默迁移接入、Trailer 尺寸守护均已落地） | P5 增量门禁 | • 在已跟踪/未跟踪文件上执行合同 Scope 联合检查<br>• 接入 `migrateContractToV13`，防止历史合同静默获批<br>• 前置：TASK-0.2c、TASK-D.2、TASK-W.2b |
@@ -177,11 +180,11 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
                                     │
                     ┌───────────────┼──────────────────────────────┐
                     ▼               ▼                              ▼
-              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f
+              TASK-C.10a       TASK-C.10b                    TASK-C.10c ──► TASK-C.10d ──► TASK-C.10e ──► TASK-C.10f ──► TASK-C.10g
               │                │                             │              │              │              │
-              前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e
-              [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]
-              建议序：C.10e/f 已合 · **欢迎页开项目 + 纯文件树 + 资产进审阅收口**
+              前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
+              [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
+              建议序：C.10g 已合 · **文件树可折叠（默认第一层）收口**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -265,7 +268,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.10b", "to": "TASK-C.10c" },
   { "from": "TASK-C.10c", "to": "TASK-C.10d" },
   { "from": "TASK-C.10d", "to": "TASK-C.10e" },
-  { "from": "TASK-C.10e", "to": "TASK-C.10f" }
+  { "from": "TASK-C.10e", "to": "TASK-C.10f" },
+  { "from": "TASK-C.10f", "to": "TASK-C.10g" }
 ]
 ```
 
@@ -1442,6 +1446,32 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   5. 四件套全绿。
 * **FAIL**：资产仍在左栏主路径；审阅页无资产；取消文件树能力。
 
+
+#### 【Task C.10g】文件树展开/折叠（默认只展开第一层）`[COMPLETED · 2026-10-24]`
+* **任务编号**：`TASK-C.10g`
+* **前置依赖**：`TASK-C.10f` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-24 合入 main，tip `PENDING`；合后四件套 **PENDING**。交付：`src/lib/file-tree-expand.ts`；`FileTree` 点目录展开/折叠；默认根下第一层展开、更深收起；点文件仍 `onOpen`）
+* **对照痛点**：资源管理器文件树整棵摊开、文件夹无法折叠，老板看不清结构。
+* **v0.1 范围（施工合同）**：
+  1. **交互**：点文件夹展开/折叠（`aria-expanded`）；有可见展开指示。
+  2. **默认**：只展开根下第一层目录；更深目录默认收起。
+  3. **保留**：点文件仍打开中栏编辑；换项目/重拉树时按默认重置展开态。
+  4. **纪律**：与 C.10f 纯文件树一致；不改鉴权；不抢 D.1e。
+* **明确不包含**：虚拟滚动/懒加载远端；Git 状态着色；搜索面板；改鉴权。
+* **涉及核心文件（预期）**：
+  - `src/components/FileTree.tsx`
+  - `src/lib/file-tree-expand.ts`
+  - 单元：`tests/lib/file-tree-expand.test.ts`
+  - UI：`tests/ui/file-tree-expand.test.tsx`
+* **Pass/Fail 验收判定**（≤5）：
+  1. 默认可见根下第一层内容；更深文件默认不可见。
+  2. 点文件夹可展开再折叠。
+  3. 点文件仍触发打开。
+  4. 不回退 C.10f/C.10e；不改鉴权。
+  5. 四件套全绿；不打印 token。
+* **FAIL**：仍整棵摊开无法折叠；默认展开全部深层；文件打不开。
+
+
 ---
 
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
@@ -1768,12 +1798,12 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 | **v0.2+（推迟，另行立项）** `[用户已确认 D4 · 2026-10-20]` | `TASK-B.1` ➔ `TASK-B.2` ➔ `TASK-C.4` ➔ `TASK-S.3`（建议广播、成熟度评分与 HUD 徽章/Snooze）➔ RFC-2026-002（多子任务 DAG / 新鲜上下文 / Schema-First / 并行 Worktree） | 架构雷达、成熟度评分、多 Agent 编译流水线 | 另行立项评审 |
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
-> - **当前工程物理起点**：本地代码仓库 `main`@`592f825`（C.10e/f）；测试基线 **1274 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–f**。
-> - **当前首要编码任务**：C.10e/f 已收口。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.11/§6.12。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
+> - **当前工程物理起点**：本地代码仓库 `main`@`PENDING`（C.10g）；测试基线待四件套回填；已交付至 C.9a–d、**C.10a–g**。
+> - **当前首要编码任务**：C.10g 已收口。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**。对照走查报告 §6.15。细 UI 抛光按既定：等开发任务收完再统一验收；可选下一批 W.5b/c。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
-> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–f` 均已 **COMPLETED**（C.10e/f tip `592f825`）；属非技术可用性打磨，不新开 Sprint 编号。
+> - **Sprint 4 体验打磨**：`C.8a/b/c`、`C.9a–d`、`C.10a–g` 均已 **COMPLETED**（C.10g tip `PENDING`）；属非技术可用性打磨，不新开 Sprint 编号。
 
 ### 跨阶段门禁准则 (Gate Alignment)
 根据 A §10 规定，阶段内任务支持依据 DAG 拓扑关系进行并行编码与单元验证；跨阶段进入联调前，必须以当前 Sprint 的 Gate Check 检查点为准绳，跑通：
