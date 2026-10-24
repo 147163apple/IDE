@@ -140,6 +140,20 @@ describe("Task Graph 双视图", () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it("C.10n 热修：建图失败/未选合同时错误出现在图谱顶栏", () => {
+    render(
+      <TaskGraphPanel
+        graph={null}
+        error="请先在左侧点一份合同（或先出草案并落盘），再确认原型开工。"
+        onConfirmPrototype={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("graph-error")).toHaveTextContent(
+      "请先在左侧点一份合同",
+    );
+    expect(screen.getByTestId("graph-empty-confirm-cta")).toBeInTheDocument();
+  });
+
   it("C.10n：有图时显示只读提示；选中节点高亮并出详情", () => {
     render(<TaskGraphPanel graph={makeGraph()} />);
     expect(screen.getByTestId("graph-readonly-hint")).toHaveTextContent(

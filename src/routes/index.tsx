@@ -1826,7 +1826,7 @@ function Console() {
           <TaskGraphPanel
             graph={taskGraph}
             loading={taskGraphLoading}
-            error={taskGraphError}
+            error={confirmPrototypeError ?? taskGraphError}
             onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
             onConfirmPrototype={() => {
               void handleConfirmPrototype();
@@ -2035,7 +2035,7 @@ function Console() {
               <TaskGraphPane
                 graph={taskGraph}
                 loading={taskGraphLoading}
-                error={taskGraphError}
+                error={confirmPrototypeError ?? taskGraphError}
                 onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
                 onConfirmPrototype={() => {
                   void handleConfirmPrototype();
