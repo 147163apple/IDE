@@ -20,6 +20,10 @@
 
 见《决策记录对账》§5：API Top5 拍板 + 现网 `/api` 对账；工程卡（如五屏串联 / 质量门禁）须另立；Impact Analysis = v0.2+。
 
+## 目录精简（2026-10-25）
+
+已删除 32 份过期单卡交付说明、phase-checklist、走查/复审/一致性报告等；本目录仅保留决策与设计相关重要文档（约 15 份）。施工验收仍以《任务规范》与 git 历史为准，不以已删报告为准。
+
 ## 正式规范（不在本目录）
 
 - `docs/Stagent_System_Architecture_Specification_v1.6.1.md`
