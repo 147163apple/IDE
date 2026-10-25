@@ -44,6 +44,13 @@ import {
   type DemoPreviewServerOptions,
 } from "./supervisor/demo/preview-server";
 import {
+  assertDemoConfirmedForWrite,
+  buildMinimalPrototypeDemo,
+  confirmDemoPrototype,
+  readDemoConfirm,
+  writePrototype,
+} from "./supervisor/demo/prototypes";
+import {
   createRealPreviewServer,
   writeRealPlaytestStub,
   type RealPreviewServer,
@@ -280,6 +287,9 @@ export class StagentDaemon {
   private readonly targetAdvancedContracts: Set<string> = new Set();
   /** TASK-S.6b：合同 → 真机预览服务（自建或外链挂载） */
   private readonly realPreviews = new Map<string, RealPreviewServer>();
+  /** TASK-C.11b：当前隔离 Demo 预览（prototypes） */
+  private demoPreviewServer: DemoPreviewServer | null = null;
+  private activePrototypeId: string | null = null;
   private stopSweepFn: (() => void) | null = null;
 
   constructor(options: DaemonServerOptions) {
@@ -2307,6 +2317,127 @@ export class StagentDaemon {
    * 根据白话意图静默路由：质疑 → dispute；大事 → 草案；小事 → Fast Path（免强制 Demo）。
    * 底座复用 S.2 / S.5 / requirements-store，不重砌引擎。
    */
+
+  /**
+   * TASK-C.11b：创建 / 确认 `.stagent/prototypes/<id>/` Demo，并启动隔离预览。
+   * GET：查询确认态；POST action=create|confirm。
+   */
+  private async handleSupervisorPrototype(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    url: URL,
+  ): Promise<void> {
+    if (method === "GET") {
+      const id = url.searchParams.get("prototype_id") ?? undefined;
+      const rec = readDemoConfirm(this.repoRoot, id);
+      if (!rec) {
+        this.sendJson(res, 200, null);
+        return;
+      }
+      this.sendJson(res, 200, {
+        prototype_id: rec.prototype_id,
+        relative_root: rec.relative_root,
+        confirmed: rec.confirmed,
+        confirmed_at: rec.confirmed_at,
+        preview_url: null,
+        preview_status: null,
+      });
+      return;
+    }
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    let body: {
+      action?: unknown;
+      title?: unknown;
+      prototype_id?: unknown;
+    };
+    try {
+      body = (await this.readJsonBody(req)) as typeof body;
+    } catch (err) {
+      this.sendJson(res, 400, {
+        error: "invalid_json",
+        message: (err as Error).message,
+      });
+      return;
+    }
+    const action = typeof body.action === "string" ? body.action : "";
+    if (action === "create") {
+      const title =
+        typeof body.title === "string" && body.title.trim()
+          ? body.title.trim()
+          : "隔离 Demo";
+      const prototypeId =
+        typeof body.prototype_id === "string" && body.prototype_id.trim()
+          ? body.prototype_id.trim()
+          : `proto-${Date.now().toString(36)}`;
+      const demo = buildMinimalPrototypeDemo(title);
+      const written = writePrototype(this.repoRoot, prototypeId, demo);
+      const absRoot = path.join(this.repoRoot, written.relative_root);
+      try {
+        if (this.demoPreviewServer) {
+          await this.demoPreviewServer.stop().catch(() => undefined);
+          this.demoPreviewServer = null;
+        }
+      } catch {
+        /* ignore */
+      }
+      const server = this.createDemoPreview(absRoot);
+      this.demoPreviewServer = server;
+      this.activePrototypeId = written.prototype_id;
+      let previewUrl: string | null = null;
+      let previewStatus: "RUNNING" | "STOPPED" | "ERROR" = "STOPPED";
+      let message: string | undefined;
+      try {
+        const handle = await server.start();
+        previewUrl = handle.url;
+        previewStatus = "RUNNING";
+      } catch (err) {
+        previewStatus = "ERROR";
+        message = err instanceof Error ? err.message : "Demo 预览启动失败";
+      }
+      const rec = readDemoConfirm(this.repoRoot, written.prototype_id);
+      this.sendJson(res, 200, {
+        prototype_id: written.prototype_id,
+        relative_root: written.relative_root,
+        confirmed: rec?.confirmed ?? false,
+        confirmed_at: rec?.confirmed_at ?? null,
+        preview_url: previewUrl,
+        preview_status: previewStatus,
+        ...(message ? { message } : {}),
+      });
+      return;
+    }
+    if (action === "confirm") {
+      const prototypeId =
+        typeof body.prototype_id === "string" ? body.prototype_id.trim() : "";
+      if (!prototypeId) {
+        this.sendJson(res, 400, {
+          error: "prototype_id_required",
+          message: "确认 Demo 需要 prototype_id",
+        });
+        return;
+      }
+      const rec = confirmDemoPrototype(this.repoRoot, prototypeId);
+      this.sendJson(res, 200, {
+        prototype_id: rec.prototype_id,
+        relative_root: rec.relative_root,
+        confirmed: rec.confirmed,
+        confirmed_at: rec.confirmed_at,
+        preview_url: null,
+        preview_status: null,
+        message: "Demo 已确认，可以签署白话合同后开工",
+      });
+      return;
+    }
+    this.sendJson(res, 400, {
+      error: "unknown_action",
+      message: "action 须为 create 或 confirm",
+    });
+  }
+
   private async handleSupervisorJourney(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -2977,6 +3108,15 @@ export class StagentDaemon {
       return;
     }
 
+    if (pathname === "/api/supervisor/prototype") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleSupervisorPrototype(req, res, method, parsedUrl);
+      return;
+    }
+
     if (pathname === "/api/supervisor/journey") {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -3181,6 +3321,28 @@ export class StagentDaemon {
 
         if (method === "POST" && action === "run-worker") {
           try {
+            // TASK-C.11b/c：未确认 Demo 禁止写真码（Fast Path 由 skip_demo / 无 prototype 策略另判）
+            try {
+              assertDemoConfirmedForWrite(
+                this.repoRoot,
+                this.activePrototypeId ?? undefined,
+                {
+                  // 本轮未挂载 prototype（Fast Path / 旧路径）则跳过；挂载了就必须已确认
+                  skip_demo: this.activePrototypeId == null,
+                },
+              );
+            } catch (gateErr) {
+              const code = (gateErr as Error & { code?: string }).code;
+              if (code === "E_DEMO_NOT_CONFIRMED") {
+                this.sendJson(res, 409, {
+                  error: "Demo not confirmed",
+                  code: "E_DEMO_NOT_CONFIRMED",
+                  message: (gateErr as Error).message,
+                });
+                return;
+              }
+              throw gateErr;
+            }
             const result = await this.orchestrator.runWorker(contractId);
             this.emitWorkerLog(contractId, result.log);
             // Worker 可能把状态推到 PENDING_RESUME（预算/循环熔断）

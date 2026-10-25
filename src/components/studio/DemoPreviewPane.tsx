@@ -15,7 +15,7 @@ export interface DemoPreviewPaneProps {
   errorMessage?: string | null | undefined;
   /** 【修改原型】——回到右栏继续聊；本组件不调 Daemon */
   onRevise?: (() => void) | undefined;
-  /** 【确认原型并实施真实工程】——由上层推进旅程 */
+  /** 【确认 Demo】——由上层推进旅程 */
   onConfirm?: (() => void) | undefined;
   busy?: boolean | undefined;
   /** Fast Path / 无预览时仍允许确认开工（TASK-S.6） */
@@ -64,7 +64,7 @@ export function DemoPreviewPane(props: DemoPreviewPaneProps) {
             onClick={() => props.onConfirm?.()}
             className="rounded border border-emerald-600/50 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-800 disabled:opacity-40"
           >
-            确认原型并实施真实工程
+            <span data-testid="demo-confirm-label">确认 Demo</span>
           </button>
         </div>
       </div>

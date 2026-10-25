@@ -10,6 +10,7 @@ import type {
   EvidenceReadyPayload,
   IpcFrame,
   ScopeAlertPayload,
+  GatewayViolationPayload,
   StateChangedPayload,
   TerminalStreamPayload,
   WorkerLogPayload,
@@ -39,6 +40,7 @@ export interface StreamAlert {
   code: string;
   message: string;
   at: string;
+  path?: string | undefined;
 }
 
 /** TASK-C.5 终端回放行（内容已由 Daemon 脱敏） */
@@ -136,6 +138,29 @@ export function useDaemonStream(
             at,
           }));
           setLogs((prev) => [...prev, ...incoming].slice(-MAX_LOG_LINES));
+          return;
+        }
+
+        case "GATEWAY_VIOLATION": {
+          const payload = asPayload<GatewayViolationPayload>(frame);
+          if (!payload) return;
+          const code =
+            (payload as { reason?: string; code?: string }).reason ??
+            (payload as { code?: string }).code ??
+            "E_OUT_OF_SCOPE";
+          setAlerts((prev) =>
+            [
+              {
+                id: `${at}-gateway-${prev.length}`,
+                contractId: payload.contract_id ?? "unknown",
+                code: String(code),
+                message: payload.message || "写入被 Gateway 拦截",
+                at,
+                path: (payload as { path?: string }).path,
+              },
+              ...prev,
+            ].slice(0, MAX_ALERTS),
+          );
           return;
         }
         case "SCOPE_ALERT": {

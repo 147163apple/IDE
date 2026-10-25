@@ -1449,3 +1449,61 @@ export async function getRealPlaytestStatus(
     { method: "GET" },
   );
 }
+
+
+// ---------------------------------------------------------------------------
+// TASK-C.11b/c：隔离 Demo prototypes + 感官确认
+// ---------------------------------------------------------------------------
+
+export interface SupervisorPrototypeView {
+  prototype_id: string;
+  relative_root: string;
+  confirmed: boolean;
+  confirmed_at: string | null;
+  preview_url?: string | null;
+  preview_status?: "RUNNING" | "STOPPED" | "ERROR" | null;
+  message?: string;
+}
+
+export async function createSupervisorPrototype(
+  conn: DaemonConnection,
+  input: { title?: string; prototype_id?: string },
+): Promise<SupervisorPrototypeView> {
+  return request<SupervisorPrototypeView>(conn, "/api/supervisor/prototype", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "create",
+      ...(input.title === undefined ? {} : { title: input.title }),
+      ...(input.prototype_id === undefined
+        ? {}
+        : { prototype_id: input.prototype_id }),
+    }),
+  });
+}
+
+export async function confirmSupervisorPrototype(
+  conn: DaemonConnection,
+  input: { prototype_id: string },
+): Promise<SupervisorPrototypeView> {
+  return request<SupervisorPrototypeView>(conn, "/api/supervisor/prototype", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "confirm",
+      prototype_id: input.prototype_id,
+    }),
+  });
+}
+
+export async function getSupervisorPrototypeStatus(
+  conn: DaemonConnection,
+  prototypeId?: string,
+): Promise<SupervisorPrototypeView | null> {
+  const q = prototypeId
+    ? `?prototype_id=${encodeURIComponent(prototypeId)}`
+    : "";
+  return request<SupervisorPrototypeView | null>(
+    conn,
+    `/api/supervisor/prototype${q}`,
+    { method: "GET" },
+  );
+}

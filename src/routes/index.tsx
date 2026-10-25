@@ -54,6 +54,8 @@ import {
   startTaskGraphNode,
   verifyTaskGraphNode,
   createTaskGraph,
+  createSupervisorPrototype,
+  confirmSupervisorPrototype,
   fetchPresentationSnapshot,
   listContracts,
   loadConnection,
@@ -109,6 +111,22 @@ import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
 import { StudioViewportShell } from "@/components/studio/StudioViewportShell";
 import { DemoPreviewPane } from "@/components/studio/DemoPreviewPane";
+import { PlainContractAuthorizeCard } from "@/components/supervisor/PlainContractAuthorizeCard";
+import { ScopePausedDialog } from "@/components/supervisor/ScopePausedDialog";
+import {
+  advanceClarificationSession,
+  buildClarificationRound,
+  formatClarificationDefaultsSummary,
+  isRoundComplete,
+  recordClarificationAnswer,
+  startClarificationSession,
+  type ClarificationRound,
+  type ClarificationSessionState,
+} from "@/lib/journey/clarification";
+import {
+  grayOutTaskGraphNodes,
+  shouldGrayAfterDispute,
+} from "@/lib/graph/dispute-gray";
 import { RealPlaytestPane } from "@/components/studio/RealPlaytestPane";
 import { TaskGraphPane } from "@/components/studio/TaskGraphPane";
 import {
@@ -240,6 +258,34 @@ function Console() {
   const [confirmPrototypeError, setConfirmPrototypeError] = useState<
     string | null
   >(null);
+
+  /** TASK-C.11a：澄清会话（fixture ≤2 轮） */
+  const [clarificationState, setClarificationState] =
+    useState<ClarificationSessionState | null>(null);
+  const [clarificationRound, setClarificationRound] =
+    useState<ClarificationRound | null>(null);
+  const [clarificationPendingText, setClarificationPendingText] = useState<
+    string | null
+  >(null);
+  /** TASK-C.11b：感官确认 + prototype id */
+  const [demoConfirmed, setDemoConfirmed] = useState(false);
+  const [activePrototypeId, setActivePrototypeId] = useState<string | null>(
+    null,
+  );
+  const [retainedDemoUrl, setRetainedDemoUrl] = useState<string | null>(null);
+  /** TASK-C.11c：白话合同卡可见 + 草案版本 */
+  const [plainContractVisible, setPlainContractVisible] = useState(false);
+  const [draftVersion, setDraftVersion] = useState(1);
+  const [authorizeBusy, setAuthorizeBusy] = useState(false);
+  /** TASK-C.11d：越界挂起 */
+  const [scopePaused, setScopePaused] = useState<{
+    contract_id: string;
+    code: string;
+    message: string;
+    attempted_path?: string;
+  } | null>(null);
+  const [scopePausedBusy, setScopePausedBusy] = useState(false);
+
   /** C.10o：图谱开工/核销忙态与失败黄条（与建图错误共用顶栏） */
   const [graphActionBusy, setGraphActionBusy] = useState(false);
   const [studioViewportOverride, setStudioViewportOverride] =
@@ -639,23 +685,96 @@ function Console() {
             setStudioViewportOverride("dispute");
           }
         }
+        // TASK-C.11e：自查失败或需求演进 → 相关节点回灰，禁止假绿
+        const reportFailed =
+          result.degraded === true ||
+          result.report.degraded === true ||
+          result.report.next_action.kind === "REQUIREMENT_CHANGE" ||
+          result.report.classification === "REQUIREMENT_DRIFT";
+        if (
+          taskGraph &&
+          shouldGrayAfterDispute({
+            userChoice,
+            reportFailed: reportFailed === true,
+          })
+        ) {
+          setTaskGraph(
+            grayOutTaskGraphNodes(taskGraph, {
+              reason:
+                userChoice === "REQUIREMENT_CHANGE"
+                  ? "需求演进：图谱回灰待重做"
+                  : "质疑自查未通过：点亮已回灰",
+            }),
+          );
+          setJourneyCards((prev) => [
+            ...prev.slice(-19),
+            {
+              id: `dispute-gray-${Date.now()}`,
+              kind: "DISPUTE",
+              text: "相关任务灯已回灰。修完或重签后再验证点亮——不会假绿。",
+            },
+          ]);
+        }
       } catch (err) {
         setDisputeError((err as Error).message);
       } finally {
         setDisputeBusy(false);
       }
     },
-    [conn, selected, toDisputeView],
+    [conn, selected, toDisputeView, taskGraph],
   );
 
-  /** TASK-S.6：右侧唯一入口分流 */
+  /** TASK-S.6 + C.11a：右侧唯一入口分流；MAJOR 前先走 ≤2 轮白话选择题 */
   const handleJourneyBeforeSend = useCallback(
     async (text: string): Promise<"handled" | "passthrough"> => {
       if (!conn || !connected) return "passthrough";
+      const trimmed = text.trim();
+      // 澄清进行中：忽略新输入，避免打断选择题
+      if (clarificationState?.status === "asking") {
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `clarif-wait-${Date.now()}`,
+            kind: "SYSTEM",
+            text: "请先点完上面的选择题（带「推荐」的那项是默认稳妥选项）。",
+          },
+        ]);
+        return "handled";
+      }
+      // 尚未澄清：对较长意图先出选择题（dispute/短指令放行）
+      const looksDispute =
+        /不对|质疑|有问题|bug|缺陷|验收失败/.test(trimmed.toLowerCase());
+      // 每次新意图都重新澄清；有 pending 时不重复开场（asking 已在上方提前 return）
+      const needsClarify = trimmed.length >= 6 && !looksDispute;
+      if (needsClarify && !clarificationPendingText) {
+        const started = startClarificationSession(trimmed);
+        setClarificationState(started.state);
+        setClarificationRound(started.round);
+        setClarificationPendingText(trimmed);
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `clarif-start-${Date.now()}`,
+            kind: "MAJOR_DRAFT",
+            text: "收到。先确认两件小事（最多 2 轮选择题），再给你 Demo 和白话合同。",
+          },
+        ]);
+        return "handled";
+      }
       setJourneyBusy(true);
       try {
+        const enrich =
+          clarificationState &&
+          (clarificationState.status === "completed" ||
+            clarificationState.status === "capped")
+            ? formatClarificationDefaultsSummary(clarificationState.answers)
+            : "";
+        const message =
+          enrich.length > 0
+            ? `${trimmed}\n\n【澄清默认】${enrich}`
+            : trimmed;
         const result = await submitJourneyMessage(conn, {
-          message: text,
+          message,
           ...(selectedId ? { contract_id: selectedId } : {}),
         });
         const kind = result.route;
@@ -681,6 +800,48 @@ function Console() {
           // 小事 Fast Path：默认不甩工程师合同表单，改由老板三步台确认开改
           setShowForm(kind !== "FAST_PATH");
           setStudioNonce((n) => n + 1);
+          // C.11b：MAJOR 路径自动落 prototypes 并开预览；Fast Path 可 skip
+          if (kind === "MAJOR_DRAFT" && result.skip_demo !== true) {
+            void (async () => {
+              try {
+                const proto = await createSupervisorPrototype(conn, {
+                  title: result.draft?.contract.intent.title ?? trimmed.slice(0, 40),
+                });
+                setActivePrototypeId(proto.prototype_id);
+                setDemoConfirmed(proto.confirmed === true);
+                setPlainContractVisible(false);
+                if (proto.preview_url) {
+                  setRetainedDemoUrl(proto.preview_url);
+                  setDemoPreview({
+                    url: proto.preview_url,
+                    port: Number(new URL(proto.preview_url).port) || 4100,
+                    status: (proto.preview_status as "RUNNING") ?? "RUNNING",
+                    updated_at: new Date().toISOString(),
+                    ...(proto.message ? { message: proto.message } : {}),
+                  });
+                }
+                setStudioViewportOverride("demo");
+                setJourneyCards((prev) => [
+                  ...prev.slice(-19),
+                  {
+                    id: `proto-${Date.now()}`,
+                    kind: "SYSTEM",
+                    text: `已生成隔离 Demo（${proto.relative_root}）。请先试玩并点「确认 Demo」，再签署白话合同。`,
+                  },
+                ]);
+              } catch (err) {
+                setConfirmPrototypeError(
+                  err instanceof Error
+                    ? err.message
+                    : "隔离 Demo 生成失败",
+                );
+              }
+            })();
+          }
+          if (kind === "FAST_PATH") {
+            setDemoConfirmed(true); // skip_demo
+            setPlainContractVisible(true);
+          }
         }
 
         if (result.requirements_updated) {
@@ -752,7 +913,146 @@ function Console() {
         setJourneyBusy(false);
       }
     },
-    [conn, connected, selectedId, selected, toDisputeView],
+    [
+      conn,
+      connected,
+      selectedId,
+      selected,
+      toDisputeView,
+      clarificationState,
+      clarificationPendingText,
+    ],
+  );
+
+  const handleClarificationSelect = useCallback(
+    (questionId: string, optionId: string) => {
+      if (!clarificationState || !clarificationRound) return;
+      const question = clarificationRound.questions.find((q) => q.id === questionId);
+      if (!question) return;
+      let nextState = recordClarificationAnswer(
+        clarificationState,
+        question,
+        optionId,
+      );
+      if (!isRoundComplete(clarificationRound, nextState.answers)) {
+        setClarificationState(nextState);
+        return;
+      }
+      const advanced = advanceClarificationSession(nextState, clarificationRound);
+      setClarificationState(advanced.state);
+      if (advanced.nextRound) {
+        setClarificationRound(advanced.nextRound);
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `clarif-r${advanced.nextRound!.round_index}-${Date.now()}`,
+            kind: "SYSTEM",
+            text: `第 ${advanced.nextRound!.round_index + 1} 轮澄清（仍带推荐选项）。`,
+          },
+        ]);
+        return;
+      }
+      setClarificationRound(null);
+      const pending = clarificationPendingText;
+      setClarificationPendingText(null);
+      const summary = formatClarificationDefaultsSummary(advanced.state.answers);
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `clarif-done-${Date.now()}`,
+          kind: "SYSTEM",
+          text: `澄清完成。${summary}。正在为你准备草案与 Demo…`,
+        },
+      ]);
+      if (pending && conn && connected) {
+        void (async () => {
+          setJourneyBusy(true);
+          try {
+            const message = `${pending}\n\n【澄清默认】${summary}`;
+            const result = await submitJourneyMessage(conn, {
+              message,
+              ...(selectedId ? { contract_id: selectedId } : {}),
+            });
+            const kind = result.route;
+            setJourneyCards((prev) => [
+              ...prev.slice(-19),
+              {
+                id: `journey-${Date.now()}`,
+                kind,
+                text: result.plain_summary,
+              },
+            ]);
+            if (result.draft) {
+              setDraft(result.draft);
+              setShowForm(kind !== "FAST_PATH");
+              setStudioNonce((n) => n + 1);
+              if (kind === "MAJOR_DRAFT" && result.skip_demo !== true) {
+                try {
+                  const proto = await createSupervisorPrototype(conn, {
+                    title:
+                      result.draft?.contract.intent.title ?? pending.slice(0, 40),
+                  });
+                  setActivePrototypeId(proto.prototype_id);
+                  setDemoConfirmed(proto.confirmed === true);
+                  setPlainContractVisible(false);
+                  if (proto.preview_url) {
+                    setRetainedDemoUrl(proto.preview_url);
+                    setDemoPreview({
+                      url: proto.preview_url,
+                      port: Number(new URL(proto.preview_url).port) || 4100,
+                      status: (proto.preview_status as "RUNNING") ?? "RUNNING",
+                      updated_at: new Date().toISOString(),
+                      ...(proto.message ? { message: proto.message } : {}),
+                    });
+                  }
+                  setStudioViewportOverride("demo");
+                  setJourneyCards((prev) => [
+                    ...prev.slice(-19),
+                    {
+                      id: `proto-${Date.now()}`,
+                      kind: "SYSTEM",
+                      text: `已生成隔离 Demo（${proto.relative_root}）。请先试玩并点「确认 Demo」。`,
+                    },
+                  ]);
+                } catch (err) {
+                  setConfirmPrototypeError(
+                    err instanceof Error ? err.message : "隔离 Demo 生成失败",
+                  );
+                }
+              }
+              if (kind === "FAST_PATH") {
+                setDemoConfirmed(true);
+                setPlainContractVisible(true);
+              }
+            }
+            if (result.suggest_viewport) {
+              setStudioViewportOverride(result.suggest_viewport);
+            }
+            if (result.requirements_updated) {
+              setRequirementsHint(
+                result.requirements_hint ??
+                  `需求说明已更新 · ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
+              );
+            }
+          } catch (error) {
+            setJourneyCards((prev) => [
+              ...prev.slice(-19),
+              {
+                id: `journey-err-${Date.now()}`,
+                kind: "SYSTEM",
+                text:
+                  error instanceof Error
+                    ? `分流暂时不可用：${error.message}`
+                    : "分流暂时不可用",
+              },
+            ]);
+          } finally {
+            setJourneyBusy(false);
+          }
+        })();
+      }
+    },
+    [clarificationState, clarificationRound, clarificationPendingText, conn, connected, selectedId],
   );
 
   const handleStartRealPlaytest = useCallback(async () => {
@@ -818,38 +1118,167 @@ function Console() {
     }
   }, [conn, selectedId]);
 
-  /** TASK-S.6：确认原型 → 建全灰 TaskGraph（禁止空壳 nonce） */
+  /** TASK-C.11b：确认 Demo 感官对齐 → 展示白话合同卡（不立刻写真码） */
   const handleConfirmPrototype = useCallback(async () => {
-    if (!conn || !selected) {
-      setConfirmPrototypeError(
-        "请先在左侧点一份合同（或先出草案并落盘），再确认原型开工。",
-      );
+    if (!conn) {
+      setConfirmPrototypeError("请先连接 Daemon。");
       return;
     }
     setConfirmPrototypeBusy(true);
     setConfirmPrototypeError(null);
     try {
-      const proposal = buildProposalFromContract(selected);
-      const graph = await createTaskGraph(conn, proposal);
-      setTaskGraph(graph);
-      setStudioViewportOverride("graph");
-      setStudioNonce((n) => n + 1);
+      let pid = activePrototypeId;
+      if (!pid) {
+        const title =
+          selected?.intent.title ??
+          draft?.contract.intent.title ??
+          "隔离 Demo";
+        const proto = await createSupervisorPrototype(conn, { title });
+        pid = proto.prototype_id;
+        setActivePrototypeId(pid);
+        if (proto.preview_url) {
+          setRetainedDemoUrl(proto.preview_url);
+          setDemoPreview({
+            url: proto.preview_url,
+            port: Number(new URL(proto.preview_url).port) || 4100,
+            status: (proto.preview_status as "RUNNING") ?? "RUNNING",
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+      const confirmed = await confirmSupervisorPrototype(conn, {
+        prototype_id: pid,
+      });
+      setDemoConfirmed(true);
+      setPlainContractVisible(true);
+      setStudioViewportOverride("contract");
       setJourneyCards((prev) => [
         ...prev.slice(-19),
         {
-          id: `journey-confirm-${Date.now()}`,
+          id: `demo-confirmed-${Date.now()}`,
           kind: "SYSTEM",
-          text: `已按合同「${selected.intent.title}」建好全灰任务图（${graph.nodes.length} 个节点）。审批通过后会随 Evidence 逐个点亮。`,
+          text: `Demo 已确认（${confirmed.relative_root}）。请审阅白话合同并一键授权；拒约将保留 Demo。`,
         },
       ]);
     } catch (error) {
       setConfirmPrototypeError(
-        error instanceof Error ? error.message : "确认原型失败：无法建立任务图",
+        error instanceof Error ? error.message : "确认 Demo 失败",
       );
     } finally {
       setConfirmPrototypeBusy(false);
     }
-  }, [conn, selected]);
+  }, [conn, selected, draft, activePrototypeId]);
+
+  const plainAuthorizeView = useMemo(() => {
+    const src = selected ?? draft?.contract ?? null;
+    if (!src || !plainContractVisible) return null;
+    const criteria = src.intent.acceptance_criteria ?? [];
+    const writable =
+      src.authorization?.file_system_scope?.writable_paths?.slice(0, 6) ??
+      draft?.plan.writable_paths?.slice(0, 6) ??
+      [];
+    return {
+      contract_id: src.contract_id ?? `draft-${draftVersion}`,
+      title: src.intent.title,
+      intent_summary: src.intent.description || src.intent.title,
+      scope_summary:
+        writable.length > 0
+          ? `可改：${writable.join("、")}`
+          : "范围将在授权后按草案锁定",
+      acceptance_summary:
+        criteria.length > 0
+          ? criteria.slice(0, 4).join("；")
+          : "按 Demo 主流程可走通即为验收",
+      draft_version: `v${draftVersion}-draft`,
+      demo_confirmed: demoConfirmed,
+      lifecycle_hint: demoConfirmed
+        ? "已确认 Demo · 等待授权"
+        : "请先确认 Demo",
+    };
+  }, [selected, draft, plainContractVisible, draftVersion, demoConfirmed]);
+
+  const handlePlainAuthorize = useCallback(async () => {
+    if (!conn || !demoConfirmed) return;
+    setAuthorizeBusy(true);
+    setConfirmPrototypeError(null);
+    try {
+      // 若仅有草案：先落盘再批准
+      let contractId = selected?.contract_id;
+      let target = selected;
+      if (!contractId && draft?.contract) {
+        const created = await createContractWithAdmission(conn, draft.contract);
+        const saved = created.contract;
+        contractId = saved.contract_id;
+        target = saved;
+        setContracts((prev) => {
+          const without = prev.filter((c) => c.contract_id !== saved.contract_id);
+          return [...without, saved];
+        });
+        setSelectedId(contractId);
+      }
+      if (!contractId) {
+        setConfirmPrototypeError("没有可授权的合同或草案。");
+        return;
+      }
+      await approveContract(conn, contractId, "local-user");
+      const list = await listContracts(conn);
+      setContracts(list);
+      const approved = list.find((c) => c.contract_id === contractId);
+      target = approved ?? target ?? selected;
+      if (target) {
+        const proposal = buildProposalFromContract(target);
+        const graph = await createTaskGraph(conn, proposal);
+        setTaskGraph(graph);
+        setStudioViewportOverride("graph");
+        setStudioNonce((n) => n + 1);
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `authorized-${Date.now()}`,
+            kind: "SYSTEM",
+            text: `已授权「${target.intent.title}」。任务图已建好（${graph.nodes.length} 节点），将随 Evidence 点亮——不会假绿。`,
+          },
+        ]);
+      }
+      setPlainContractVisible(false);
+    } catch (error) {
+      setConfirmPrototypeError(
+        error instanceof Error ? error.message : "授权失败",
+      );
+    } finally {
+      setAuthorizeBusy(false);
+    }
+  }, [conn, demoConfirmed, selected, draft]);
+
+  const handlePlainReject = useCallback(() => {
+    setDraftVersion((v) => v + 1);
+    setPlainContractVisible(true);
+    setJourneyCards((prev) => [
+      ...prev.slice(-19),
+      {
+        id: `reject-${Date.now()}`,
+        kind: "SYSTEM",
+        text: `已拒绝本版合同（草案升为 v${draftVersion + 1}-draft）。Demo 仍保留可继续试玩；改完细节后再授权。`,
+      },
+    ]);
+    if (retainedDemoUrl) {
+      setStudioViewportOverride("demo");
+    }
+  }, [draftVersion, retainedDemoUrl]);
+
+  const handlePlainRevise = useCallback(() => {
+    setShowForm(true);
+    setStudioViewportOverride("contract");
+    setDraftVersion((v) => v + 1);
+    setJourneyCards((prev) => [
+      ...prev.slice(-19),
+      {
+        id: `revise-${Date.now()}`,
+        kind: "SYSTEM",
+        text: "可以改合同细节。Demo 默认保留；大改流程时再重做原型。",
+      },
+    ]);
+  }, []);
 
   // C.3：Agent 改完文件 → 中栏自动打开并刷新（Sprint 1 门禁「中栏实时可见」）
   const [openRequest, setOpenRequest] = useState<{
@@ -1638,6 +2067,20 @@ function Console() {
   );
 
   // TASK-C.9a：三态单一指挥面（无钥匙 / 有钥匙空闲 / 进行中）
+  // TASK-C.11d：越界告警 → 挂起弹窗（扩权 / 回滚）
+  useEffect(() => {
+    const hit = stream.alerts.find((a) =>
+      /OUT_OF_SCOPE|FORBIDDEN|GATEWAY_VIOLATION|SCOPE/i.test(a.code),
+    );
+    if (!hit) return;
+    setScopePaused({
+      contract_id: hit.contractId,
+      code: hit.code,
+      message: hit.message,
+      ...(hit.path ? { attempted_path: hit.path } : {}),
+    });
+  }, [stream.alerts]);
+
   const needsProtectionConfirm =
     admission != null && shouldConfirmAdmission(admission);
   // C.10a：进行中只跟忙碌/确认/三步台；历史 journeyCards 不粘住 in_progress
@@ -1656,7 +2099,41 @@ function Console() {
 
   return (
     <div className="flex h-screen flex-col bg-background text-sm text-foreground">
-      <WorkspaceLayout
+      <>
+        <ScopePausedDialog
+          view={scopePaused}
+          busy={scopePausedBusy}
+          onExpandScope={() => {
+            setScopePausedBusy(true);
+            setJourneyCards((prev) => [
+              ...prev.slice(-19),
+              {
+                id: `scope-expand-${Date.now()}`,
+                kind: "SYSTEM",
+                text: "已记录扩权意向。请在白话合同里改 Scope 后重签；本轮仍保持暂停，不会静默放行。",
+              },
+            ]);
+            setScopePaused(null);
+            setScopePausedBusy(false);
+            setPlainContractVisible(true);
+            setStudioViewportOverride("contract");
+          }}
+          onRollback={() => {
+            setScopePausedBusy(true);
+            setJourneyCards((prev) => [
+              ...prev.slice(-19),
+              {
+                id: `scope-rollback-${Date.now()}`,
+                kind: "SYSTEM",
+                text: "已选择回滚本轮越界改动。任务保持暂停，可重新确认范围后再开工。",
+              },
+            ]);
+            setScopePaused(null);
+            setScopePausedBusy(false);
+          }}
+          onDismiss={() => setScopePaused(null)}
+        />
+        <WorkspaceLayout
         repoName={repoName}
         repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
         baseBranch={currentBranch}
@@ -1694,12 +2171,40 @@ function Console() {
         }
         rightPanel={
           // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
+          <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+            {plainAuthorizeView ? (
+              <div className="shrink-0 px-2 pt-2">
+                <PlainContractAuthorizeCard
+                  view={plainAuthorizeView}
+                  busy={authorizeBusy}
+                  onAuthorize={() => {
+                    void handlePlainAuthorize();
+                  }}
+                  onReject={handlePlainReject}
+                  onRevise={handlePlainRevise}
+                />
+              </div>
+            ) : null}
           <AgentChatPane
             transport={chatTransport}
             session={chatSession}
             onBeforeSend={handleJourneyBeforeSend}
             journeyCards={journeyCards}
             journeyBusy={journeyBusy}
+            clarificationQuestions={clarificationRound?.questions}
+            clarificationRoundIndex={clarificationRound?.round_index ?? 0}
+            clarificationSelections={
+              clarificationState
+                ? Object.fromEntries(
+                    clarificationState.answers.map((a) => [
+                      a.question_id,
+                      a.option_id,
+                    ]),
+                  )
+                : undefined
+            }
+            clarificationDisabled={journeyBusy || authorizeBusy}
+            onClarificationSelect={handleClarificationSelect}
             keyConfigured={settings?.configured === true}
             onConfigureKey={() => {
               setSettingsDeepFocus("model-key");
@@ -1710,6 +2215,7 @@ function Console() {
             primaryCtaTestId={commandSurface.primaryCtaTestId}
             onAssistantModeChange={setAssistantMode}
           />
+          </div>
         }
         supervisorContent={
           // 左下角 Supervisor 图标 → 中央可关闭 Tab；数据全部来自合同/保护清单
@@ -2221,6 +2727,7 @@ function Console() {
           </footer>
         }
       />
+      </>
     </div>
   );
 }

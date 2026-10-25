@@ -1,0 +1,199 @@
+/**
+ * TASK-C.11b：Demo 落盘到 `.stagent/prototypes/<prototype_id>/`（Top7#1）。
+ * 目录已在根 `.gitignore` 的 `.stagent/` 规则下忽略，不合入主干。
+ */
+import fs from "node:fs";
+import path from "node:path";
+import { DEMO_ENTRY, type GeneratedDemo } from "./types";
+import { writeDemo, type WriteDemoResult } from "./demo-generator";
+
+export const PROTOTYPES_ROOT = ".stagent/prototypes" as const;
+
+export const DEMO_CONFIRM_STATE_FILE =
+  ".stagent/metadata/demo-confirm.json" as const;
+
+export interface DemoConfirmRecord {
+  prototype_id: string;
+  confirmed: boolean;
+  confirmed_at: string | null;
+  relative_root: string;
+}
+
+export function prototypeRelativeRoot(prototypeId: string): string {
+  const id = sanitizePrototypeId(prototypeId);
+  return path.posix.join(PROTOTYPES_ROOT, id);
+}
+
+export function sanitizePrototypeId(raw: string): string {
+  const cleaned = raw
+    .trim()
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+  return cleaned.length > 0 ? cleaned : `proto-${Date.now()}`;
+}
+
+/** 写入 prototypes/<id>/，返回落盘结果 */
+export function writePrototype(
+  repoRoot: string,
+  prototypeId: string,
+  demo: GeneratedDemo,
+): WriteDemoResult & { prototype_id: string; relative_root: string } {
+  const id = sanitizePrototypeId(prototypeId);
+  const relative_root = prototypeRelativeRoot(id);
+  const result = writeDemo(repoRoot, demo, { rootDir: relative_root });
+  // 初始确认态：未确认
+  upsertDemoConfirm(repoRoot, {
+    prototype_id: id,
+    confirmed: false,
+    confirmed_at: null,
+    relative_root,
+  });
+  return { ...result, prototype_id: id, relative_root };
+}
+
+export function readDemoConfirm(
+  repoRoot: string,
+  prototypeId?: string,
+): DemoConfirmRecord | null {
+  const abs = path.join(repoRoot, DEMO_CONFIRM_STATE_FILE);
+  if (!fs.existsSync(abs)) return null;
+  try {
+    const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as {
+      records?: DemoConfirmRecord[];
+    };
+    const records = Array.isArray(raw.records) ? raw.records : [];
+    if (prototypeId) {
+      const id = sanitizePrototypeId(prototypeId);
+      return records.find((r) => r.prototype_id === id) ?? null;
+    }
+    // 最近一条
+    return records.length > 0 ? records[records.length - 1]! : null;
+  } catch {
+    return null;
+  }
+}
+
+export function upsertDemoConfirm(
+  repoRoot: string,
+  record: DemoConfirmRecord,
+): void {
+  const abs = path.join(repoRoot, DEMO_CONFIRM_STATE_FILE);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  let records: DemoConfirmRecord[] = [];
+  if (fs.existsSync(abs)) {
+    try {
+      const raw = JSON.parse(fs.readFileSync(abs, "utf8")) as {
+        records?: DemoConfirmRecord[];
+      };
+      records = Array.isArray(raw.records) ? raw.records : [];
+    } catch {
+      records = [];
+    }
+  }
+  const idx = records.findIndex((r) => r.prototype_id === record.prototype_id);
+  if (idx >= 0) records[idx] = record;
+  else records.push(record);
+  fs.writeFileSync(
+    abs,
+    JSON.stringify({ records, updated_at: new Date().toISOString() }, null, 2),
+    "utf8",
+  );
+}
+
+export function confirmDemoPrototype(
+  repoRoot: string,
+  prototypeId: string,
+  now: () => Date = () => new Date(),
+): DemoConfirmRecord {
+  const id = sanitizePrototypeId(prototypeId);
+  const existing = readDemoConfirm(repoRoot, id);
+  const relative_root = existing?.relative_root ?? prototypeRelativeRoot(id);
+  const record: DemoConfirmRecord = {
+    prototype_id: id,
+    confirmed: true,
+    confirmed_at: now().toISOString(),
+    relative_root,
+  };
+  upsertDemoConfirm(repoRoot, record);
+  return record;
+}
+
+/** 签署前写真码门禁：未确认 Demo 则拒绝（Fast Path skip_demo 由调用方另判） */
+export function assertDemoConfirmedForWrite(
+  repoRoot: string,
+  prototypeId: string | undefined,
+  options: { skip_demo?: boolean } = {},
+): void {
+  if (options.skip_demo === true) return;
+  if (!prototypeId) {
+    const err = new Error(
+      "未确认 Demo：缺少 prototype_id，禁止写入项目主干",
+    ) as Error & { code: string };
+    err.code = "E_DEMO_NOT_CONFIRMED";
+    throw err;
+  }
+  const rec = readDemoConfirm(repoRoot, prototypeId);
+  if (!rec?.confirmed) {
+    const err = new Error(
+      "未确认 Demo：请先感官对齐后再写真码",
+    ) as Error & { code: string };
+    err.code = "E_DEMO_NOT_CONFIRMED";
+    throw err;
+  }
+}
+
+export function buildMinimalPrototypeDemo(title: string): GeneratedDemo {
+  const safeTitle = title.trim() || "隔离 Demo";
+  const html = `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(safeTitle)}</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(safeTitle)}</h1>
+    <p data-testid="prototype-demo-banner">这是隔离 Demo（假数据），不会改你的正式源码。</p>
+    <form id="demo-form">
+      <label>试用输入 <input name="sample" type="text" placeholder="点这里试试" /></label>
+      <button type="submit">模拟提交</button>
+    </form>
+    <pre id="result" hidden></pre>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
+`;
+  const css = `body{font:14px/1.5 system-ui,sans-serif;margin:24px;background:#fafafa;color:#111}
+main{max-width:480px}h1{font-size:20px}input,button{font:inherit;margin-top:8px}
+button{padding:8px 14px;border:0;border-radius:6px;background:#0a84ff;color:#fff;cursor:pointer}
+pre{margin-top:12px;padding:12px;background:#f2f2f7;border-radius:6px;font-size:12px}`;
+  const js = `(function(){var f=document.getElementById("demo-form");var r=document.getElementById("result");if(!f||!r)return;f.addEventListener("submit",function(e){e.preventDefault();var el=f.elements.namedItem("sample");r.hidden=false;r.textContent="已模拟提交（未发网络）：\n"+JSON.stringify({sample:el&&"value"in el?el.value:""},null,2);});})();`;
+  const meta = JSON.stringify(
+    { title: safeTitle, kind: "c11b-prototype" },
+    null,
+    2,
+  );
+  const assets = [
+    { path: DEMO_ENTRY, content: html },
+    { path: "styles.css", content: css },
+    { path: "app.js", content: js },
+    { path: "meta.json", content: meta },
+  ] as const;
+  const totalBytes = assets.reduce(
+    (sum, a) => sum + Buffer.byteLength(a.content, "utf8"),
+    0,
+  );
+  return { entry: DEMO_ENTRY, assets: [...assets], totalBytes };
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}

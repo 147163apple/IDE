@@ -13,6 +13,8 @@ import {
   type AssistantModeSurface,
 } from "@/lib/assistant-mode";
 import { relaunchCurrentSession } from "@/lib/daemon-api";
+import { ClarificationChoiceCard } from "@/components/supervisor/ClarificationChoiceCard";
+import type { ClarificationQuestion } from "@/lib/journey/clarification";
 
 export interface JourneyChatCard {
   id: string;
@@ -37,6 +39,15 @@ export interface AgentChatPaneProps {
   /** 旅程系统卡（质疑白话摘要 / Fast Path 说明 / 草案就绪） */
   journeyCards?: JourneyChatCard[] | undefined;
   journeyBusy?: boolean | undefined;
+  /**
+   * TASK-C.11a：白话推荐选择题（右栏可点选；算对话内容，不破坏 C.10k 主视线）。
+   */
+  clarificationQuestions?: ClarificationQuestion[] | undefined;
+  clarificationRoundIndex?: number | undefined;
+  clarificationSelections?: Record<string, string> | undefined;
+  clarificationDisabled?: boolean | undefined;
+  onClarificationSelect?:
+    ((questionId: string, optionId: string) => void) | undefined;
   /**
    * TASK-C.8a：打开设置里的「模型钥匙」向导（由布局切到设置 Tab）。
    * 未配 Key 时右栏给一键入口，不甩工程师后台话术。
@@ -68,6 +79,11 @@ export function AgentChatPane({
   onBeforeSend,
   journeyCards,
   journeyBusy,
+  clarificationQuestions,
+  clarificationRoundIndex = 0,
+  clarificationSelections,
+  clarificationDisabled,
+  onClarificationSelect,
   onConfigureKey,
   keyConfigured,
   commandPhase,
@@ -358,6 +374,18 @@ export function AgentChatPane({
             </div>
             <div className="whitespace-pre-wrap">{card.text}</div>
           </div>
+        ))}
+        {(clarificationQuestions ?? []).map((q) => (
+          <ClarificationChoiceCard
+            key={q.id}
+            question={q}
+            roundIndex={clarificationRoundIndex}
+            selectedOptionId={clarificationSelections?.[q.id] ?? null}
+            disabled={clarificationDisabled === true}
+            onSelect={(questionId, optionId) =>
+              onClarificationSelect?.(questionId, optionId)
+            }
+          />
         ))}
       </div>
       {chat.error && <div className="text-destructive">{chat.error}</div>}
