@@ -9,13 +9,14 @@
 1. [`合同设计说明-2026-10-25.md`](./合同设计说明-2026-10-25.md) — 护照 vs 宪法、导言三锤、§7.3–§7.5  
 2. [`Supervisor运转机制-2026-10-25.md`](./Supervisor运转机制-2026-10-25.md) — 定稿：四机制 + 五阶段 + 收紧  
 3. [`核心资产治理-追溯与变更判定-2026-10-25.md`](./核心资产治理-追溯与变更判定-2026-10-25.md) — 六类资产生命周期、追溯硬门禁、轻量变更判定  
-4. [`任务图谱-设计说明-2026-10-24.md`](./任务图谱-设计说明-2026-10-24.md) — 全景 / 施工双视角  
-5. [`决策记录对账-2026-10-25.md`](./决策记录对账-2026-10-25.md) — 15 项矩阵校正、入库状态、缺口  
-6. 三份讨论稿（已入库、未升格）：
+4. [`工程决策拍板-Top7-2026-10-25.md`](./工程决策拍板-Top7-2026-10-25.md) — Demo/Token/越界/澄清轮次/拒约回退/重连/无Git 七条硬标准（讨论稿未整份升格）  
+5. [`任务图谱-设计说明-2026-10-24.md`](./任务图谱-设计说明-2026-10-24.md) — 全景 / 施工双视角  
+6. [`决策记录对账-2026-10-25.md`](./决策记录对账-2026-10-25.md) — 15 项矩阵校正、入库状态、缺口  
+7. 三份讨论稿（已入库、未升格）：
    - [`Stagent_Clarification_and_Authorization_Specification_v1.0.md`](./Stagent_Clarification_and_Authorization_Specification_v1.0.md)
    - [`Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md`](./Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md)
    - [`Stagent_Interface_Contract_Checklist_v1.0.md`](./Stagent_Interface_Contract_Checklist_v1.0.md)
-7. 骨架附件（以定稿为准）：[`Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md)
+8. 骨架附件（以定稿为准）：[`Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md)
 
 ## 仍缺（指导写码前）
 
