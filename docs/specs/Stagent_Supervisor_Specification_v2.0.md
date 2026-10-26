@@ -1,6 +1,6 @@
 # Stagent Supervisor 完整规范（v2.0）
 
-> **版本**：v2.0.1  
+> **版本**：v2.0.1（已由 **v2.0.2** 修订；见 `docs/specs/Stagent_Supervisor_Specification_v2.0.2.md`）  
 > **日期**：2026-10-26（Asia/Hong_Kong）  
 > **状态**：**现行生效 · Supervisor 单一事实源（SSOT）**  
 > **立卡**：`TASK-C.19` / `DOC-SSOT-Supervisor` → **[COMPLETED]**（Tina t906u 授权合流起草）  
@@ -11,6 +11,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.0.2** | 2026-10-26 | 见独立文件：五项决策钉死（单一确认谓词 / 直接签署状态边 / 事务补偿 / 权威优先级 / `completeness` 语义）+ 55 条验收矩阵（逐条绑测试 ID，`✅ 55 / ⏳ 0`）。**与本文件冲突处，以 v2.0.2 为准。** |
 | **v2.0.1** | 2026-10-26 | Tina t909u/t910u 审查补丁：① Demo 为体验增强项，跳过 Demo 可直接「确认方案」开工，废止新体验主链上 EO-06「未确认 Demo 禁止签署」硬卡解读；② 通配符分级（老项目禁裸通配 / 绿野允许模块级子目录通配并落盘收敛）；③ 「确认方案」五步原子时序钉死；④ 手改字段级 `user_pinned`；⑤ Demo 失败双按钮降级与风险标记；⑥ `demoReady` 硬性布尔底线（completeness≥60 仅辅助）。 |
 | v2.0.0 | 2026-10-26 | 初版 SSOT 五大章合流（`TASK-C.19`）；体验对齐 C.18。 |
 
@@ -97,12 +98,15 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
 
 **辅助分（非充分条件）**：
 
-- `completeness` 0–100 可作 UI 进度条与启发式辅助；**现行建议**再要求 `completeness ≥ 60`，但**仅辅助**：不满足上列四条布尔底线时，即使模型输出 90 分也**不得** `demoReady`。
+- `completeness` 0–100 可作 UI 进度条与启发式辅助；~~现行建议再要求 `completeness ≥ 60`~~
+  > **v2.0.2 裁废**：`completeness` **不参与任何门禁**（见 v2.0.2 §1 D5）。上列四条布尔底线是 `demoReady` 的全部内容。
 - 实现侧可对启发式分做封顶/校验，**不得**把模型 JSON 里的自报分直接当权威。
 
 **现行实现口径（C.18 薄切片 + v2.0.1 契约）**：从对话语料抽取业务模块、拼 Mermaid、生成默认决策与冲突卡（`src/lib/journey/scheme-draft.ts`）；工程落地须对齐上列布尔底线（未完全对齐前以规范为准纠偏，不得以「模型觉得够了」放行）。
 
 **确认方案 vs Demo**：`canConfirmScheme`（可点「确认方案」）= 无 OPEN 冲突 + 方案摘要可审；**不要求** `demoReady`，**不要求**已生成/已确认 Demo。`demoReady` 只控制「生成 Demo」按钮浮现。
+
+> **v2.0.2 收口**：`canConfirmScheme` 已降为兼容别名，唯一门禁是 `evaluateSchemeConfirmation(draft, demo)`（含「已生成必须已确认」与「修订必须一致」）。见 v2.0.2 §1 D1。
 
 **演进方向**：硬字段清单（核心实体、主流程、验收判据、数据模式、受众）可继续加严布尔求值；**不得**回退到强制问卷打断右栏。
 
@@ -209,6 +213,7 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
   2. **新功能 / 从零新建（绿野）**：允许**模块级子目录通配**作为签署时的 Scope 种子（例：`src/features/finance/**`、`src/components/ProgressBoard/**`），以便尚未存在的文件可被创建。
   3. **落盘收敛**：Worker 在施工中每创建/改写文件后，Daemon/Supervisor 须将通配**收敛/替换**为具体文件 manifest（写入合同附属或执行快照）；验收与审计以收敛后的清单为准，不得长期悬挂无界通配。
   4. **敏感区永不被通配覆盖**：即使绿野，`.env*`、`.git/**`、`.stagent/**`、锁文件、认证/支付等 P.1 保护区仍一票否决，不可被任何 `writable_paths` 通配吞入。
+  > **v2.0.2 细化（R1）**：判据改为「**有没有既有代码会被覆盖**」——绿野仓库且该顶层目录**尚不存在**时，`src/**`、`tests/**` 可作为脚手架种子放行；顶层目录已存在即拒绝；全仓通配（`**`、`**/*`、`*`、`*/**`）任何情况都拒绝。见 v2.0.2 §2 R1 与测试 `T-SCOPE-007/007b/007c/014/015`。
 - **其他目标约束**：依赖追踪默认 ≤2 hop；单合同 `writable_paths` 宜小，过大拆微合同。
 - **严禁 / 保护**：`.env*`、`.git/**`、`.stagent/**`（治理自锁）、锁文件、认证/支付等敏感区（P.1 一票否决）。
 - **脏区防误伤（已验）**：未 `acknowledge_dirty` 不得把脏主仓路径卷入可写施工；API 返回 **409** + 白话低恐慌排除建议；确认后排除并入禁写（`TASK-H.6` / C.14d）。
@@ -241,6 +246,7 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
   - **无 UI**、或用户**未点**「生成 Demo」而直接「确认方案」→ **以审阅后的静态图表方案为准直接开工**，Daemon/`can_sign` **不得强阻断**。
   - **已生成** Demo → 签署须经用户**显式确认 Demo**；或走 §5.4「接受仅用流程图说明开工（标风险）」降级并写入风险标记。
   - 合同/证据字段建议：`demo.status = none | building | ready | confirmed | failed | degraded_flowcard`；仅当 `ready` 且用户未确认、又未选降级时，才阻断签署。
+  > **v2.0.2 权威优先级（D4）**：① 有 `confirmation_id` → 按冻结快照求值，快照缺失即拒签；② 无快照 → 回退最新确认记录；③ 完全无记录 → 视为从未生成，允许直签。旧实现「仅在已有确认记录时才校验」导致 `confirmed:false` 被跳过 —— 属缺陷，v2.0.2 起必须拒绝（`E_DEMO_NOT_CONFIRMED`）。见 `daemon/supervisor/demo/signing-gate.ts`。
 
 ---
 
@@ -284,6 +290,8 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
 5. **配 Worktree + 发 Token → 中栏切入施工进度**：挂载 `.stagent/worktrees/{contract_id}/`，签发 `exec_token`，中栏无缝切到施工进度/任务图谱（或方案页内嵌施工态）；**禁止**前端在步骤 4 完成前抢跑 Worker。
 
 **禁止**：确认瞬间并行接受新的右栏用户消息写入同一草案；确认后静默解冻改写已签快照。
+
+> **v2.0.2 补充（D3）**：上述五步已落为带幂等键与补偿的事务 —— 阶段名 `CLAIM_AND_QUIESCE → VALIDATE_CONFIRMATION → FREEZE_SNAPSHOT → SIGN_AND_PREPARE → COMMIT`，实现见 `src/lib/journey/confirm-scheme-atomic.ts`。第 4 步失败必须 `compensate`；补偿失败保持右栏锁定。快照落盘路径钉死为 `.stagent/drafts/schemes/{confirmation_id}.json`，摘要剔除 `updatedAt`。
 
 ### 5.3 与五阶段监理职责的映射（机制层仍有效）
 
