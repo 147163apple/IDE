@@ -99,7 +99,8 @@ export function forceClearIndexLocks(
     try {
       if (fs.existsSync(wtGit) && fs.statSync(wtGit).isFile()) {
         const gitdir = fs.readFileSync(wtGit, "utf8").trim();
-        const m = /^gitdir:\s*(.+)$/i.exec(gitdir);
+        // 解析 gitdir: 指针（String.match，非进程启动）
+        const m = gitdir.match(/^gitdir:\s*(.+)$/i);
         if (m?.[1]) {
           candidates.push(path.join(m[1].trim(), "index.lock"));
         }
