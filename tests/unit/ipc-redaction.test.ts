@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  NEVER_TRUNCATE_ARRAY_KEYS,
   REDACTED_PLACEHOLDER,
   collectEnvironmentSecrets,
   redactDeep,
@@ -153,6 +154,19 @@ describe("顺序与边界：先脱敏、后截断", () => {
     );
     expect(longArray.value).toHaveLength(200);
     expect(longArray.truncated).toBe(true);
+
+    // 无关数组仍截断；脏区白名单键永不截断（C.14d）
+    const dirtyPayload = redactDeep(
+      {
+        dirty_exclusions: Array.from({ length: 306 }, (_, i) => `path-${i}.ts`),
+        other_list: Array.from({ length: 250 }, (_, i) => i),
+      },
+      { maxArrayLength: 200 },
+    );
+    expect(dirtyPayload.value.dirty_exclusions).toHaveLength(306);
+    expect(dirtyPayload.value.other_list).toHaveLength(200);
+    expect(dirtyPayload.truncated).toBe(true);
+    expect(NEVER_TRUNCATE_ARRAY_KEYS.has("dirty_exclusions")).toBe(true);
 
     type Deep = { child?: Deep };
     let deep: Deep = {};

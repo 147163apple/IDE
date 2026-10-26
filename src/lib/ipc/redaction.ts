@@ -42,6 +42,20 @@ export const REDACTED_PLACEHOLDER = "[REDACTED]";
 /** 单字段最大字符数：超出截断并标记，防止单帧撑爆传输上限 */
 export const REDACTION_MAX_STRING_LENGTH = 8_000;
 
+/**
+ * C.14d：脏区/禁写路径清单是施工门禁物理白名单，脱敏不得截断长度，
+ * 否则管家话术计数与落盘白名单不一致，且超额路径失去保护。
+ * 元素字符串仍走 redactText。
+ */
+export const NEVER_TRUNCATE_ARRAY_KEYS = new Set<string>([
+  "dirty_exclusions",
+  "protect_paths",
+  "uncommitted",
+  "untracked",
+  "strictly_forbidden_paths",
+  "forbidden_paths",
+]);
+
 export interface RedactionOptions {
   /** 已知真实秘密值（≥6 字符才参与精确抹除） */
   secretValues?: readonly string[];
@@ -51,6 +65,11 @@ export interface RedactionOptions {
   maxDepth?: number;
   /** 单数组元素上限，默认 200（防止超长列表把帧撑爆） */
   maxArrayLength?: number;
+  /**
+   * 额外永不截断长度的数组键（并入 {@link NEVER_TRUNCATE_ARRAY_KEYS}）。
+   * 元素仍脱敏。
+   */
+  neverTruncateArrayKeys?: readonly string[];
 }
 
 export interface RedactionResult<T = unknown> {
@@ -130,6 +149,10 @@ export function redactDeep<T = unknown>(
 ): RedactionResult<T> {
   const maxDepth = options.maxDepth ?? 12;
   const maxArrayLength = options.maxArrayLength ?? 200;
+  const neverTruncate = new Set<string>([
+    ...NEVER_TRUNCATE_ARRAY_KEYS,
+    ...(options.neverTruncateArrayKeys ?? []),
+  ]);
   let redacted = false;
   let truncated = false;
   let redactions = 0;
@@ -164,8 +187,11 @@ export function redactDeep<T = unknown>(
     if (value instanceof Date) return value.toISOString();
 
     if (Array.isArray(value)) {
+      const preserveFull = neverTruncate.has(keyHint);
       const bounded =
-        value.length > maxArrayLength ? value.slice(0, maxArrayLength) : value;
+        !preserveFull && value.length > maxArrayLength
+          ? value.slice(0, maxArrayLength)
+          : value;
       if (bounded.length !== value.length) truncated = true;
       return bounded.map((item) => walk(item, depth + 1, keyHint));
     }

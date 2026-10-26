@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { redactDeep } from "../../src/lib/ipc/redaction";
 import {
   BASELINE_RECORDS_ROOT,
+  buildStewardDirtyMessage,
   type BaselineArchive,
   type BaselineReviewStatus,
 } from "./types";
@@ -50,9 +51,20 @@ export function writeBaselineArchive(
   if (/contract_000/i.test(archive.scan_id)) {
     throw new Error("禁止使用 contract_000 作为基线 scan_id");
   }
+  // EO-04 脱敏；C.14d 路径白名单键不截断（见 NEVER_TRUNCATE_ARRAY_KEYS）
   const safe = redactDeep(archive).value as BaselineArchive;
   // 强制：确认永不授予施工写权
   safe.grants_construction = false;
+  // 管家话术数字必须与落盘 dirty_exclusions 全量一致（防截断/漂移）
+  if (safe.dirty) {
+    const n = safe.dirty.dirty_exclusions?.length ?? 0;
+    if (safe.dirty.protect_paths?.length !== n) {
+      safe.dirty.protect_paths = [...(safe.dirty.dirty_exclusions ?? [])];
+    }
+    safe.dirty.steward_message =
+      n > 0 ? buildStewardDirtyMessage(n) : null;
+    safe.dirty.clean = n === 0;
+  }
 
   const dir = baselineScanDir(repoRoot, safe.scan_id);
   fs.mkdirSync(dir, { recursive: true });

@@ -225,6 +225,51 @@ describe("TASK-C.14c dirty + guard + scope", () => {
     expect(report.steward_message).toContain("3 个");
   });
 
+  it("落盘 dirty_exclusions >200 时不被 redactDeep 截断，话术数字一致", () => {
+    const root = makeRepo();
+    try {
+      const paths = Array.from({ length: 306 }, (_, i) => `tmp/file-${i}.txt`);
+      const archive: BaselineArchive = {
+        schema_version: "1.0.0",
+        kind: "project_baseline_archive",
+        scan_id: newBaselineScanId(),
+        scanned_at: new Date().toISOString(),
+        tool_version: "t",
+        review_status: "pending_review",
+        accepted_at: null,
+        grants_construction: false,
+        phase: "done",
+        progress_copy: "x",
+        p0: null,
+        deep: null,
+        dirty: {
+          clean: false,
+          uncommitted: paths.slice(0, 100),
+          untracked: paths.slice(100),
+          // 故意写成与清单不符的旧话术，落盘后必须纠正
+          steward_message: buildStewardDirtyMessage(999),
+          protect_paths: paths,
+          dirty_exclusions: paths,
+        },
+        os_sandbox: null,
+        ignore_rules: [],
+        incomplete: false,
+        notes: [],
+      };
+      writeBaselineArchive(root, archive);
+      const loaded = readBaselineArchive(root);
+      expect(loaded).not.toBeNull();
+      expect(loaded!.dirty.dirty_exclusions).toHaveLength(306);
+      expect(loaded!.dirty.protect_paths).toHaveLength(306);
+      expect(loaded!.dirty.steward_message).toBe(buildStewardDirtyMessage(306));
+      expect(loaded!.dirty.steward_message).toContain("306 个");
+      const merged = mergeBaselineProtectIntoForbidden(root, [".git/"]);
+      expect(merged.filter((p) => p.startsWith("tmp/"))).toHaveLength(306);
+    } finally {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("首张微合同默认排除脏路径", () => {
     const root = makeRepo();
     try {
