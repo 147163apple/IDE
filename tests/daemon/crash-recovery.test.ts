@@ -172,10 +172,11 @@ describe("M3 / TASK-A.6 Daemon 崩溃恢复与工作区自愈", () => {
     writeContract(id, "PREPARING");
     const info = await createTaskWorktree({ repoRoot: repo, contractId: id });
 
+    // 端口段：与其余套件不重叠，登记表见 tests/unit/test-port-map.test.ts
     const daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3620,
-      endPort: 3630,
+      startPort: 3920,
+      endPort: 3929,
     });
     try {
       await daemon.start();

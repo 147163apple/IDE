@@ -61,19 +61,32 @@ function getJson(
   });
 }
 
-/** 连接 → AUTH → 收集到指定帧或超时 */
+/**
+ * 连接 → AUTH → 收集回放帧。
+ *
+ * 这里是「等待预算」而不是延迟断言：全量 8 fork 并发时进程会被整段饿死，
+ * 收紧预算会把「帧晚到」误判成「没回放」。断言只看内容，不看到达时刻。
+ * 预算给到 5s 只用于兜底（连 AUTH_OK 都没到的情况）；正常路径靠
+ * AUTH_OK 之后的一小段宽限收工，不让用例白等。
+ */
+const REPLAY_GRACE_MS = 500;
+
 function connectAndCollect(
   port: number,
   token: string,
-  timeoutMs = 1_500,
+  timeoutMs = 5_000,
 ): Promise<{ authOk: boolean; states: StateChangedPayload[] }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://127.0.0.1:${port}`);
     const states: StateChangedPayload[] = [];
     let authOk = false;
+    let settled = false;
 
     const finish = (): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
+      clearTimeout(graceTimer);
       try {
         ws.close();
       } catch {
@@ -83,6 +96,7 @@ function connectAndCollect(
     };
 
     const timer = setTimeout(finish, timeoutMs);
+    let graceTimer: ReturnType<typeof setTimeout> | undefined;
 
     ws.on("open", () => {
       ws.send(
@@ -99,12 +113,19 @@ function connectAndCollect(
         type: string;
         payload?: StateChangedPayload;
       };
-      if (frame.type === "AUTH_OK") authOk = true;
+      if (frame.type === "AUTH_OK") {
+        authOk = true;
+        // 服务端发完 AUTH_OK 紧接着回放，给一小段宽限后收工
+        graceTimer = setTimeout(finish, REPLAY_GRACE_MS);
+      }
       if (frame.type === "STATE_CHANGED" && frame.payload) {
         states.push(frame.payload);
       }
     });
     ws.on("error", reject);
+    // 连接被服务端关掉就别再空等预算：立刻交回已收到的帧，让断言直接说出
+    // 「没拿到 AUTH_OK」，而不是 5s 后报一个含糊的超时。
+    ws.on("close", finish);
   });
 }
 
@@ -112,8 +133,9 @@ beforeEach(async () => {
   repo = initRepo("stagent-d3-wiring-");
   daemon = createDaemon({
     repoRoot: repo,
-    startPort: 3691,
-    endPort: 3699,
+    // 端口段：与其余套件不重叠，登记表见 tests/unit/test-port-map.test.ts
+    startPort: 3820,
+    endPort: 3829,
     enableCrashRecovery: false,
   });
   await daemon.start();

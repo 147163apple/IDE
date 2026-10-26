@@ -32,8 +32,10 @@ describe("E2E / 差异化拦截：可恢复熔断 vs 安全中止", () => {
 
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3720,
-      endPort: 3725,
+      // 端口段：与其余套件不重叠（原 3720–3725 与 repo-delete-api 的 3720–3729 重叠），
+      // 登记表见 tests/unit/test-port-map.test.ts
+      startPort: 3880,
+      endPort: 3889,
       enableCrashRecovery: false,
     });
     const info = await daemon.start();

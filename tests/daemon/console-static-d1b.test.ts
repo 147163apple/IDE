@@ -47,8 +47,9 @@ describe("Daemon console static host (TASK-D.1b)", () => {
   it("同源托管 / 与 assets；无 Authorization 的 /api/state 仍 401", async () => {
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3610,
-      endPort: 3620,
+      // 端口段：与其余套件不重叠，登记表见 tests/unit/test-port-map.test.ts
+      startPort: 3910,
+      endPort: 3919,
       enableCrashRecovery: false,
       autoShutdownSignals: false,
       consolePublicDir: publicDir,

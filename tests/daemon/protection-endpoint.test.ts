@@ -42,7 +42,9 @@ describe("P.1 GET /api/protection 模式三态", () => {
 
   beforeEach(async () => {
     repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-protection-api-"));
-    daemon = createDaemon({ repoRoot: repo, startPort: 3540, endPort: 3550 });
+    // 端口段：与其余套件不重叠（原 3540–3550 与 server.test 的 3535–3540 撞边界），
+    // 登记表见 tests/unit/test-port-map.test.ts
+    daemon = createDaemon({ repoRoot: repo, startPort: 3890, endPort: 3899 });
     const info = await daemon.start();
     baseUrl = `http://127.0.0.1:${info.port}`;
   });

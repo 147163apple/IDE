@@ -172,8 +172,10 @@ describe("TASK-C.15b live path / HTTP API", () => {
 
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3690,
-      endPort: 3695,
+      // 端口段：与其余套件不重叠（原 3690–3695 与 resume-abort 完全相同），
+      // 登记表见 tests/unit/test-port-map.test.ts
+      startPort: 3860,
+      endPort: 3869,
       enableCrashRecovery: false,
     });
     const info = await daemon.start();

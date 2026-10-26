@@ -394,8 +394,10 @@ describe("DEMO_PREVIEW_STATUS 帧与生命周期广播", () => {
     const events: DemoPreviewStatusPayload[] = [];
     const server = createDemoPreviewServer({
       rootDir: demoDir,
-      startPort: 4100,
-      endPort: 4110,
+      // 与 demoServing() 的 4100–4110 错开：同文件的区间也登记在
+      // tests/unit/test-port-map.test.ts，互不重叠是硬约束。
+      startPort: 4120,
+      endPort: 4130,
       onStatusChange: (payload) => events.push(payload),
     });
     servers.push(server);

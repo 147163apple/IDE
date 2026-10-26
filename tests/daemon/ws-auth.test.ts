@@ -14,7 +14,15 @@ import { StagentIpcClient } from "../../src/lib/ipc/client";
  * 会泄漏进日志；统一为第一帧 AUTH + 失败 4401 断开。
  */
 
-const AUTH_TIMEOUT_MS = 400;
+/**
+ * 鉴权预算是两回事，不能共用一个值：
+ * - 成功路径只要求「别误伤」——8 fork 抢 CPU 时 400ms 会把 AUTH 帧的处理拖过
+ *   预算，服务端按配置先行 4401，合法 Token 也拿不到 AUTH_OK；
+ * - 超时用例要「等满」，预算长了就把单文件拖成十几秒。
+ * 所以 beforeEach 起宽预算的 daemon，超时用例自行切到短预算。
+ */
+const AUTH_TIMEOUT_MS = 8_000;
+const TIMEOUT_CASE_MS = 400;
 
 function openRaw(
   port: number,
@@ -67,18 +75,29 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
   let token: string;
   let port: number;
 
-  beforeEach(async () => {
-    repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-ws-auth-"));
+  const PORT_RANGE = { startPort: 3740, endPort: 3750 } as const;
+
+  /**
+   * 起（或重起）daemon。超时预算按用例需要切换：
+   * 成功路径用宽预算（它只要求「别误伤」），超时用例用短预算（它要等满）。
+   * 两者共用一个值就会互相拆台——短了成功路径被 4401，长了超时用例要等很久。
+   */
+  async function startDaemon(authTimeoutMs: number): Promise<void> {
+    if (daemon?.isRunning) await daemon.stop();
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3740,
-      endPort: 3750,
+      ...PORT_RANGE,
       enableCrashRecovery: false,
-      authTimeoutMs: AUTH_TIMEOUT_MS,
+      authTimeoutMs,
     });
     const info = await daemon.start();
     port = info.port;
     token = daemon.getSessionToken() ?? "";
+  }
+
+  beforeEach(async () => {
+    repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-ws-auth-"));
+    await startDaemon(AUTH_TIMEOUT_MS);
   });
 
   afterEach(async () => {
@@ -125,12 +144,19 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
   });
 
   it("完全不发帧：AUTH 超时后以 4401 断开", async () => {
+    await startDaemon(TIMEOUT_CASE_MS);
+    // 计时起点在发起连接之前：服务端的 authTimeout 只在连接建立后起算，
+    // 这个下界不受握手/调度延迟影响（延迟只会让它更长）。
+    const startedAt = performance.now();
     const ws = await openRaw(port);
     const code = await waitClose(ws);
+    const elapsed = performance.now() - startedAt;
     expect(code).toBe(WS_CLOSE_UNAUTHORIZED);
+    expect(elapsed).toBeGreaterThanOrEqual(TIMEOUT_CASE_MS * 0.9);
   });
 
   it("URL query 携带正确 Token 但不做 AUTH：不再豁免，超时 4401", async () => {
+    await startDaemon(TIMEOUT_CASE_MS);
     const ws = await openRaw(
       port,
       `ws://127.0.0.1:${port}/ws?token=${encodeURIComponent(token)}`,
@@ -163,9 +189,11 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
     });
     client.connect();
     await new Promise<void>((resolve, reject) => {
+      // 等待预算而非延迟断言：8 fork 并发下客户端进程会被整段饿死，
+      // 2s 会把「连得晚」误判成「连不上」。
       const timer = setTimeout(
         () => reject(new Error("connect timeout")),
-        2000,
+        8_000,
       );
       client.onStatusChange((s) => {
         if (s === "connected") {
@@ -190,7 +218,7 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(
         () => reject(new Error("expected closed status")),
-        2000,
+        8_000,
       );
       client.onStatusChange((s) => {
         if (s === "closed") {

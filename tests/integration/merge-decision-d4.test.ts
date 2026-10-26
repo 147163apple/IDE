@@ -37,8 +37,10 @@ describe("D-4：目标分支前进的合并门禁与二选一决策（HTTP 接�
 
     daemon = createDaemon({
       repoRoot: repo,
-      startPort: 3790,
-      endPort: 3795,
+      // 端口段：与其余套件不重叠（原 3790–3795 与 ws-security 的 3781–3790 重叠），
+      // 登记表见 tests/unit/test-port-map.test.ts
+      startPort: 3850,
+      endPort: 3859,
       enableCrashRecovery: false,
     });
     const info = await daemon.start();
