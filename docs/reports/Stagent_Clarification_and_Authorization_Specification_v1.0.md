@@ -1,7 +1,7 @@
 # Stagent 需求澄清与授权流程规范 (Clarification & Authorization Specification)
 **版本**: v1.0.0-draft  
 **状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**  
-**消歧对齐（2026-10-26）**: 本文已与 tip **`d610d0a`**（《Supervisor右栏对话行为-设计》§8～§13 产品 CLOSED）及《工程决策拍板-Top7-2026-10-25》交叉消歧；过时「待决议」选择题已改为「已被 Top7 + 右栏 DEC/EO 取代」。**仍为讨论稿，未升格、未立卡**，不作为任务卡 Scope、验收标准或「代码已实现」的证据。  
+**消歧对齐（2026-10-26）**: 本文已与 tip **`fb6167d`** 前序消歧（Top7 + 右栏 §8～§13 / DEC / EO-01～10 CLOSED）对齐；同日 Tina 将 **API Top5 As-is→To-be** 收口为 **CLOSED 定案条款**（见本文 **§6** 与《Stagent_Interface_Contract_Checklist_v1.0》§3）。原「Schema 待拍 / 待决议」残留已核销为交叉引用。**仍为讨论稿，未升格、未立卡**；**CLOSED ≠ 已实现**。  
 **不作为**：任务卡 Scope、验收标准或「代码已实现」的证据。立卡前须对照《决策记录对账-2026-10-25》与合同说明 §7.5。  
 **关联基准**:
 - 《Stagent 系统架构设计规范 v1.6.1》（宪法；本文不改其正文）
@@ -10,14 +10,15 @@
 - 《Supervisor运转机制-2026-10-25》（定稿；冲突时以定稿为准）
 - 《工程决策拍板-Top7-2026-10-25》（七条硬标准；冲突时本纪要 > 本文旧「待决议」）
 - 《Supervisor右栏对话行为-设计-2026-10-26》（讨论稿；**§0 / §8～§13 / DEC-01～06 / EO-01～10 CLOSED**；冲突时以该稿 CLOSED 条款为准，本文不得另开选择题）
+- 《Stagent_Interface_Contract_Checklist_v1.0》（同目录讨论稿；**API Top5 CLOSED**；冲突时以 Top5 定案 + EO 为准）
 
-> **收紧注记（2026-10-25 · 2026-10-26 消歧修订）**  
+> **收紧注记（2026-10-25 · 2026-10-26 消歧修订 · Top5 定案）**  
 > 1. **Impact Analysis**：文中「影响面推导 / AST」属**目标能力**；**v0.1 = 保守 Scope + P.1**，完整 AST = **v0.2+**（合同说明 §7.3.5 / §7.5 #7 = 未实现）。图注与案例一律按此标注，不得暗示 v0.1 已具备 AST Impact。  
-> 2. **Execution Token**：**通道**已由 Top7 §2 拍板（内存级轻量 Token + 本地 IPC / Domain Socket 实时校验）；**具体 Schema / Claim 字段**标明「待 API Top5 / 立卡时 Schema」，**不再**作为本文 Open Decision。  
+> 2. **Execution Token**：**通道** = Top7 §2；**双层令牌 + Schema 草稿** = **API Top5 #1 CLOSED**（§6.1 / EO-07）。**不再**作为本文 Open Decision；**CLOSED ≠ 已实现**。  
 > 3. **仓库中不存在**《产品体验与技术底座设计规范 v1.1》——勿再引用为正式路径。  
 > 4. 质询超时：**不静默放行**（见 Supervisor 定稿 §5.2）。  
-> 5. **越界处置**：Gateway 检出越界时阻断 + `PAUSED` + 告警问人——见 **Top7 §3**；勿在本文另写静默放行或默认 `kill -9`。  
-> 6. **交付主状态**：废除以 `APPROVED` / `FROZEN` 作为主交付态叙事；对齐右栏 **EO-01 `DeliveryState`**（如 `PLAN_*` / `DEMO_*_READY` / `CONTRACT_SIGNED` / `CANDIDATE_VERIFIED` / `MERGED` / `DELIVERED`）。资产文件可仍有「草稿 / 签署冻结快照」语义，但不得冒充 DeliveryState。
+> 5. **越界处置**：Top7 §3（阻断 + `PAUSED` + 问人）+ **API Top5 #3 CLOSED**（原子拦截：SIGINT 软停 3s → 超时 SIGKILL → 吊销 `exec_token` → 清锁文件；**禁止静默放行**）。勿另写「仅弹窗放行」或「默认立刻 kill -9」。  
+> 6. **交付主状态**：废除以 `APPROVED` / `FROZEN` 作为主交付态叙事；对齐右栏 **EO-01 `DeliveryState`**；广播态须带 **`session_epoch` + `state_seq`**（**API Top5 #2 CLOSED**）。资产文件可仍有「草稿 / 签署冻结快照」语义，但不得冒充 DeliveryState。
 
 ---
 
@@ -37,7 +38,7 @@
 
 ### 1.2 核心资产定义
 - **白话方案草稿 / 合同提案 (Plan Draft / Contract Proposal)**: 中栏给人看的白话短方案与可签署提案。草稿落盘于 **`.stagent/drafts/`**（DRAFT；未签无主仓库写权）。提案含本轮改动范围、预期影响、安全下限、测试验收集及可写路径（`writable_paths`）。
-- **执行凭证 (Execution Token)**: 用户显式签署后由 Daemon 签发的临时凭证。**校验通道** = Top7 §2（内存级轻量 Token + 本地 IPC / Domain Socket）；**具体 Schema** = 待 API Top5 / 立卡时 Schema（本文不再开选项）。
+- **执行凭证 (Execution Token)**: 用户显式签署后由 Daemon 签发的临时凭证。**校验通道** = Top7 §2（内存级轻量 Token + 本地 IPC；v0.1 同进程 Gateway 校验亦可，Tina 未强制 Domain Socket）。**双层体系（API Top5 #1 CLOSED / EO-07）**：外部保持 `session-token` 鉴权；内部施工通道签发绑定 `contract_id`+`worktree` 的 `exec_token`；`PAUSED` 硬吊销；恢复下发一次性带 `jti` 的 `resume_token`。字段级 Schema 草稿见 Checklist 附录；**CLOSED ≠ 已实现**。
 - **隔离 Demo 资产**: 试玩期生成并运行在 **`.stagent/prototypes/{prototype_id}/`**（`.gitignore`；不合入主干）。三态（右栏 EO-06 / DEC-02）：`INTERACTIVE_DEMO` / `NATIVE_FLOW_CARD` / `DEGRADED_FLOW_CARD`。签署后门禁见 `can_sign`；施工 Worker **不得**挂载 / 修改该目录。
 
 ---
@@ -93,7 +94,7 @@ sequenceDiagram
     UI->>Dmn: 显式授权 (合同 Hash)
     Dmn->>Dmn: DeliveryState → CONTRACT_SIGNED；冻结基线；签署期 GC（EO-05）
     Dmn->>Wt: 分配 .stagent/worktrees/{contract_id}/
-    Dmn->>Gtw: 下发限权 Execution Token（通道=Top7 §2；Schema 待 API Top5）
+    Dmn->>Gtw: 下发限权 exec_token（通道=Top7 §2；双层=API Top5 #1 CLOSED / EO-07）
     Note over Gtw, Wt: Worker 只挂载本 worktree；禁挂 prototypes/records；禁 ../
 ```
 
@@ -109,7 +110,7 @@ sequenceDiagram
 | :--- | :--- | :--- |
 | **Supervisor** | • **允许**: 只读代码检索、草拟方案（`.stagent/drafts/`）、在 **prototypes/** 生成 Demo / 流程卡、起草合同提案、发起自查质询。<br>• **禁止**: 任何形式的项目主干代码写入、调用写接口、跳过用户审批、提前于 sufficiency+初确生成 Demo。 | • **允许**: 在 **`.stagent/worktrees/{contract_id}/`** 内指挥实施 Agent 编写代码、生成改动补丁、执行测试。<br>• **禁止**: 擅自修改未授权路径、修改合同本身、直接合并至主干、访问 / 改写 `prototypes/` 或 `records/`。 |
 | **Daemon** | • **允许**: 登记会话状态（EO-01）、调度只读租约、管理 drafts/prototypes、校验合同格式与 `can_sign`。<br>• **禁止**: 下发任何具备写权限的 Execution Token；把流程卡记成可交互 Demo。 | • **允许**: 推进 `CONTRACT_SIGNED`、冻结签署基线、签发 / 吊销 Token（EO-07）、分配 worktree、裁决交付态至 `MERGED`/`DELIVERED`（EO-05）。<br>• **禁止**: 接受未经用户签署的写 Token 请求、篡改已签合同快照、归档失败仍标 `DELIVERED`。 |
-| **Gateway (执行网关)** | • **允许**: 拦截并放行只读文件访问；允许 **prototypes/** 沙盒内临时文件读写。<br>• **禁止**: 拦截所有针对项目主干工作区的 `write` / `delete` / `patch` 请求。 | • **允许**: 依据 Execution Token 严格放行 `writable_paths` 内、且位于本 worktree 内的写入与受限命令。<br>• **禁止**: 越界路径写入 → 按 **Top7 §3** 阻断当次 IO + `PAUSED` + 告警问人（不静默放行；不默认 `kill -9`）。 |
+| **Gateway (执行网关)** | • **允许**: 拦截并放行只读文件访问；允许 **prototypes/** 沙盒内临时文件读写。<br>• **禁止**: 拦截所有针对项目主干工作区的 `write` / `delete` / `patch` 请求。 | • **允许**: 依据 Execution Token 严格放行 `writable_paths` 内、且位于本 worktree 内的写入与受限命令。<br>• **禁止**: 越界路径写入 → **Top7 §3** + **API Top5 #3 CLOSED**：阻断当次 IO + 原子拦截（SIGINT 软停 3s 释锁 → 超时 SIGKILL → 吊销 `exec_token` → 清锁文件）+ `PAUSED` + 告警问人（**禁止静默放行**）。 |
 | **隔离运行区** | • **Demo 区 = `.stagent/prototypes/{prototype_id}/`**：独立 Origin / CSP；**不是**施工 Worktree。<br>• **禁止**: 访问宿主机敏感路径、把 Demo 依赖写入主工程 `package.json`。 | • **施工区 = `.stagent/worktrees/{contract_id}/`**：Worker **仅且只**挂载该目录（EO-02）；禁符号链接穿出、禁 `../`。<br>• **禁止**: 将 `prototypes/` 或 `records/` 挂进 Worker 沙盒。 |
 | **文档与数据资产** | • **状态**: 方案 / `requirements` 等为 **DRAFT**，落 **`.stagent/drafts/`**（Git 门禁豁免；gitignore ≠ 安全边界）。 | • **签署时**: 冻结当前版快照并算 `spec_sha256`（Pre-Execution Freeze & GC，见右栏补钉-3 / EO-05）；DeliveryState → **`CONTRACT_SIGNED`**（**不用** `APPROVED`/`FROZEN` 作主交付态）。<br>• **验收合并后**: `MERGED` → 脱敏归档入 `.stagent/records/{contract_id}/` → 成功才 **`DELIVERED`**（两阶段归档；EO-04 / EO-05 / EO-10）。 |
 
@@ -195,32 +196,32 @@ Daemon 校验 Supervisor 提交的提案（含 `demo_mode` 与确认事件匹配
   1. 记录签署事件与时间戳；冻结需求快照并计算 `spec_sha256`；DeliveryState → **`CONTRACT_SIGNED`**（**不以** `APPROVED`/`FROZEN` 作为主交付态）；
   2. 签署期 GC：仅清当前合同可重建临时缓存（不得清活跃 Demo、已校验签署快照、中栏仍引用的 drafts 正文）；
   3. 分配施工目录 **`.stagent/worktrees/{contract_id}/`**（本例即 `.stagent/worktrees/c_mem_001/`）；Worker 只挂载该路径；
-  4. 签发限权执行许可：通道 = **Top7 §2**（内存级轻量 Token + 本地 IPC）；**具体 Schema / Claim 字段 = 待 API Top5 / 立卡时 Schema**；白名单路径严格绑定为上述 4 个文件；
+  4. 签发限权执行许可：通道 = **Top7 §2**；双层 = **API Top5 #1 CLOSED**（外部 `session-token` + 内部 `exec_token` 绑定本 `contract_id`/worktree；Schema 草稿见 Checklist 附录）；白名单路径严格绑定为上述 4 个文件；
   5. 唤醒实施引擎进入 `IMPLEMENTING`；后续验收合并后走 `MERGED` → 脱敏归档 `records/` → `DELIVERED`（失败停在 `MERGED`，不伪标交付）。
 
 ---
 
 ## 5. 已被 Top7 + 右栏 DEC/EO 取代的原「待决议」（不再开放选择题）
 
-> **口径**：下列四条原 Open Decisions **已全部被取代**；本文**不再**保留 A/B 选项供再选。实现细节若仍缺字段级 Schema，归口 **API Top5 / 立卡时 Schema** 或右栏 **EO**，**不**再回写为本澄清稿的开放决议。
+> **口径**：下列四条原 Open Decisions **已全部被取代**；本文**不再**保留 A/B 选项供再选。字段级 Token Schema / 重连序列 / 越界原子拦截 / Demo 三态门禁 / 无 Git 审计清单等，已由 **API Top5 CLOSED（§6）** + 右栏 **EO** 收口为规范正文定案；**CLOSED ≠ 已实现**；**不**再回写为本澄清稿的开放决议。
 
-### 5.1 原「待决议 1」：Execution Token 格式与校验 → **已被取代**
-* **通道（产品/工程硬标准）**: 《工程决策拍板-Top7》**§2** — **内存级轻量 Token + 本地 IPC / Domain Socket 实时校验**（Daemon 权威；Gateway 每次敏感操作询问或等价本地校验）。**不采用（v0.1）** 纯离线 JWT 作为唯一撤销通道。
-* **暂停 / 恢复凭证**: 右栏 **EO-07** — 进入 `PAUSED` 立即吊销 `exec_token`；恢复续发一次性 `resume_token`；旧凭证一律拒绝。
-* **具体 Schema / Claim 字段名 / 序列化**: **待 API Top5 / 立卡时 Schema** — **不是**本澄清稿 Open Decision；本文仅保留对接目标名词，不暗示 JWT/gRPC 已落地。
+### 5.1 原「待决议 1」：Execution Token 格式与校验 → **已被取代（已定案）**
+* **通道（产品/工程硬标准）**: 《工程决策拍板-Top7》**§2** — **内存级轻量 Token + 本地 IPC**（Daemon 权威；v0.1 同进程 Gateway 校验 OK；Domain Socket 非强制）。**不采用（v0.1）** 纯离线 JWT 作为唯一撤销通道。
+* **双层令牌 + 暂停/恢复**: **API Top5 #1 CLOSED** + 右栏 **EO-07** — 外部 `session-token` + 内部 `exec_token`（绑定 `contract_id`+worktree）；`PAUSED` 硬吊销；恢复下发一次性带 `jti` 的 `resume_token`；旧凭证一律拒绝。
+* **Schema / Claim 草稿**: **已定案（CLOSED）** — 见本文 **§6.1** 与 Checklist 附录 `ExecToken` / `ResumeToken`；**不是**开放选择题；**CLOSED ≠ 已实现**（不暗示 JWT/gRPC 已落地）。
 
-### 5.2 原「待决议 2」：Mock Demo 持久化生命周期 → **已被取代**
+### 5.2 原「待决议 2」：Mock Demo 持久化生命周期 → **已被取代（已定案）**
 * **归宿**: Top7 **§1** + 右栏 **DEC-01 / 补钉-4 / EO-02** — 活跃态存 **`.stagent/prototypes/{prototype_id}/`**，gitignore，不合入主干。
-* **三态与门禁**: 右栏 **DEC-02 / EO-06** — `INTERACTIVE_DEMO` / `NATIVE_FLOW_CARD` / `DEGRADED_FLOW_CARD`；签署须 `can_sign`；降级须显式接受并带 ⚠️。
-* **流转**: 签署后 prototypes 只读作 Golden Benchmark；验收合并后轻量拷贝进 **`.stagent/records/{contract_id}/demo_snapshot/`**，再进入 `DELIVERED` 事务（EO-05）；**prototypes ≠ worktrees**。
+* **三态与门禁**: 右栏 **DEC-02 / EO-06** + **API Top5 #4 CLOSED** — 确认事件升级为 `demo_mode` 三态结构体；入库校验 `can_sign` 硬谓词（阻断流程卡偷渡为交互 Demo）；降级须显式接受并带 ⚠️。
+* **流转**: 签署后 prototypes 只读作 Golden Benchmark；验收合并后轻量无依赖拷贝进 **`.stagent/records/{contract_id}/`**（EO-05 / Top5 #4）；**prototypes ≠ worktrees**。
 * **废止**: 「纯即弃 /tmp」与「进主干」两选项均不再讨论。
 
-### 5.3 原「待决议 3」：澄清轮次上限 → **已被取代**
+### 5.3 原「待决议 3」：澄清轮次上限 → **已被取代（已定案）**
 * **标准**: Top7 **§4** — 主动澄清 **≤ 2 轮**；每题为带**唯一推荐项**的白话选择题；未决细项用**安全默认**写入白话合同供一键确认。
 * **禁止**: 无休止开放式追问、技术填空卷。
 * **与右栏**: sufficiency / 方案初确 / Demo 晚见 **§11（产品 CLOSED）**；不得用「动态置信度分数」替代结构化 sufficiency（§11.2.1）。
 
-### 5.4 原「待决议 4」：拒约 / 改细节回退 → **已被取代**
+### 5.4 原「待决议 4」：拒约 / 改细节回退 → **已被取代（已定案）**
 * **标准**: Top7 **§5** — 默认**保留** Demo 与会话上下文继续改；仅业务流程大改或 Scope 剧烈扩散时重跑只读影响分析 / 重做 Demo。
 * **版本**: 合同草案按草稿递增（如 `v1.0-draft` → `v1.1-draft`）；签署前旧草案作废或标记 `SUPERSEDED`。
 * **放弃本轮**: 右栏 **DEC-03** — 须二次确认；中栏置灰只读截断；非成功终态归档（不得标成已交付三件套）。
@@ -236,9 +237,69 @@ Daemon 校验 Supervisor 提交的提案（含 `demo_mode` 与确认事件匹配
 | Demo 与施工同一沙盒含糊 | **prototypes ≠ worktrees**；Worker 只挂 **`.stagent/worktrees/{contract_id}/`**（EO-02） |
 | Demo 单一「可交互」默认 | **EO-06** 三态 + `can_sign` |
 | 「永久原声」vs 脱敏字面冲突 | **DEC-01 / EO-04 / EO-10** + 两阶段归档（补钉-3） |
-| Token 开 JWT vs gRPC 选择题 | **Top7 §2** 定通道；Schema → **API Top5 / 立卡** |
-| 越界怎么处置未写清 | **Top7 §3**（阻断 + `PAUSED` + 问人） |
+| Token 开 JWT vs gRPC 选择题 | **Top7 §2** 定通道；双层 Schema → **API Top5 #1 CLOSED**（§6.1 / EO-07） |
+| 越界怎么处置未写清 | **Top7 §3** + **API Top5 #3 CLOSED**（软停 3s → SIGKILL → 吊销 → 清锁；禁静默放行） |
+| 重连后状态乱跳 / 幽灵写入 | **API Top5 #2 CLOSED**（`session_epoch`+`state_seq`；映射 EO-01；seq 去重防倒流） |
+| 无 Git 时审计不可证 | **API Top5 #5 CLOSED**（`.stagent/records/{contract_id}/audit-manifest.json`；脱敏后哈希；独立于 Git） |
 
 ---
 
-**落定句（讨论稿）**: 澄清授权稿已与 Top7 + 右栏 DEC/EO（tip `d610d0a` 及后续 EO 加固）消歧；原 §5 四条待决议全部关闭为交叉引用；**仍讨论稿，未升格、未立卡**。
+## 6. API Top5 缺口补齐定案（CLOSED · 2026-10-26 · 对齐 EO）
+
+> **状态：CLOSED（规范正文定案）** — Tina 2026-10-26 Asia/Hong_Kong 拍板。  
+> **口径**：现网骨架（session-token、全量 STATE 回放、写保护弹窗、prototypes + 布尔确认）**不推翻**；下列五项把「half/none 缺口」映射为最干净的 **Delta 升级卡** 目标收口。**CLOSED ≠ 已实现**；未升格、未立卡。权威字段细节与 Schema 草稿见《Stagent_Interface_Contract_Checklist_v1.0》§3 / 附录。
+
+| # | API Top5 | 现网 As-is | 目标 To-be（定案） | 对应 EO | Delta 方针 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 1 | Token 凭证 | 仅单层 `session-token`，依赖单进程拦写 | **双层令牌**：外部保持 session 鉴权；内部施工通道引入 `exec_token`（绑定 `contract_id` 与 worktree）；`PAUSED` 时硬吊销；恢复时下发一次性带 `jti` 的 `resume_token` | EO-07 | 升级卡，不推翻现网 session |
+| 2 | 状态与重连 | 仅粗粒度全量 `STATE` 全局广播回放 | 引入 `session_epoch` + `state_seq` 递增序列号；广播状态严格映射 **EO-01** 强类型枚举；客户端按 seq 去重、**防倒流** | EO-01 | 升级卡，在现有 STATE 通道上叠序列 |
+| 3 | 越界与拦截 | 抛错拦截 + UI 弹窗提示 | **原子化拦截器**：触发越界/中断 → 先发 `SIGINT` 给 **3 秒**软停止释锁 → 超时强制 `SIGKILL` → 吊销当前 `exec_token` → 清理锁文件；**禁止静默放行** | EO-02, EO-07 | 升级卡，补齐弹窗背后的进程/锁语义 |
+| 4 | Demo 门禁 | 本地静态目录 + 粗暴布尔确认 | 确认事件升级为 **`demo_mode` 三态结构体**；入库校验 **`can_sign` 硬谓词**（阻断流程卡偷渡为交互 Demo）；合入主干后向 `.stagent/records/` 轻量无依赖复制 | EO-05, EO-06 | 升级卡，不推翻 prototypes 目录 |
+| 5 | 无 Git 审计 | 完全缺失 | 落地 **`.stagent/records/{contract_id}/audit-manifest.json`**：脱敏管道后落盘，计算快照与审计事件哈希；**不依赖 Git 提交**独立证明交付物完整性 | EO-03, EO-04, EO-05 | 新建侧车清单；不依赖 Git Trailer |
+
+### 6.1 Token Schema 草稿（定案目标 · 非已实现）
+
+```ts
+type ExecToken = {
+  jti: string;
+  kind: "exec";
+  contract_id: string;
+  contract_hash: string;
+  worktree_root: string;
+  scope: { writable_paths: string[]; allowed_commands: string[] };
+  egress_policy: unknown;
+  issued_at: string;
+  expires_at: string;
+  session_epoch?: number;
+};
+
+type ResumeToken = {
+  jti: string;
+  kind: "resume";
+  contract_id: string;
+  replaces_jti: string;
+  issued_at: string;
+  expires_at: string;
+  single_use: true;
+  worktree_clean_ok: boolean;
+};
+```
+
+* **校验**: v0.1 同进程 Gateway 向 Daemon 校验即可（Tina 未要求 Domain Socket）。  
+* **`hmac_signature`**: 可选；当 IPC 需 Daemon 实时确认时可附。  
+* **废止开放题**: 「Token 是否分级 / JWT vs IPC」「Schema 仍待拍」——本条 **CLOSED**。
+
+### 6.2 与原开放残留交叉核销
+
+| 原残留开放表述（历史） | 核销结果 |
+| :--- | :--- |
+| Token 是否分级 / JWT vs IPC / Schema 仍待拍 | **CLOSED** → §6.1 + Top5 #1 + EO-07 + Top7 §2 |
+| Demo 存放路径 / prototypes vs main / 即弃 vs 归档 | **CLOSED** → §5.2 + Top5 #4 + Top7 §1 + EO-02/05/06 |
+| 拒签 / 改细节回退逻辑 | **CLOSED** → §5.4 + Top7 §5 + DEC-03/05 + EO-08 |
+| 重连一致性 / epoch·seq 未定 | **CLOSED** → Top5 #2 + EO-01 |
+| 越界仅弹窗 vs kill 未定 | **CLOSED** → Top5 #3 + Top7 §3 + EO-07 |
+| 无 Git 审计侧车路径未定 | **CLOSED** → Top5 #5（路径定为 `records/{contract_id}/audit-manifest.json`，非旧稿 `metadata/`） |
+
+---
+
+**落定句（讨论稿）**: 澄清授权稿已与 Top7 + 右栏 DEC/EO + **API Top5 CLOSED（§6）** 消歧；原 §5 四条待决议及 Schema「仍待拍」残留全部核销为定案交叉引用；**仍讨论稿，未升格、未立卡**；**CLOSED ≠ 已实现**。下一步（不在本文）：DocGov / Workflow 状态名与 EO-01/02 对齐。

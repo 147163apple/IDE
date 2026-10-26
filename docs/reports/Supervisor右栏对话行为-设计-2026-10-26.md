@@ -1312,6 +1312,12 @@ function can_sign(contract: Contract, demo: DemoArtifact, event: DemoConfirmatio
 5. **取消 / 中止 / 升级人工**：`CANCELLED` / `ABORTED` 归档为 **`NON_SUCCESS_ARCHIVE`**，不得标成最终交付三件套或已完成。`ESCALATED_HUMAN` 是待接管态——**刚触发时不得按终止态 GC**；仅当用户结束本轮或人工接管流程结束后再封存。  
 6. **PAUSED 授权恢复**：按 **EO-07 CLOSED**——软停 3s 释 Git 锁 / 逾时 SIGKILL+清 `index.lock` 后再吊销 `exec_token`（旧凭证 401）；15min 毁容器；唤醒校验干净度后发一次性 `resume_token`；验收须证明旧凭证不可并行写入。
 
+
+### 14.13 交叉注记：API Top5 Delta CLOSED（2026-10-26）
+
+> **规范定案交叉引用（不改写 DEC / EO）**。Tina 将接口侧 **API Top5**（Token 双层令牌、重连 `session_epoch`+`state_seq`、越界原子拦截、Demo 三态 `can_sign`、无 Git `audit-manifest`）收口为 **CLOSED**；现网骨架不推翻，缺口映射为 Delta 升级卡。正文见《Stagent_Clarification_and_Authorization_Specification_v1.0》**§6** 与《Stagent_Interface_Contract_Checklist_v1.0》**§3**。本注记**不**重开 EO-01～10 选择题；**CLOSED ≠ 已实现**。
+
+
 ---
 
 *文档结束。冲突时：Top7 硬标准与《Supervisor运转机制》定稿优先；本稿开篇 **§0** 确立「语义折叠与契约编译」哲学与 Supervisor 双面镜职责（施工落地表仅立卡时再落）；并细化「右栏对话按真实澄清生命周期怎么表现」、澄清结束产物形态（§8 **产品 CLOSED**）、「文档地基 + 四重锚点」的意图对齐边界（§9 **产品 CLOSED**）、四锚点端到端闭环 / 隐性逃逸 / 开工门禁 / 微合同与 v0.1 降级（§10 **产品 CLOSED**）、「方案可早、Demo 须够具体且初步确认后再出」（§11 **产品 CLOSED**；确认语义见 §11.3.1）、「日常白话方案 + 折叠机器细稿 + Tenets/ADR/Golden 三层决策锁」（§12 **产品 CLOSED**）、「实现约束四条款 + P0–P3 + AC」（§13 **产品 CLOSED**），以及「异常回退基线 + 三层状态 Mermaid + 交叉补丁 + **产品决策 DEC-01～06 / 四补钉 CLOSED** + **§14.11 EO-01～10 CLOSED** + **§14.12 边界补丁**」（§14）。本稿仍为**讨论稿**：**§8～§13 产品 CLOSED**；§0 哲学已写入；产品选择与工程契约均已拍板；CLOSED 不表示已实现或已验证；未升格、未立卡。*
