@@ -1,4 +1,6 @@
 # Stagent 需求澄清与授权流程规范 (Clarification & Authorization Specification)
+> **已迁入 SSOT（2026-10-26）**：Supervisor 产品与监理现行权威见 [`docs/specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章合流）。**与本文冲突处以 SSOT 为准**；本文保留作档案/字段对接参考。 体验层以 `TASK-C.18`（自由对话 + 单页方案审阅 + 确认方案）为现行定案。
+
 **版本**: v1.0.0-draft  
 **状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**  
 **消歧对齐（2026-10-26）**: 本文已与 tip **`fb6167d`** 前序消歧（Top7 + 右栏 §8～§13 / DEC / EO-01～10 CLOSED）对齐；同日 Tina 将 **API Top5 As-is→To-be** 收口为 **CLOSED 定案条款**（见本文 **§6** 与《Stagent_Interface_Contract_Checklist_v1.0》§3）。原「Schema 待拍 / 待决议」残留已核销为交叉引用。**讨论稿正文仍分治**；API Top5 Delta **已立卡** `TASK-C.12a`–`e`（见《任务规范》；**NEW_TASK ≠ 已实现**）。**CLOSED ≠ 已实现**。  

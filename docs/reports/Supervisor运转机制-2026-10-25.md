@@ -1,5 +1,7 @@
 # Supervisor 运转机制（定稿）
 
+> **已迁入 SSOT（2026-10-26）**：Supervisor 产品与监理现行权威见 [`docs/specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章合流）。**与本文冲突处以 SSOT 为准**；本文保留作档案/字段对接参考。 体验层以 `TASK-C.18`（自由对话 + 单页方案审阅 + 确认方案）为现行定案。
+
 > **日期**：2026-10-25（Asia/Hong_Kong）  
 > **状态**：**定稿（讨论闭环）** — 结论先行；只定「怎么做」，不立任务卡、不改产品代码、不改《架构规范》《任务规范》正文。  
 > **交叉引用**：《合同设计说明-2026-10-25》文首导言、§7.3 / §7.3.5、§7.4、§7.5、§8、§9；《决策记录对账-2026-10-25》；`docs/reports/README.md` 阅读顺序；讨论附件骨架《Stagent_Supervisor_End_to_End_Workflow_v1.0》（本定稿对其收紧后吸收；附件已入库为讨论稿）。

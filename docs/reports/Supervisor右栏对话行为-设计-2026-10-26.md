@@ -1,5 +1,7 @@
 # Supervisor · 右栏对话时做什么（设计稿）
 
+> **已迁入 SSOT（2026-10-26）**：Supervisor 产品与监理现行权威见 [`docs/specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章合流）。**与本文冲突处以 SSOT 为准**；本文保留作档案/字段对接参考。 体验层以 `TASK-C.18`（自由对话 + 单页方案审阅 + 确认方案）为现行定案。
+
 > **日期**：2026-10-26（Asia/Hong_Kong）  
 > **状态**：**讨论稿** — 只定「对话时 Supervisor 干什么」；不改《架构规范》《任务规范》正文，不立卡、不动产品代码，除非 Tina「立卡」或「升格」。  
 > **澄清结束产物（§8）**：**产品 CLOSED** — 严格限定产出 4 份核心文档草案 + 1 份隔离 Mock Demo；全 DRAFT/PROPOSED，未签合同前无任何主仓库写权；草稿落 `.stagent/drafts/` 且 Git 门禁豁免（见 §8.5.2）。  

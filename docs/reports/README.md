@@ -6,6 +6,11 @@
 > 本目录是设计说明、对账与讨论稿的落点；**造 Stagent 的施工权威**仍是仓库根 `docs/` 下的《架构规范》《任务规范》。  
 > **讨论稿 ≠ 施工依据**；写代码只认任务卡 + 合同说明 §7.5 钉桩。
 
+## Supervisor 单一事实源（2026-10-26 起）
+
+- **现行权威**：[`../specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章；`TASK-C.19` COMPLETED；体验对齐 `TASK-C.18`）。
+- 下列右栏 / 工作流 / 澄清授权 / 接口清单 / 运转机制若与 SSOT 冲突，**以 SSOT 为准**；本目录旧文作档案。
+
 ## 推荐阅读顺序（决策 / Supervisor 相关）
 
 0. [`Stagent_Spec_Freeze_Record_2026-10-26.md`](./Stagent_Spec_Freeze_Record_2026-10-26.md) — **Spec Freeze 封版记录**（唯一事实源锚点；CLOSED≠免体验；§6 → C.12；**§7 → 基线 C.14a–c**，不并入五正文）

@@ -1,4 +1,6 @@
 # Supervisor 端到端职责工作流规范 (从模糊需求到交付验收)
+> **已迁入 SSOT（2026-10-26）**：Supervisor 产品与监理现行权威见 [`docs/specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章合流）。**与本文冲突处以 SSOT 为准**；本文保留作档案/字段对接参考。 体验层以 `TASK-C.18`（自由对话 + 单页方案审阅 + 确认方案）为现行定案。
+
 **版本**: v1.0.0-draft  
 **定位**: 五阶段骨架**附件**（讨论稿）  
 **状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**  

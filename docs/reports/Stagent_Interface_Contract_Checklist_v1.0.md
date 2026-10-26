@@ -1,4 +1,6 @@
 # Stagent 系统内部接口与通信契约清单 (API / IPC Contract Checklist)
+> **已迁入 SSOT（2026-10-26）**：Supervisor 产品与监理现行权威见 [`docs/specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章合流）。**与本文冲突处以 SSOT 为准**；本文保留作档案/字段对接参考。 体验层以 `TASK-C.18`（自由对话 + 单页方案审阅 + 确认方案）为现行定案。
+
 **版本**: v1.0.0-draft  
 **状态**: **讨论稿 / 已入库 reports**（对接看板；**API Top5 CLOSED**；Top5 Delta **已立卡** `TASK-C.12a`–`e`；**NEW_TASK ≠ 已实现**；正文仍非架构规范整份升格）  
 **关联基准**:

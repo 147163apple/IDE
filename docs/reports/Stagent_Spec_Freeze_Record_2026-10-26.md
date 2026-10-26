@@ -1,5 +1,7 @@
 # Stagent 规范资产封版记录（Spec Freeze Record）
 
+> **Supervisor SSOT 升级（2026-10-26）**：体验与监理合流权威见 [`../specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（`TASK-C.19`）。本 Freeze 记录仍是封版索引；**与 SSOT 冲突的体验旧词（五视口日常入口、≤2 轮问卷门控等）以 SSOT 为准**。 五正文可保留作档案字段来源。
+
 **日期**: 2026-10-26（Asia/Hong_Kong）  
 **定位**: 短锚点 / 索引 — **不**合并五份正文；正文继续分治。  
 **权威声明**: 自消歧锚点 tip **`fb6167d`** 起，经 **`836be2b`**（API Top5）、**`cbc0216`**（DocGov/Workflow 分轨）至**本封版 tip**，**以本记录 + 下列 CLOSED 规范为唯一事实源**；此前讨论草稿、过时「待决议 / Open Decision」、与本记录冲突的旧词（单一 `DEMO_READY`、笼统交付 `VERIFIED`、资产 `FROZEN` 冒充主交付、弹窗静默放行等）**一律作废**。  
