@@ -104,6 +104,7 @@
 > 72. **状态回写（2026-10-26 · 立卡并实现 TASK-C.18 · 方案工作台单页）**：Tina t905u「改代码…只需要一个页面」。新增 **`TASK-C.18`** 并由同授权收口为 **`[COMPLETED]`**。交付：去掉五视口入口；中间仅「方案审阅」；右侧真正自由对话（取消 ≤2 轮选择题门控）；方案随聊更新（启发式模块/mermaid/决策冲突）；完整度够才「生成 Demo」；最底仅「确认方案」冻结 Spec 并开工。**不**扩 Spec Freeze；不抢 D.1e；不扩 v0.2。
 > 73. **状态回写（2026-10-26 · 立卡并完成 TASK-C.19 / DOC-SSOT-Supervisor）**：Tina t906u 要求将 Supervisor 散落文档合流为唯一权威源。新增 **`TASK-C.19`**（`DOC-SSOT-Supervisor`）并由同授权收口为 **`[COMPLETED]`**。交付：`docs/specs/Stagent_Supervisor_Specification_v2.0.md` 五大章 SSOT；旧右栏/工作流/澄清授权/接口清单/运转机制文首加「已迁入 SSOT」指针；reports README + Spec Freeze 加指向。**本文档仅薄卡回写**；不改产品代码；不抢 D.1e；不扩 v0.2。
 > 74. **状态回写（2026-10-26 · 立卡并完成 TASK-C.20 / DOC-ARCHIVE-Supervisor-pre-SSOT）**：Tina t908u「归档」。新增 **`TASK-C.20`** 并由同授权收口为 **`[COMPLETED]`**。交付：`docs/archive/supervisor-pre-ssot/`；`git mv` 右栏设计 / E2E 工作流 / 澄清授权 / 接口清单 / 运转机制；原 `docs/reports/` 路径保留 stub 指向 SSOT+归档；更新 archive/reports README、Spec Freeze、SSOT 路径表；Spec Freeze 总册保留。**仅文档**；不改产品代码；不抢 D.1e；不扩 v0.2。
+> 75. **状态回写（2026-10-26 · 立卡并完成 TASK-C.21 / DOC-SSOT-Supervisor-Patch）**：Tina t910u「补丁」。新增 **`TASK-C.21`** 并由同授权收口为 **`[COMPLETED]`**。交付：SSOT 升 **v2.0.1**——钉死 Demo 可选门禁（覆盖 EO-06 硬卡误读）、通配符分级与落盘收敛、「确认方案」五步原子时序、`user_pinned` 字段级脏检查、Demo 失败双按钮降级与风险标记、`demoReady` 硬性布尔底线。**仅文档**；不改产品代码；不抢 D.1e；不扩 v0.2。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -199,6 +200,7 @@
 | **TASK-C.18** | 方案工作台单页：自由对话 + 方案审阅 | 工作台 UX | **[COMPLETED]**（2026-10-26 Tina t905u「改代码…只需要一个页面」；本提交合入） | P4 体验打磨 | • 前置 `C.17`/`C.16` COMPLETED<br>• 去掉五视口 Tab；中间仅方案审阅<br>• 右栏自由聊，取消 2 轮选择题门控<br>• 方案启发式更新；Demo 按钮按完整度；确认方案=冻结+授权+Worker<br>• 不扩 Spec Freeze；不抢 D.1e；不扩 v0.2 |
 | **TASK-C.19** | Supervisor SSOT 合流（DOC-SSOT-Supervisor） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t906u；本提交合入） | P4 规范合流 | • 前置 `C.18` COMPLETED<br>• 新建 `docs/specs/Stagent_Supervisor_Specification_v2.0.md` 五大章<br>• 旧右栏/工作流/澄清/接口/运转机制加 SSOT 指针<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
 | **TASK-C.20** | Supervisor 合流前碎片归档（DOC-ARCHIVE-Supervisor-pre-SSOT） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t908u「归档」；本提交合入） | P4 规范归档 | • 前置 `C.19` COMPLETED<br>• `docs/archive/supervisor-pre-ssot/` + 5 份 git mv<br>• reports 留 stub；Freeze 总册保留并强化指针<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
+| **TASK-C.21** | Supervisor SSOT 审查补丁（DOC-SSOT-Supervisor-Patch） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t910u「补丁」；本提交合入） | P4 规范补丁 | • 前置 `C.20` COMPLETED<br>• SSOT v2.0.1：Demo 门禁 / 通配分级 / 确认原子时序 / pin / 降级 / demoReady<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
 | **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
 | **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
 | **TASK-H.3** | 基线扫描硬上限与超时熔断 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.14a` COMPLETED<br>• 文件数/深度硬上限 + 超时中断；防 Daemon 假死<br>• 沿用 OS 只读证明；禁 AST/Impact |
@@ -443,7 +445,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.17", "to": "TASK-C.18" },
   { "from": "TASK-C.16", "to": "TASK-C.18" },
   { "from": "TASK-C.18", "to": "TASK-C.19" },
-  { "from": "TASK-C.19", "to": "TASK-C.20" }
+  { "from": "TASK-C.19", "to": "TASK-C.20" },
+  { "from": "TASK-C.20", "to": "TASK-C.21" }
 ]
 ```
 
@@ -2397,6 +2400,22 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   - 本文矩阵/详细卡/changelog 含 C.20 COMPLETED。
 * **关键文件**：`docs/archive/supervisor-pre-ssot/**`、`docs/reports/*`（stub）、`docs/specs/Stagent_Supervisor_Specification_v2.0.md`、`docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`、本文。
 
+#### 【Task C.21】Supervisor SSOT 审查补丁（DOC-SSOT-Supervisor-Patch） `[COMPLETED]`
+* **任务编号**：`TASK-C.21`（别名 `DOC-SSOT-Supervisor-Patch`）
+* **任务名称**：将 Tina 审查的 Demo/通配/确认时序/pin/降级/demoReady 冲突钉进 SSOT v2.0.1
+* **前置依赖**：`TASK-C.20` (COMPLETED)
+* **优先级**：P4 规范补丁（Tina t910u「补丁」）
+* **状态**：`[COMPLETED]`（2026-10-26 Tina t910u「补丁」）
+* **一句话目标**：SSOT 升 v2.0.1，覆盖 EO-06 硬卡误读与冷启动通配等六处病灶，供后续实现不走样。
+* **范围**：
+  1. 修订 `docs/specs/Stagent_Supervisor_Specification_v2.0.md`：§2.1/2.2、§3.3/3.4、§4.2/4.6、§5.2.1、§5.4.1 + changelog。
+  2. 本任务规范薄卡回写 COMPLETED（矩阵/详细卡/changelog/DAG）。
+* **非目标**：不改 daemon/src 产品代码；不重开五视口；不抢 D.1e；不扩 v0.2。
+* **验收**：
+  - SSOT 文首版本为 v2.0.1 且含六条补丁摘要。
+  - 本文矩阵/详细卡/changelog 含 C.21 COMPLETED。
+* **关键文件**：`docs/specs/Stagent_Supervisor_Specification_v2.0.md`、本文。
+
 * **任务编号**：`TASK-H.1`
 * **前置依赖**：`TASK-W.5a` (COMPLETED)
 * **任务状态**：**[COMPLETED]**（2026-10-26 Tina t878u 全部开工；parse-worker-output + OpenAi ≤1 重试；单测 PASS）
@@ -2843,7 +2862,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：`TASK-C.20` → **`[COMPLETED]`**（Tina t908u Supervisor 合流前碎片归档）。C.19/C.18/C.17/C.16/H.1–H.8 均 COMPLETED。**不**改产品代码；不抢 D.1e；不扩 v0.2。
+> - **当前首要编码任务**：`TASK-C.21` → **`[COMPLETED]`**（Tina t910u Supervisor SSOT v2.0.1 审查补丁）。C.20/C.19/C.18/C.17/C.16/H.1–H.8 均 COMPLETED。**不**改产品代码；不抢 D.1e；不扩 v0.2。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
@@ -2962,5 +2981,6 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-82（立卡+实现，2026-10-26）**：新增 **`TASK-C.18`**（方案工作台单页；Tina t905u「改代码…只需要一个页面」）。去掉五视口；右侧自由对话；中间方案审阅（启发式图/决策/冲突）；「生成 Demo」按完整度；「确认方案」冻结 Spec 并开工。同步：版本头第 72 条、§1.1 矩阵、§2.1 JSON（`C.17→C.18`）、§3.4 详细卡、Sprint「当前首要」→ **C.18**。**不**扩 Spec Freeze；不抢 D.1e；不扩 v0.2。
 - **P-83（立卡+文档，2026-10-26）**：新增 **`TASK-C.19`** / `DOC-SSOT-Supervisor`（Tina t906u Supervisor 合流 SSOT）。交付 `docs/specs/Stagent_Supervisor_Specification_v2.0.md` 五大章；旧文指针；Freeze/README 指向。同步：版本头第 73 条、§1.1 矩阵、§2.1 JSON（`C.18→C.19`）、§3.4 详细卡、Sprint「当前首要」→ **C.19**。**不**改产品代码；不抢 D.1e；不扩 v0.2。
 - **P-84（立卡+归档，2026-10-26）**：新增 **`TASK-C.20`** / `DOC-ARCHIVE-Supervisor-pre-SSOT`（Tina t908u「归档」）。5 份 Supervisor 碎片 → `docs/archive/supervisor-pre-ssot/`；reports 留 stub；Freeze 总册保留。同步：版本头第 74 条、§1.1 矩阵、§2.1 JSON（`C.19→C.20`）、§3.4 详细卡、Sprint「当前首要」→ **C.20**。**不**改产品代码；不抢 D.1e；不扩 v0.2。
+- **P-85（立卡+文档补丁，2026-10-26）**：新增 **`TASK-C.21`** / `DOC-SSOT-Supervisor-Patch`（Tina t910u「补丁」）。SSOT → **v2.0.1**：Demo 可选门禁、通配分级、确认方案原子时序、`user_pinned`、Demo 失败双按钮降级、`demoReady` 硬性布尔底线。同步：版本头第 75 条、§1.1 矩阵、§2.1 JSON（`C.20→C.21`）、§3.4 详细卡、Sprint「当前首要」→ **C.21**。**不**改产品代码；不抢 D.1e；不扩 v0.2。
 
 - **P-79（完工，2026-10-26）**：`TASK-H.5`–`TASK-H.8` → **[COMPLETED]**（Tina t881u「开工」）。实现：旅程 `contract_id` 落盘回传；脏区白话引导+ack 排除；主链路回归套件；records 脱敏 zip/清理 API。单测 `task-h5`…`task-h8` PASS。**不**触碰 v0.2 封印。
