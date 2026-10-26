@@ -8,6 +8,7 @@
 > **方案早、Demo 晚（§11）**：**倾向采纳** — 方案草稿可在需求很少很模糊时随对话自动生成/更新；Demo 不自动过早出——须自动检测「方案足以生成 Demo」且用户对方案**初步确认**后才生成；Demo 合意后再点「符合预期」并签合同，才写真码。  
 > **日常方案草稿 vs 机器侧细稿 / 三层决策锁（§12）**：**倾向采纳** — 中栏日常方案 = 给人看的白话短稿；背后可另存更细机器稿（断言草案、影响面笔记、未决清单），默认折叠；签字前仍草案。决策治理用 Tenets 常驻 + ADR 条件触发 + 金标准用例在方案够稳/签合同前后落成，与大规范互补，不每轮硬写满三套。  
 > **实现约束四条款 + P0–P3 + AC（§13）**：**倾向采纳** — sufficiency 结构化反脑补（11.2.1）；两次确认体感分级（11.3.1）；草稿 `.stagent/` gitignore / Daemon 态（8.5.2）；方案视口稳定增量更新（12.1.1）；落地优先级 P0 草稿隔离 → P1 sufficiency → P2 确认分级 → P3 防闪烁；附 AC-SUFF/CONF/ISOL/UX。  
+> **异常回退 / 三层状态 / DEC-01～06（§14）**：**倾向采纳** — 交付·资产·任务分层状态 + 五阶段异常转移矩阵；三层联动 Mermaid；6 项产品决策推荐默认；交叉修订（Demo 视觉微调免重初确、局部失效回退、中止 Worktree 封存改名、session_epoch 双端、非空 Diff）；**PAUSED 经「扩权」恢复必须重签新合同，禁止静默扩权**。  
 > **用户意图锁定**（当日对话）：右栏保持 Cursor 式自由度；**不是**一句愿望直接写真代码；先由 Supervisor 落成**方案 + Demo**；Tina **确认后再**执行真实仓库开发。澄清宜少打断，关键分叉优先收进**方案草稿里的选项**，而不是聊天连珠炮。  
 > **本稿依据**：真实软件开发里「需求澄清 / Discovery」怎么走（问题框定 → 现状与目标 → 边界 → 关键决策 → 验收与边角 → 冻结再实施），对照映射到右栏对话；并与 `Supervisor运转机制-2026-10-25.md`、Top7（澄清 ≤2 轮）、合同设计说明、C.11 体感链对齐。  
 > **不是**：把 C.11 演示脚本当成产品主流程；演示卡只用来验按钮，日常对话应按下文澄清生命周期运转。
@@ -135,6 +136,7 @@ Impact Analysis 完整 AST = **v0.2+**；v0.1 可降级保守 Scope + P.1——�
 - [ ] 是否将 **§8「澄清结束 4+1 产物」**（已标倾向采纳）升格进运转机制 / 核心资产治理，或单独立卡落地草稿区与哈希锁  
 - [ ] 是否将 **§9「四重真实锚点」**（已标倾向采纳）写进澄清/验收旅程或立卡（Demo 反馈回写断言、对抗质询、设计参考、微合同切分）
 - [ ] 是否将 **§13「实现约束四条款 + AC」**（已标倾向采纳）立卡：P0 `.stagent/` gitignore / 草稿隔离；P1 sufficiency Schema；P2 两次确认 UX；P3 视口增量更新
+- [ ] 是否将 **§14「异常回退基线 + DEC-01～06」**（已标倾向采纳）立卡：状态机分层、异常矩阵、PAUSED 扩权重签、Worktree 封存、session_epoch、非空 Diff；DEC-01～06 待 Tina 拍板项单独确认
 
 ---
 
@@ -615,4 +617,216 @@ Tina 提出的三类互补文档，用来锁死决策、抑制长上下文漂移
 
 ---
 
-*文档结束。冲突时：Top7 硬标准与《Supervisor运转机制》定稿优先；本稿只细化「右栏对话按真实澄清生命周期怎么表现」、澄清结束产物形态（§8 倾向采纳）、「文档地基 + 四重锚点」的意图对齐边界（§9 倾向采纳）、四锚点端到端闭环 / 隐性逃逸 / 开工门禁 / 微合同与 v0.1 降级（§10 倾向采纳）、「方案可早、Demo 须够具体且初步确认后再出」（§11 倾向采纳）、「日常白话方案 + 折叠机器细稿 + Tenets/ADR/Golden 三层决策锁」（§12 倾向采纳），以及「实现约束四条款 + P0–P3 + AC」（§13 倾向采纳；条款正文见 §8.5.2 / §11.2.1 / §11.3.1 / §12.1.1）。*
+## 14. 异常状态转移基线、三层状态联动与产品决策（**倾向采纳**）
+
+> **状态：倾向采纳**（2026-10-26 Asia/Hong_Kong）  
+> 来源：Tina 指出澄清→Demo→签署→施工→验收主路径清晰后的 7 类异常断点；随后给出「分层状态 + 异常转移矩阵 + 四项默认回退 + 质疑规则」基线；再整理为三层 Mermaid、DEC-01～06 决策表与交叉自检修订。Grok 判定：**方向正确、可当讨论稿基线**，但**不算终局定稿**——第 5/6 节产品题仍待 Tina 拍板；状态名是设计建议，不声称现网已实现；返工上限「2 次」等为建议默认。仍只写讨论稿，不立卡、不改规范正文 / 产品代码。  
+> **硬约束补丁（必须一并生效）**：施工挂起 `PAUSED` 后若用户选「扩权」，**必须**走新合同重签 / 新凭证，**禁止**从图上的 `PAUSED → EXECUTING` 暗示静默扩权。
+
+### 14.1 为什么要补异常回退
+
+主路径（Happy Path）在 §8～§13 已够清；以下异常若不钉死，会在实现时被笼统写成「全部重新开始」或「假绿继续」：
+
+1. 澄清已 sufficiency 后用户大改口 / 方案推翻  
+2. Demo「不符合预期」时退到哪、失败/白屏怎么报  
+3. 拒签（Reject）vs 带条件修改（Modify）vs 明确取消  
+4. 施工中 Abort、越界 `PAUSED`、断线重连  
+5. 质疑后图谱回退、Worktree 复用、返工死循环断路器  
+
+原则一句：**版本不覆盖、旧证据不冒充新证据、暂停不等于回滚、取消不等于删除、质疑不等于失败；任何继续施工都必须有仍有效的合同和凭证。**
+
+### 14.2 三层状态解耦（建议设计名，非现网已实现断言）
+
+把「本轮交付」与「资产 / 施工」拆开，避免例如「质疑后证据失效」被误写成「任务失败」从而错误重试或回滚。
+
+| 层 | 建议状态名（示例） | 用途 |
+| --- | --- | --- |
+| **交付主生命周期** | `CLARIFYING`、`DEMO_BUILDING`、`DEMO_READY`、`DEMO_FAILED`、`CONTRACT_PROPOSED`、`CONTRACT_REVISING`、`AUTHORIZATION_FAILED`、`EXECUTING`、`PAUSED`、`ABORTING`、`ABORTED`、`VERIFYING`、`REWORK_REQUIRED`、`ESCALATED_HUMAN`、`VERIFIED`、`CANCELLED`；可选 `NEEDS_USER_DECISION`、`SUSPENDED`、`RECOVERY_REQUIRED` | 用户可见的本轮进度 |
+| **资产状态** | 方案 / 合同按**版本**记录；Demo：`READY` / `STALE` / `ARCHIVED`；Evidence：`VALID` / `STALE` / `FAILED`；合同提案：`PROPOSED` / `REJECTED` / `SUPERSEDED` / `SIGNED` / `UNFULFILLED` | 可审计、可对照，不因 UI 阶段跳跃而丢历史 |
+| **施工 / 任务状态** | 每任务：`PENDING` / `RUNNING` / `PAUSED` / `FAILED` / `REWORK_REQUIRED` / `VERIFIED`；每次尝试保留 Attempt 结果；Worktree：`ACTIVE` / 封存归档 | 局部返工与锁释放 |
+
+### 14.3 五阶段异常状态转移矩阵（基线）
+
+| 阶段 / 当前状态 | 触发条件 | 建议目标状态 | 资产与环境处理 | 用户界面反馈 |
+| --- | --- | --- | --- | --- |
+| 澄清：`CLARIFYING` | 用户提出新需求，实质改变目标、用户、范围或验收 | 留在 `CLARIFYING`，**新方案修订版** | 旧方案只读保留；新版**重算** sufficiency；不得把旧版字段悄悄混入新版 | 「需求方向已更新，正在整理新方案」；旧版可查看 |
+| 澄清：方案已够（`PLAN_READY` / sufficiency 真） | 初确前重大改口 | 回 `CLARIFYING` | sufficiency 对新方案重算；旧版保留，不物理清空 | 禁用「生成试玩原型」；列出缺失/变化项 |
+| 澄清：`CLARIFYING` | 达轮次上限仍有阻断未决 | 保持 `CLARIFYING` 或 `NEEDS_USER_DECISION` | 草案保留；不得以模型推断代替用户决议 | 少量明确选项指出阻断点；可稍后继续 |
+| 澄清：任一未签署状态 | 暂时离开 / 断线 | 保持当前；会话可转 `SUSPENDED` | 保存最后一致快照与修订号；**不发**执行凭证、不删草稿 | 重连恢复到该版本，「上次停在这里」 |
+| Demo：`DEMO_BUILDING` | 超时 / 异常 / 白屏 | `DEMO_FAILED` | 保留错误摘要与失败版本；不把失败 Demo 标为已确认 | 明确「Demo 未成功生成」；重试或看故障摘要 |
+| Demo：`DEMO_FAILED` | 重试 | `DEMO_BUILDING` | 新 Attempt 号；旧日志保留 | 「正在重试」，不假装已有可试玩原型 |
+| Demo：`DEMO_READY` | **仅**文案/颜色/布局等呈现细节 | 保持方案版本；新 Demo 修订版 | 旧 Demo → `ARCHIVED`；新 Demo 同方案版本；合同未签 | 改动摘要 + 前一版预览入口；**无需**再点方案初确（见 §14.7） |
+| Demo：`DEMO_READY` | 主流程 / 范围 / 关键业务规则改变 | 回 `CLARIFYING` | 方案新建修订；旧 Demo → `STALE` 后归档，**不得**再用于签署 | 「这会改变本轮范围，方案需要重新确认」 |
+| Demo：`DEMO_READY` | 未试玩就试图签署，或 Demo 未就绪 | 保持签署前 | 不冻结合同、不发 Token | 签署按钮禁用并说明缺什么 |
+| 合同：`CONTRACT_PROPOSED` | 改可写路径 / 范围 / 验收 / 风险条件 | `CONTRACT_REVISING` → 再回 `CONTRACT_PROPOSED` | 原提案保留为旧版；相关字段变则哈希重算；**旧签名不得复用** | 「合同草案已更新，请检查变更」 |
+| 合同：`CONTRACT_PROPOSED` | 拒签但愿意继续改 | 回 `CLARIFYING` 或 `CONTRACT_REVISING` | 默认保留 Demo 与上下文；旧提案 `REJECTED` / `SUPERSEDED`，不删除 | 合同卡「未授权」+ 继续修改入口 |
+| 合同：`CONTRACT_PROPOSED` | 明确取消本轮 | `CANCELLED` | 默认**归档**草稿/Demo/签署前指纹与原因；释放会话租约；不删用户可见历史 | 「本轮已取消」+ 只读历史 + 另起新需求 |
+| 合同：签署链路 | 签名 / 哈希冻结 / 凭证签发任一失败 | 回 `CONTRACT_PROPOSED` 或 `AUTHORIZATION_FAILED` | **事务式**：未全部成功不得部分进入施工；不创建可写 Worker | 「授权未生效」，不得出现「施工已开始」 |
+| 合同已签 / `EXECUTING` | 用户提出影响已签 Scope 的新要求 | **先暂停**，再开**新合同版本**；旧合同不可变 | 停止旧凭证继续授权；新范围重新审核、**重签**；受影响 Evidence 失效 | 「这超出当前授权，需要新合同」——**不是**已批准扩权 |
+| 施工：`EXECUTING` | Gateway 拦越界 | `PAUSED` | 阻断本次 IO；保留 Worktree / 日志 / 违规证据；不静默放行、不默认销毁现场 | 越界位置 + 选项：「缩小改动 / **申请新授权（重签）** / 放弃本轮」 |
+| 施工：`PAUSED` | 用户选「扩权」 | **不得**直接静默回 `EXECUTING` | 必须进入新合同提案 / 重签 / 新 Token；旧 Token 吊销或冻结 | 明确「新授权合同」卡，禁止一键静默放行 |
+| 施工：`EXECUTING` | 用户主动停止 | `ABORTING` → 进程确认退出后 `ABORTED` | 先协作式停止，超宽限期再强杀；保留 Worktree 快照，**不合并**；删除须用户确认或明确保留期策略 | 「正在停止」→「已中止，改动留在隔离区，未合入主线」 |
+| 施工：`PAUSED` | 关页 / 断网 | 保持 `PAUSED` | Worker **不**因 UI 断线继续执行；保留现场；**不**因断线自动扩权或删 Worktree | 重连用快照+增量恢复挂起卡与待决选择 |
+| 施工：`EXECUTING` | Daemon / Worker / 机器异常退出 | `PAUSED` 或 `RECOVERY_REQUIRED` | 以持久化状态与最后确认事件恢复；不从猜测继续写；先核凭证、候选指纹、进程状态 | 「施工中断，正在核对现场」；确认前不显示继续施工 |
+| 验收：`VERIFYING` | 测试失败或缺 Evidence | 任务 `FAILED` / `EVIDENCE_MISSING`；交付未 `VERIFIED` | 失败证据保留；未跑/空集/旧 Evidence **不得**当通过 | 标出未通过项与缺失证据 |
+| 验收：任务曾 `VERIFIED` | 用户质疑且成立 / 证据不足 | 受影响节点 `REWORK_REQUIRED`；Evidence → `STALE` | 旧 Evidence 留审计；下游按依赖 `STALE`/`BLOCKED`；合同范围未变时可在原隔离 Worktree 返工 | 图谱「需复核/返工」，不伪装从未发生 |
+| 验收：`REWORK_REQUIRED` | 自动返工耗尽 / Scope 不足 / 无法判定 | `ESCALATED_HUMAN`，或经用户选择 `CANCELLED` | 冻结现场与诊断包；停 Worker，确认退出后释放执行锁；合同「未完成/待人工」，不假绿 | 失败原因、已尝试次数、「人工接管 / 结束本轮」 |
+| 验收：指纹不匹配 | 代码/合同/Demo/基线变化导致 Evidence 不一致 | 受影响任务及依赖 → `STALE` | 仅重跑受影响证据；引用仍一致者可沿用 | 解释失效原因与需重跑项 |
+| 验收全绿 | 用户验收通过且证据绑定当前候选 | `VERIFIED` | 固化证据与候选指纹；合并后记最终 Commit 关联；之后新需求开新版本/新合同 | 通过项、仍有限制、可继续迭代入口 |
+
+### 14.4 四项默认回退与资源保留
+
+| 场景 | 建议默认 | 不建议 |
+| --- | --- | --- |
+| 方案改口 | 保留旧版，创建新版；对新版重算 sufficiency。只复制仍明确有效的字段并标明来源；实质改变时旧 Demo 失效 | 覆盖旧方案、沿用旧 sufficiency 绿灯，或不经检查把旧流程字段并进新需求 |
+| Demo 被推翻 | 默认保留历史 Demo，标旧版失效。纯呈现微调 → 同方案版本更新 Demo；改主流程/范围/规则 → 先修订方案并重检 sufficiency，再出新 Demo | 静默覆盖唯一 Demo；拿旧 Demo 继续解锁签署 |
+| 拒签或取消 | 「拒签但愿意改」→ 方案/合同修订，保留上下文与 Demo；「明确不做了」→ `CANCELLED`，资产默认归档只读，释放租约 | 拒签一律永久取消；默认 `rm -rf` 清草稿与审计 |
+| 施工中止 | `ABORTING` → 确认停止后 `ABORTED`；默认保留隔离 Worktree 与现场快照，不合入主线；删除须确认或保留期策略 | 强杀后立刻删 Worktree；Abort 只改 UI、后台仍在写 |
+
+「保留」= 可审计、隔离、**不可继续授权执行**的快照，不等于永久保存；期限与敏感清理见 DEC-01。
+
+### 14.5 质疑后的 Graph、Worktree 与重试
+
+**Graph（局部失效回退，非整图变灰）**
+
+1. 先核对质疑对应的合同断言、候选指纹与 Evidence。  
+2. 证据仍有效且质疑不成立 → 节点保持 `VERIFIED`，记录结论。  
+3. 证据不完整或质疑成立 → 相关节点 `REWORK_REQUIRED`；旧 Evidence → `STALE`。  
+4. **仅**下游依赖按拓扑变 `STALE`/`BLOCKED`；无相关上游保持 `VERIFIED`。  
+5. 修复并新 Evidence 通过后才恢复 `VERIFIED`。  
+
+不建议把质疑直接记为 `FAILED`：`FAILED`≈执行/测试实际失败；`STALE`≈依据过期；`REWORK_REQUIRED`≈需再施工。
+
+**Worktree**
+
+- 同一签署合同、同一 Scope、候选未合并：默认原隔离 Worktree 修补，每次返工独立 Attempt + 快照。  
+- Scope / 授权 / 候选基线变：暂停 → 新合同审核；是否新 Worktree 由新合同基线定；旧 Worktree 留审计。  
+- 已合并后再发现问题：开新缺陷/变更合同，不回写旧合同历史、不伪造「未发生」。  
+- 回滚主线必须单独授权、单独验收。
+
+**重试上限（建议默认，待 DEC-05 拍板）**
+
+- 每个验收断言/任务最多 **2** 次自动返工；初次实现不计入。  
+- 达上限 → `ESCALATED_HUMAN`：停自动循环、保留现场与诊断、确认停进程后释放施工锁、合同标未完成；人工接管须重确认操作者/范围/凭证；Mode 4 **不**自动扩大权限。  
+- 高风险（钱/权限/核心数据）可更早人工接管；**不得**由模型自行提高上限。
+
+### 14.6 三层状态联动 Mermaid（讨论稿）
+
+```mermaid
+stateDiagram-v2
+    [*] --> CLARIFYING: 用户提出愿望 / 问题框定
+
+    state CLARIFYING {
+        [*] --> DraftPlan
+        DraftPlan --> SufficiencyCheck
+        SufficiencyCheck --> NeedsUserDecision: S1~S5 缺阻断项 / 达上限
+        NeedsUserDecision --> DraftPlan: 用户补全拍板
+    }
+
+    CLARIFYING --> DEMO_BUILDING: 方案初确 PLAN_PRELIMINARY_CONFIRMED
+    CLARIFYING --> CANCELLED: 明确放弃本轮
+
+    DEMO_BUILDING --> DEMO_READY: 沙盒构建成功
+    DEMO_BUILDING --> DEMO_FAILED: 崩溃 / 超时 / 白屏
+    DEMO_FAILED --> DEMO_BUILDING: 重试（新 Attempt）
+    DEMO_READY --> DEMO_BUILDING: 视觉微调（方案 S1~S5 不变，免重初确）
+    DEMO_READY --> CLARIFYING: 流程推翻（需求实质改变）
+    DEMO_READY --> CONTRACT_PROPOSED: Demo「符合预期」
+
+    CONTRACT_PROPOSED --> CONTRACT_REVISING: 用户 Modify
+    CONTRACT_REVISING --> CONTRACT_PROPOSED: 重出白话合同卡
+    CONTRACT_PROPOSED --> CLARIFYING: 拒签但继续调整
+    CONTRACT_PROPOSED --> CANCELLED: 明确取消
+    CONTRACT_PROPOSED --> EXECUTING: CONTRACT_SIGNED + 凭证签发成功
+
+    EXECUTING --> PAUSED: Gateway 越界 / 断线现场保留 / 租约切资源
+    PAUSED --> CONTRACT_PROPOSED: 申请扩权（必须新合同重签，禁止静默扩权）
+    CONTRACT_PROPOSED --> EXECUTING: 新合同签署 + 新 Token
+    PAUSED --> EXECUTING: 恢复连接且授权未变（仅续跑，非扩权）
+    PAUSED --> ABORTING: 放弃本轮 / 决定回滚
+    EXECUTING --> ABORTING: 用户「停止施工」
+    ABORTING --> ABORTED: Worker 退出完成
+
+    EXECUTING --> VERIFYING: 代码就绪进入验收
+    VERIFYING --> VERIFIED: 门禁全绿 + 用户无异议
+    VERIFYING --> REWORK_REQUIRED: 测试红 / 缺 Evidence / 空 Diff
+    VERIFIED --> REWORK_REQUIRED: 质疑成立
+    REWORK_REQUIRED --> EXECUTING: Retry 未达上限
+    REWORK_REQUIRED --> ESCALATED_HUMAN: Retry 达上限
+
+    ABORTED --> CANCELLED: 现场封存归档
+    ESCALATED_HUMAN --> CANCELLED: 人工评估后放弃
+    ESCALATED_HUMAN --> EXECUTING: 人工接管且重新确认凭证后修复
+    VERIFIED --> [*]: 合并入主线 / 凭证销毁
+
+    note right of CLARIFYING
+        资产：方案 DRAFT（按版本修订）
+        Demo/合同/写凭证：无
+    end note
+
+    note right of DEMO_READY
+        方案：FROZEN_DRAFT（待核验）
+        Demo：READY（隔离 CSP，不写主工程）
+        写凭证：无
+    end note
+
+    note right of EXECUTING
+        方案与断言：LOCKED_HASH
+        合同：SIGNED 不可变
+        凭证：VALID Execution Token
+        Worktree ACTIVE / Task RUNNING
+    end note
+
+    note right of REWORK_REQUIRED
+        局部失效：被质疑节点 REWORK_REQUIRED
+        旧 Evidence → STALE；下游 STALE
+        上游无关节点保持 VERIFIED
+        Attempt +1
+    end note
+
+    note right of ESCALATED_HUMAN
+        Token 吊销，Worker 停
+        Worktree 冻结留存（不可写）
+        合同 UNFULFILLED
+        禁止假绿 / 静默合并
+    end note
+```
+
+> **读图注意**：`PAUSED → CONTRACT_PROPOSED → EXECUTING` 才是「扩权」路径；`PAUSED → EXECUTING` 仅表示**授权未变**时的断线恢复续跑，**不是**扩大 Scope。
+
+### 14.7 交叉自检修订（冲突 / 遗漏补丁）
+
+| 编号 | 问题 | 修订（倾向采纳） |
+| --- | --- | --- |
+| PATCH-1 | Demo 视觉微调是否要再「方案初确」？ | **Demo 增量微调豁免**：未改 S1～S5 结构化字段（`in_scope_items` / `flows` 无增删）时，同方案版本出 `Demo v1.x`，**无需**再点方案初确；增加功能/改主流程才强制回方案重审。 |
+| PATCH-2 | 「质疑回灰」易被理解成整图变灰 | 正式定名 **局部失效回退（Targeted Invalidation）**：仅被质疑项 → `REWORK_REQUIRED`；下游依赖 → `STALE`；无关上游保持 `VERIFIED`。 |
+| PATCH-3 | `ABORTED` 后旧 Worktree 与新需求冲突 | **中止隔离封存协议**：Daemon 将 Worktree 改名为 `.stagent/archived-worktrees/{contract_id}-{timestamp}` 并解绑 Git 锁；新合同在干净临时 Worktree 启动。 |
+| PATCH-4 | 双 Tab / 双端并发改方案与试 Demo | 合同卡与 Demo 绑定 **`session_epoch`**；另一会话导致方案版本变更时，过期 Tab 收 WebSocket 遮罩：「方案已在另一会话更新」——**禁止**用过期 Demo 触发签署。 |
+| PATCH-5 | Worker「摸鱼」零写入仍点亮图谱 | `VERIFYING` 前增加 **非空物理 Diff 校验**：非纯探测任务若 `git diff` 为空（或仅空白），直接 `REWORK_REQUIRED`，禁止无物理变动假绿。 |
+| PATCH-6 | 图上 `PAUSED→EXECUTING` 写「扩权重签」易被实现成静默放行 | **扩权 = 新合同**：必须重算范围/哈希、重签、发新 Token；旧凭证停止授权。缩小改动可在原合同内继续；放弃走 Abort/Cancel。 |
+
+### 14.8 六项产品决策记录（DEC-01～06，推荐默认 + 待 Tina 拍板）
+
+| 编号 | 议题 | 备选 | **推荐默认** | 影响摘要 | 仍 Open |
+| --- | --- | --- | --- | --- | --- |
+| **DEC-01** | 历史资产保留期限 | A 永久 / B 活跃期+7 天软归档 / C 只留最后成功其余 rm | **B** | A 膨胀杂乱；C 毁审计；B 可追溯与成本平衡 | 敏感内容 24h 脱敏？个企归档天数是否区分？ |
+| **DEC-02** | Demo 构建崩溃降级 | A 严格阻断 / B 有损降级为状态机/线框且标注风险 / C 跳过 Demo 直接签 | **B** | A 易卡死；C 击穿 Demo-First；B 保底线 | 纯后端任务是否默认流程卡？降级是否需用户显式「接受降级」？ |
+| **DEC-03** | 拒签 vs 取消交互 | A 单按钮再弹窗 / B 平铺「调整」主按钮 +「放弃本轮」次按钮 / C 仅调整、取消靠说话 | **B** | 边界清晰，降误解 | 「放弃」是否二次确认？放弃后中栏收起还是变灰？ |
+| **DEC-04** | `PAUSED` 租约超时 | A 永久挂起 / B 超时自动回滚删现场 / C 超时切资源、现场快照，重连唤醒 | **C（建议 15 分钟切计算资源）** | A 僵尸占坑；B 可能毁掉有价值半成品；C 状态不丢且不占死机器 | 唤醒冷启动目标？底座重启后快照重放？ |
+| **DEC-05** | 自动返工上限 | A 固定 1 / B 默认 2（初建不计）/ C 按风险动态 | **B**（v0.2 再按风险覆盖） | A 过扰；C v0.1 成本高；B 截断死循环 | 新质疑是否重置计数？（推荐：同一验收项累计，新断言新计数） |
+| **DEC-06** | 已 `VERIFIED`/合并后再改 | A 回退旧合同续修 / B 历史不可变，强制微合同 / C 旧合同打补丁 | **B** | A 污染主干；C 毁指纹不可变；B 符合增量审计 | 缺陷微合同是否自动引用上轮 requirements 背景？（推荐自动引用） |
+
+### 14.9 与 §8～§13 对读
+
+| 章节 | §14 补上的点 |
+| --- | --- |
+| §8 / §8.5.2 | 取消/中止默认**归档**而非 rm；封存路径仍须在 `.stagent/` gitignore 下，不进主干 |
+| §10 / §11 | 主路径门禁不变；§14 补异常边与回退，避免「不符合预期 / 拒签 / Abort / 质疑」行为未定义 |
+| §11.3.1 | 拒签/取消按钮分流（DEC-03）与两次确认体感分级一致：轻量初确 ≠ 法律级签署 |
+| §13 AC | 立卡时可增补：扩权重签无静默 Token、session_epoch 拒签过期 Demo、非空 Diff、封存改名不挡新 Worktree |
+
+**倾向采纳判定**：采纳分层状态、异常矩阵、四项默认回退、质疑≠失败/局部失效、三层 Mermaid、DEC-01～06 **推荐默认**、以及 §14.7 六条补丁；**明确** PAUSED 扩权必须重签新合同。DEC 表中 Open Items 与「2 次返工 / 15 分钟租约 / 7 天归档」等数字仍标 **待 Tina 拍板**，未拍板前不得当成已冻结产品法。状态名仅为设计建议，升格/立卡前需与现网状态机对齐映射表。
+
+---
+
+*文档结束。冲突时：Top7 硬标准与《Supervisor运转机制》定稿优先；本稿只细化「右栏对话按真实澄清生命周期怎么表现」、澄清结束产物形态（§8 倾向采纳）、「文档地基 + 四重锚点」的意图对齐边界（§9 倾向采纳）、四锚点端到端闭环 / 隐性逃逸 / 开工门禁 / 微合同与 v0.1 降级（§10 倾向采纳）、「方案可早、Demo 须够具体且初步确认后再出」（§11 倾向采纳）、「日常白话方案 + 折叠机器细稿 + Tenets/ADR/Golden 三层决策锁」（§12 倾向采纳）、「实现约束四条款 + P0–P3 + AC」（§13 倾向采纳；条款正文见 §8.5.2 / §11.2.1 / §11.3.1 / §12.1.1），以及「异常回退基线 + 三层状态 Mermaid + DEC-01～06 + 交叉补丁（含 PAUSED 扩权重签）」（§14 倾向采纳）。*
