@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getRuntimeKey, getRuntimeModel } from "./key-store";
+import { appendLlmMeta } from "../core/debug-log";
 import type {
   WorkerGenerationInput,
   WorkerGenerationResult,
@@ -34,6 +35,8 @@ export class OpenAiWorkerClient implements WorkerModelClient {
   private readonly baseURL?: string | undefined;
   private readonly parseHooks: ParseRetryHooks;
 
+  private readonly repoRoot?: string | undefined;
+
   constructor(
     options: {
       apiKey?: string | undefined;
@@ -41,6 +44,8 @@ export class OpenAiWorkerClient implements WorkerModelClient {
       baseURL?: string | undefined;
       /** 测试可注入重试钩子 */
       parseHooks?: ParseRetryHooks | undefined;
+      /** TASK-C.17：LLM 元数据落盘根 */
+      repoRoot?: string | undefined;
     } = {},
   ) {
     const key = options.apiKey ?? getRuntimeKey();
@@ -53,11 +58,13 @@ export class OpenAiWorkerClient implements WorkerModelClient {
     this.modelId = options.modelId ?? getRuntimeModel();
     this.baseURL = options.baseURL ?? process.env["OPENAI_BASE_URL"];
     this.parseHooks = options.parseHooks ?? {};
+    this.repoRoot = options.repoRoot;
   }
 
   async generateChanges(
     input: WorkerGenerationInput,
   ): Promise<WorkerGenerationResult> {
+    const startedAt = Date.now();
     const [{ generateObject }, { createOpenAI }] = await Promise.all([
       import("ai"),
       import("@ai-sdk/openai"),
@@ -120,6 +127,21 @@ export class OpenAiWorkerClient implements WorkerModelClient {
       this.parseHooks,
     );
 
+    if (this.repoRoot) {
+      try {
+        appendLlmMeta(this.repoRoot, {
+          source: "worker",
+          duration_ms: Date.now() - startedAt,
+          model: this.modelId,
+          enrichCode: "OK",
+          input_tokens: value.usage.inputTokens,
+          output_tokens: value.usage.outputTokens,
+          contractId: input.contract.contract_id,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
     return value;
   }
 }

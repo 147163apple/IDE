@@ -52,6 +52,7 @@ import {
   generateSupervisorDraft,
   submitDisputeSelfCheck,
   submitJourneyMessage,
+  fetchJourneyHistory,
   startRealPlaytest,
   stopRealPlaytest,
   getRealPlaytestStatus,
@@ -107,6 +108,10 @@ import {
 } from "@/lib/in-progress-lifecycle";
 import type { AssistantModeSurface } from "@/lib/assistant-mode";
 import type { StudioViewportId } from "@/components/studio/viewport-routing";
+import {
+  traceCtaClick,
+  traceCtaDisabled,
+} from "@/lib/ui-trace";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
 import {
   ProtectionApprovalCard,
@@ -265,6 +270,47 @@ function Console() {
   /** TASK-S.6：右侧旅程卡与确认原型忙态 */
   const [journeyCards, setJourneyCards] = useState<JourneyChatCard[]>([]);
   const [journeyBusy, setJourneyBusy] = useState(false);
+
+  // TASK-C.17：刷新还原旅程（从 `.stagent/logs/journey-*.jsonl`）
+  useEffect(() => {
+    if (!conn || !connected) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const hist = await fetchJourneyHistory(
+          conn,
+          selectedId ?? undefined,
+        );
+        if (cancelled) return;
+        const cards: JourneyChatCard[] = [];
+        for (const turn of hist.turns) {
+          if (turn.role === "user") {
+            cards.push({
+              id: `hist-user-${turn.ts}`,
+              kind: "SYSTEM",
+              text: `你：${turn.text}`,
+            });
+          } else if (turn.role === "assistant") {
+            cards.push({
+              id: `hist-as-${turn.ts}`,
+              kind: (turn.route as JourneyChatCard["kind"]) || "SYSTEM",
+              text: turn.text,
+            });
+          }
+        }
+        if (cards.length > 0) {
+          setJourneyCards(cards.slice(-20));
+        }
+      } catch {
+        /* 还原失败不挡主路径 */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅连接/选合同变化时还原
+  }, [conn, connected, selectedId]);
+
   const [confirmPrototypeBusy, setConfirmPrototypeBusy] = useState(false);
   /** TASK-C.14：项目现状基线档案（打开即扫） */
   const [baselinePayload, setBaselinePayload] =
@@ -748,6 +794,10 @@ function Console() {
   const handleJourneyBeforeSend = useCallback(
     async (text: string): Promise<"handled" | "passthrough"> => {
       if (!conn || !connected) return "passthrough";
+      traceCtaClick("journey-send", {
+        ...(selectedId ? { contractId: selectedId } : {}),
+        detail: { text_len: text.trim().length },
+      });
       const trimmed = text.trim();
       // 澄清进行中：忽略新输入，避免打断选择题
       if (clarificationState?.status === "asking") {
@@ -1159,6 +1209,9 @@ function Console() {
 
   /** TASK-C.11b：确认 Demo 感官对齐 → 展示白话合同卡（不立刻写真码） */
   const handleConfirmPrototype = useCallback(async () => {
+    traceCtaClick("confirm-prototype", {
+      ...(selectedId ? { contractId: selectedId } : {}),
+    });
     if (!conn) {
       setConfirmPrototypeError("请先连接 Daemon。");
       return;

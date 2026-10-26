@@ -7,6 +7,7 @@
  * 本文件遵守 Zero-Tool：不拉起子进程、无 Gateway/Merger/Runner 依赖。
  */
 import { getRuntimeKey, getRuntimeModel } from "../worker/key-store";
+import { appendLlmMeta } from "../core/debug-log";
 import type { DraftEnrichment } from "./draft-generator";
 
 /** 可诊断错误码（进入 HTTP 响应的 `error` 字段，不含密钥） */
@@ -44,6 +45,8 @@ export interface SupervisorEnrichOptions {
   timeoutMs?: number | undefined;
   /** 可注入 fetch，便于单测 */
   fetchImpl?: typeof fetch | undefined;
+  /** TASK-C.17：写入 `.stagent/logs/daemon.jsonl` 的 LLM 元数据（禁密钥） */
+  repoRoot?: string | undefined;
 }
 
 const SYSTEM_PROMPT = [
@@ -223,6 +226,7 @@ export function createSupervisorEnrich(
     const baseURL = resolveBaseURL(options.baseURL);
     const modelId = resolveModel(options.modelId);
     const url = `${baseURL}/chat/completions`;
+    const startedAt = Date.now();
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -248,10 +252,34 @@ export function createSupervisorEnrich(
       });
     } catch (err) {
       if ((err as Error).name === "AbortError") {
+        if (options.repoRoot) {
+          try {
+            appendLlmMeta(options.repoRoot, {
+              source: "enrich",
+              duration_ms: Date.now() - startedAt,
+              model: modelId,
+              enrichCode: "ENRICH_TIMEOUT",
+            });
+          } catch {
+            /* ignore */
+          }
+        }
         throw new EnrichError(
           "ENRICH_TIMEOUT",
           `L1 补全超时（>${timeoutMs}ms），请稍后重试或先用不带 enrich 的纯 L0。`,
         );
+      }
+      if (options.repoRoot) {
+        try {
+          appendLlmMeta(options.repoRoot, {
+            source: "enrich",
+            duration_ms: Date.now() - startedAt,
+            model: modelId,
+            enrichCode: "ENRICH_HTTP_ERROR",
+          });
+        } catch {
+          /* ignore */
+        }
       }
       throw new EnrichError(
         "ENRICH_HTTP_ERROR",
@@ -288,6 +316,20 @@ export function createSupervisorEnrich(
       output_tokens: parsed.usage?.completion_tokens ?? 0,
     };
     const model = parsed.model?.trim() || modelId;
+    if (options.repoRoot) {
+      try {
+        appendLlmMeta(options.repoRoot, {
+          source: "enrich",
+          duration_ms: Date.now() - startedAt,
+          model,
+          enrichCode: "OK",
+          input_tokens: usage.input_tokens,
+          output_tokens: usage.output_tokens,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
     return parseEnrichmentContent(content, model, usage);
   };
 }

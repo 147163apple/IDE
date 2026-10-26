@@ -1461,6 +1461,53 @@ export interface JourneyResponse {
   budget: SupervisorBudgetSnapshotView;
 }
 
+export interface ClientTraceEventInput {
+  kind: string;
+  ts?: string | undefined;
+  cta?: string | undefined;
+  viewport?: string | undefined;
+  disabled_reason?: string | undefined;
+  contractId?: string | undefined;
+  contract_id?: string | undefined;
+  sessionId?: string | undefined;
+  session_id?: string | undefined;
+  detail?: Record<string, unknown> | undefined;
+}
+
+/** TASK-C.17：POST /api/client-events —— UI trace 落盘 */
+export async function postClientEvents(
+  events: ClientTraceEventInput[],
+  conn: DaemonConnection = loadConnection(),
+): Promise<{ accepted: number }> {
+  if (!conn.token || events.length === 0) return { accepted: 0 };
+  return request<{ accepted: number }>(conn, "/api/client-events", {
+    method: "POST",
+    body: JSON.stringify({ events }),
+  });
+}
+
+export interface JourneyHistoryTurn {
+  ts: string;
+  role: "user" | "assistant" | "system";
+  text: string;
+  contractId?: string;
+  sessionId?: string;
+  route?: string;
+  code?: string;
+}
+
+/** TASK-C.17：GET /api/supervisor/journey —— 刷新还原旅程 */
+export async function fetchJourneyHistory(
+  conn: DaemonConnection,
+  contractId?: string | undefined,
+): Promise<{ contract_id: string | null; turns: JourneyHistoryTurn[] }> {
+  const q =
+    contractId && contractId.length > 0
+      ? `?contract_id=${encodeURIComponent(contractId)}`
+      : "";
+  return request(conn, `/api/supervisor/journey${q}`);
+}
+
 /** POST /api/supervisor/journey —— 右侧一句话分流 */
 export async function submitJourneyMessage(
   conn: DaemonConnection,

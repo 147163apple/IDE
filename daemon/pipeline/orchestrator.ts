@@ -1002,7 +1002,7 @@ export class ContractOrchestrator {
       }
 
       const { gateway, costMonitor } = this.buildRuntime(current, signal);
-      const modelClient = options.modelClient ?? new OpenAiWorkerClient();
+      const modelClient = options.modelClient ?? new OpenAiWorkerClient({ repoRoot: this.repoRoot });
       const worker = new AiWorker({ gateway, costMonitor, modelClient });
 
       try {

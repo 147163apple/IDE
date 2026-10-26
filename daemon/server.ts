@@ -71,6 +71,16 @@ import {
   buildWorkspaceLaunchUrl,
   ensureWorkspaceSession,
 } from "./core/open-workspace";
+import {
+  appendClientTrace,
+  appendDaemonLog,
+  appendJourneyTurn,
+  appendWorkerTerminalLog,
+  newRequestId,
+  readJourneyTurns,
+} from "./core/debug-log";
+import { SupervisorSessionManager } from "./supervisor/session-manager";
+import { SUPERVISOR_SESSION_SCHEMA_VERSION } from "./supervisor/types";
 
 import {
   recoverDaemonState,
@@ -348,6 +358,15 @@ export class StagentDaemon {
           stream,
           line,
         });
+        try {
+          appendWorkerTerminalLog(this.repoRoot, contractId, {
+            source: "TERMINAL_STREAM",
+            stream,
+            lines: [line],
+          });
+        } catch {
+          /* 日志失败不影响施工 */
+        }
       },
       // TASK-W.4：运行时违规广播（能力漂移 / 未知通道 / 越界路径）
       onGatewayViolation: (violation) => {
@@ -640,8 +659,17 @@ export class StagentDaemon {
     return sent;
   }
 
-  /** 日志流式推送（分片 + 有界截断，PASS-5） */
+  /** 日志流式推送（分片 + 有界截断，PASS-5）；TASK-C.17 同步有界落盘 */
   emitWorkerLog(contractId: string, lines: string[]): number {
+    try {
+      appendWorkerTerminalLog(this.repoRoot, contractId, {
+        source: "WORKER_LOG",
+        stream: "worker",
+        lines,
+      });
+    } catch {
+      /* 日志失败不影响施工 */
+    }
     let sent = 0;
     for (const chunk of chunkWorkerLog(contractId, lines)) {
       sent += this.broadcast("WORKER_LOG", chunk);
@@ -2502,11 +2530,103 @@ export class StagentDaemon {
     });
   }
 
-  private async handleSupervisorJourney(
+  /** TASK-C.17：POST /api/client-events —— CTA / viewport / disabled 原因 */
+  private async handleClientEvents(
     req: http.IncomingMessage,
     res: http.ServerResponse,
     method: string,
   ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    let body: {
+      events?: unknown;
+      event?: unknown;
+    };
+    try {
+      body = (await this.readJsonBody(req)) as typeof body;
+    } catch (err) {
+      this.sendJson(res, 400, {
+        error: "invalid_json",
+        message: (err as Error).message,
+      });
+      return;
+    }
+    const rawList: unknown[] = Array.isArray(body.events)
+      ? body.events
+      : body.event !== undefined
+        ? [body.event]
+        : [];
+    if (rawList.length === 0) {
+      this.sendJson(res, 400, {
+        error: "events_required",
+        message: "需要 events[] 或 event",
+      });
+      return;
+    }
+    const requestId =
+      (req as http.IncomingMessage & { stagentRequestId?: string })
+        .stagentRequestId;
+    let accepted = 0;
+    for (const raw of rawList.slice(0, 50)) {
+      if (!raw || typeof raw !== "object") continue;
+      const ev = raw as Record<string, unknown>;
+      const kind = typeof ev["kind"] === "string" ? ev["kind"] : "";
+      if (!kind) continue;
+      try {
+        appendClientTrace(
+          this.repoRoot,
+          {
+            kind,
+            ...(typeof ev["ts"] === "string" ? { ts: ev["ts"] } : {}),
+            ...(typeof ev["cta"] === "string" ? { cta: ev["cta"] } : {}),
+            ...(typeof ev["viewport"] === "string"
+              ? { viewport: ev["viewport"] }
+              : {}),
+            ...(typeof ev["disabled_reason"] === "string"
+              ? { disabled_reason: ev["disabled_reason"] }
+              : {}),
+            ...(typeof ev["contractId"] === "string"
+              ? { contractId: ev["contractId"] }
+              : typeof ev["contract_id"] === "string"
+                ? { contractId: ev["contract_id"] }
+                : {}),
+            ...(typeof ev["sessionId"] === "string"
+              ? { sessionId: ev["sessionId"] }
+              : typeof ev["session_id"] === "string"
+                ? { sessionId: ev["session_id"] }
+                : {}),
+            ...(ev["detail"] && typeof ev["detail"] === "object"
+              ? { detail: ev["detail"] as Record<string, unknown> }
+              : {}),
+          },
+          ...(requestId === undefined ? [] : [{ requestId }]),
+        );
+        accepted += 1;
+      } catch {
+        /* skip bad event */
+      }
+    }
+    this.sendJson(res, 200, { accepted });
+  }
+
+  private async handleSupervisorJourney(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    url?: URL,
+  ): Promise<void> {
+    // TASK-C.17：GET 读回旅程（刷新还原）
+    if (method === "GET") {
+      const cid = url?.searchParams.get("contract_id") ?? undefined;
+      const turns = readJourneyTurns(this.repoRoot, cid);
+      this.sendJson(res, 200, {
+        contract_id: cid ?? null,
+        turns,
+      });
+      return;
+    }
     if (method !== "POST") {
       this.sendJson(res, 405, { error: "Method not allowed" });
       return;
@@ -2582,6 +2702,69 @@ export class StagentDaemon {
           ? {}
           : { enrich: this.supervisorEnrich }),
       });
+
+      // TASK-C.17：澄清旅程落盘（journey-<cid>.jsonl + 可选 SupervisorSession）
+      const journeyContractId =
+        result.contract_id ??
+        (contractId !== "" ? contractId : undefined);
+      const requestId =
+        (req as http.IncomingMessage & { stagentRequestId?: string })
+          .stagentRequestId;
+      try {
+        appendJourneyTurn(this.repoRoot, {
+          role: "user",
+          text: message,
+          ...(journeyContractId === undefined
+            ? {}
+            : { contractId: journeyContractId }),
+          ...(sessionId === undefined ? {} : { sessionId }),
+          ...(requestId === undefined ? {} : { requestId }),
+        });
+        appendJourneyTurn(this.repoRoot, {
+          role: "assistant",
+          text: result.plain_summary,
+          ...(journeyContractId === undefined
+            ? {}
+            : { contractId: journeyContractId }),
+          ...(sessionId === undefined ? {} : { sessionId }),
+          route: result.route,
+          ...(result.code === undefined ? {} : { code: result.code }),
+          ...(requestId === undefined ? {} : { requestId }),
+        });
+        if (
+          sessionId !== undefined &&
+          /^[A-Za-z0-9][A-Za-z0-9_-]{7,127}$/.test(sessionId)
+        ) {
+          const sessions = new SupervisorSessionManager(this.repoRoot);
+          let ses = sessions.load(sessionId);
+          if (!ses) {
+            const now = new Date().toISOString();
+            ses = sessions.save({
+              schema_version: SUPERVISOR_SESSION_SCHEMA_VERSION,
+              session_id: sessionId,
+              created_at: now,
+              updated_at: now,
+              messages: [],
+              observation: "ACTIVE",
+              ...(journeyContractId === undefined
+                ? {}
+                : { contract_id: journeyContractId }),
+            });
+          }
+          sessions.appendMessage(sessionId, {
+            role: "user",
+            text: message,
+            source: "ui",
+          });
+          sessions.appendMessage(sessionId, {
+            role: "supervisor",
+            text: result.plain_summary,
+            source: "model",
+          });
+        }
+      } catch {
+        /* 旅程日志失败不挡主路径 */
+      }
 
       if (result.dispute_report) {
         this.broadcastDisputeReport(result.dispute_report);
@@ -2845,6 +3028,31 @@ export class StagentDaemon {
     const parsedUrl = new URL(req.url ?? "/", `http://${this.host}`);
     const pathname = parsedUrl.pathname;
     const method = req.method ?? "GET";
+
+    // TASK-C.17：API 请求默认 JSONL（静态资源跳过）
+    const requestId = newRequestId();
+    (req as http.IncomingMessage & { stagentRequestId?: string }).stagentRequestId =
+      requestId;
+    const startedAt = Date.now();
+    const shouldLogHttp =
+      pathname.startsWith("/api/") ||
+      pathname === "/health" ||
+      pathname === "/api/status";
+    if (shouldLogHttp) {
+      res.on("finish", () => {
+        try {
+          appendDaemonLog(this.repoRoot, {
+            kind: "http",
+            requestId,
+            route: `${method} ${pathname}`,
+            code: String(res.statusCode),
+            duration_ms: Date.now() - startedAt,
+          });
+        } catch {
+          /* ignore */
+        }
+      });
+    }
 
     // 本地控制台跨端口访问（Vite dev server）所需的 CORS；仅放行回环来源
     const origin = req.headers.origin;
@@ -3238,7 +3446,17 @@ export class StagentDaemon {
         this.sendJson(res, 401, { error: "Unauthorized" });
         return;
       }
-      await this.handleSupervisorJourney(req, res, method);
+      await this.handleSupervisorJourney(req, res, method, parsedUrl);
+      return;
+    }
+
+    // TASK-C.17：前端轻量 UI trace → 同日志体系
+    if (pathname === "/api/client-events") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleClientEvents(req, res, method);
       return;
     }
 

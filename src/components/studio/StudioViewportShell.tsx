@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import type { PresentationState } from "@/lib/state/presentation-state";
+import { traceViewportChange } from "@/lib/ui-trace";
 import {
   resolveDefaultViewport,
   STUDIO_VIEWPORT_IDS,
@@ -50,6 +51,7 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
   const select = (id: StudioViewportId) => {
     setManualViewport(id);
     props.onViewportChange?.(id);
+    traceViewportChange(id);
   };
 
   const panes: Record<StudioViewportId, ReactNode> = {

@@ -15,6 +15,7 @@ import {
 import { relaunchCurrentSession } from "@/lib/daemon-api";
 import { ClarificationChoiceCard } from "@/components/supervisor/ClarificationChoiceCard";
 import type { ClarificationQuestion } from "@/lib/journey/clarification";
+import { traceCtaClick, traceCtaDisabled } from "@/lib/ui-trace";
 
 export interface JourneyChatCard {
   id: string;
@@ -207,8 +208,15 @@ export function AgentChatPane({
     }
     const text = draft.trim();
     if (!text) return;
-    if (routing || journeyBusy) return;
-    if (!assistant.canSendAsWork) return;
+    if (routing || journeyBusy) {
+      traceCtaDisabled("journey-send", journeyBusy ? "journey_busy" : "routing");
+      return;
+    }
+    if (!assistant.canSendAsWork) {
+      traceCtaDisabled("journey-send", "assistant_cannot_send");
+      return;
+    }
+    traceCtaClick("chat-submit");
     setDraft("");
     if (onBeforeSend) {
       setRouting(true);

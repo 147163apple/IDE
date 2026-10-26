@@ -266,7 +266,7 @@ async function runOpenOrStart(
   }
 
   const supervisorEnrich = isSupervisorEnrichConfigured()
-    ? createSupervisorEnrich()
+    ? createSupervisorEnrich({ repoRoot: options.repo })
     : undefined;
   if (supervisorEnrich) {
     console.log(`  L1 补全: 已启用（DeepSeek / OpenAI 兼容口）`);
