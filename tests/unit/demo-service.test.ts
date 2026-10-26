@@ -1,5 +1,5 @@
 import fs from "node:fs";
-import { safeRmSync } from "../helpers/tmp";
+import { diskDeleteBlocked, safeRmSync } from "../helpers/tmp";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
@@ -304,7 +304,15 @@ describe("快照生成与回退", () => {
     expect(listed[0]?.label).toBe("初版");
   });
 
-  it("回退到历史快照：内容还原，且清理快照中不存在的旧资源", () => {
+  it("回退到历史快照：内容还原，且清理快照中不存在的旧资源", (ctx) => {
+    // 受限环境的 safe-delete 垫片会拒绝删除，而这条用例要观测的正是「旧资源
+    // 被删掉」：`rollbackToSnapshot` 内部的 unlink 被拒会直接抛出，用例测不到
+    // 任何东西。按仓库既有口径（deadlock-call-sites 的 diskDeleteBlocked）降级为
+    // 跳过，并写明原因——不假装通过，也不把它算成产品失败。
+    if (diskDeleteBlocked()) {
+      ctx.skip("环境拒绝删除：无法观测「旧资源已清理」");
+      return;
+    }
     const root = newRoot();
     const demoDir = writeDemo(root, v1).root;
     const meta = createSnapshot(demoDir, v1, {
