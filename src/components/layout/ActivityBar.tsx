@@ -5,13 +5,13 @@ import { WORKBENCH_LABEL } from "../../lib/workbench-labels";
  * Activity Bar（Cursor / VS Code 式左窄条）。
  *
  * TASK-C.10c：title / aria-label 只用白话。
- * TASK-C.16：日常只挂**一个**工作台入口「合同操作台」（列表+操作台），
+ * TASK-C.16：日常只挂**一个**工作台入口「方案工作台」（列表+操作台），
  * 不再并列「项目审阅」与「任务图谱」两套门；图谱是操作台内视口。
  */
 export interface ActivityBarProps {
   explorerOpen: boolean;
   onToggleExplorer: () => void;
-  /** C.16：单门——打开/聚焦合同操作台 */
+  /** C.16：单门——打开/聚焦方案工作台 */
   workbenchOpen: boolean;
   onOpenWorkbench: () => void;
   settingsOpen: boolean;

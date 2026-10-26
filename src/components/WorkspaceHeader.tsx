@@ -70,8 +70,8 @@ export function WorkspaceHeader({
         onClick={onOpenStudio}
         title={
           protectedMode
-            ? `保护模式：已锁 ${protectedCount} 处，点击打开合同操作台`
-            : "自由模式，点击打开合同操作台"
+            ? `保护模式：已锁 ${protectedCount} 处，点击打开方案工作台`
+            : "自由模式，点击打开方案工作台"
         }
         className={`rounded-full border px-2 py-0.5 ${
           protectedMode

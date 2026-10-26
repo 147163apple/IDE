@@ -340,7 +340,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     >
       {props.studioContent ?? (
         <div className="p-3">
-          {WORKBENCH_LABEL.studio}（合同审阅区，TASK-C.2 实装）
+          {WORKBENCH_LABEL.studio}（方案审阅区，TASK-C.18）
         </div>
       )}
     </div>

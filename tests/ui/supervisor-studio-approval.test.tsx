@@ -335,7 +335,7 @@ describe("TASK-C.2 结构化审阅与执行期控制", () => {
     expect(mode).toHaveAttribute("data-locked-count", "3");
     expect(mode).toHaveAttribute("title", expect.stringContaining("已锁 3 处"));
     fireEvent.click(mode);
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );

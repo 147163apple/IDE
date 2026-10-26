@@ -111,7 +111,7 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     expect(screen.getByTestId("workspace-layout")).toBeInTheDocument();
     expect(screen.getByTestId("run-mode")).toHaveAttribute("data-mode", "VIBE");
     // 新交互：首屏不再默认打开 Supervisor Studio，中央是欢迎/空编辑区
-    expect(screen.queryByRole("tab", { name: "合同操作台" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "方案工作台" })).toBeNull();
     expect(screen.getByTestId("welcome-pane")).toBeInTheDocument();
     // 顶栏收口：右侧只有一个最小操作点（欢迎区另有自己的入口，故用 testid 定位）
     expect(screen.getByTestId("new-requirement")).toHaveTextContent("新建需求");
@@ -144,17 +144,17 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     expect(screen.getByTestId("session-token")).toBeInTheDocument();
   });
 
-  it("点需求才打开合同操作台，旧控制台功能仍在", async () => {
+  it("点需求才打开方案工作台单页（C.18 无五视口/旧合同卡按钮）", async () => {
     render(<Console />);
     await openRequirement("主页面接线测试");
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    // 自动选中唯一合同后，施工图与合同卡都可能露出「运行 Worker」
-    expect(screen.getAllByText("运行 Worker").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("执行验证").length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/查看 Diff/).length).toBeGreaterThan(0);
+    // C.18：中间仅方案审阅；旧「运行 Worker / 执行验证 / 查看 Diff」不在日常单页
+    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(screen.queryByTestId("studio-viewport-tabs")).toBeNull();
+    expect(screen.getByTestId("scheme-review-pane")).toBeInTheDocument();
     // P.1 顺手修：顶栏分支改为显示主工作区真实分支（不再按合同拼 task/xxx）；
     // 合同与 Worktree 绑定仍由 workspace-binding 体现
     expect(screen.getByTestId("current-branch")).toHaveTextContent("main");

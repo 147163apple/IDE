@@ -123,7 +123,7 @@ describe("C.16：ActivityBar 单门合同操作台", () => {
     );
     expect(screen.queryByTestId("studio-content")).toBeNull();
     fireEvent.click(screen.getByTestId("activity-workbench"));
-    const tab = screen.getByRole("tab", { name: "合同操作台" });
+    const tab = screen.getByRole("tab", { name: "方案工作台" });
     expect(tab).toHaveAttribute("data-system", "true");
     expect(tab).toHaveAttribute("aria-selected", "true");
     expect(screen.getByTestId("studio-pane")).toBeInTheDocument();
@@ -139,10 +139,10 @@ describe("C.16：ActivityBar 单门合同操作台", () => {
     );
     fireEvent.click(screen.getByTestId("activity-workbench"));
     fireEvent.click(screen.getByTestId("close-tab-system:supervisor-studio"));
-    expect(screen.queryByRole("tab", { name: "合同操作台" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "方案工作台" })).toBeNull();
     expect(screen.queryByTestId("studio-content")).toBeNull();
     fireEvent.click(screen.getByTestId("activity-workbench"));
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toBeInTheDocument();
     expect(screen.getByTestId("studio-content")).toBeInTheDocument();
   });
 
@@ -190,7 +190,7 @@ describe("C.16：ActivityBar 单门合同操作台", () => {
       />,
     );
     expect(screen.getByTestId("studio-content")).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
@@ -264,11 +264,11 @@ describe("TASK-C.10c / C.16：白话命名与单门", () => {
         terminalPanel={<div>exit 0</div>}
       />,
     );
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
     expect(screen.getByTestId("activity-workbench")).toHaveAttribute(
       "aria-label",
-      "合同操作台",
+      "方案工作台",
     );
     expect(screen.queryByTestId("activity-supervisor")).toBeNull();
     expect(screen.queryByTestId("activity-graph")).toBeNull();
@@ -279,7 +279,7 @@ describe("TASK-C.10c / C.16：白话命名与单门", () => {
     expect(screen.getByTestId("terminal-drawer")).toHaveTextContent("验证输出");
   });
 
-  it("单门打开合同操作台，不新建独立任务图谱 Tab", () => {
+  it("单门打开方案工作台，不新建独立任务图谱 Tab", () => {
     render(
       <WorkspaceLayout
         {...base}
@@ -288,7 +288,7 @@ describe("TASK-C.10c / C.16：白话命名与单门", () => {
       />,
     );
     fireEvent.click(screen.getByTestId("activity-workbench"));
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );

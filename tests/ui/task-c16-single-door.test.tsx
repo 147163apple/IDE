@@ -21,7 +21,7 @@ describe("TASK-C.16 单门：列表+操作台", () => {
     render(<WorkspaceLayout {...base} />);
     expect(screen.getByTestId("activity-workbench")).toHaveAttribute(
       "aria-label",
-      "合同操作台",
+      "方案工作台",
     );
     expect(screen.queryByTestId("activity-supervisor")).toBeNull();
     expect(screen.queryByTestId("activity-graph")).toBeNull();
@@ -41,27 +41,23 @@ describe("TASK-C.16 单门：列表+操作台", () => {
                 </button>
               </div>
             }
-            demo={<div data-testid="demo-pane">demo</div>}
-            graph={<div>graph</div>}
-            dispute={<div>dispute</div>}
-            contract={<div>contract</div>}
-            playtest={<div>playtest</div>}
+            scheme={<div data-testid="scheme-slot">方案</div>}
           />
         }
       />,
     );
     fireEvent.click(screen.getByTestId("activity-workbench"));
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     expect(screen.getByTestId("studio-contract-rail")).toBeInTheDocument();
     expect(screen.getByTestId("requirement-list")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("requirement-list-item"));
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getByTestId("demo-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("scheme-slot")).toBeInTheDocument();
   });
 });

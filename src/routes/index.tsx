@@ -120,19 +120,24 @@ import {
 import { ProtectionConfirmCard } from "@/components/ProtectionConfirmCard";
 import { SupervisorStudioPane } from "@/components/SupervisorStudioPane";
 import { StudioViewportShell } from "@/components/studio/StudioViewportShell";
+import { SchemeReviewPane } from "@/components/studio/SchemeReviewPane";
 import { DemoPreviewPane } from "@/components/studio/DemoPreviewPane";
 import { PlainContractAuthorizeCard } from "@/components/supervisor/PlainContractAuthorizeCard";
 import { ScopePausedDialog } from "@/components/supervisor/ScopePausedDialog";
 import {
-  advanceClarificationSession,
-  buildClarificationRound,
   formatClarificationDefaultsSummary,
-  isRoundComplete,
-  recordClarificationAnswer,
-  startClarificationSession,
   type ClarificationRound,
   type ClarificationSessionState,
 } from "@/lib/journey/clarification";
+import {
+  rebuildSchemeFromCorpus,
+  confirmSchemeDecision,
+  resolveSchemeConflict,
+  updateSchemeNotes,
+  freezeScheme,
+  formatSchemeAsIntent,
+  type SchemeDraft,
+} from "@/lib/journey/scheme-draft";
 import {
   grayOutTaskGraphNodes,
   shouldGrayAfterDispute,
@@ -329,6 +334,11 @@ function Console() {
   const [clarificationPendingText, setClarificationPendingText] = useState<
     string | null
   >(null);
+  /** TASK-C.18：中间方案审阅（随右栏自由对话更新） */
+  const [schemeDraft, setSchemeDraft] = useState<SchemeDraft | null>(null);
+  const [schemeCorpus, setSchemeCorpus] = useState("");
+  const [schemeDemoBusy, setSchemeDemoBusy] = useState(false);
+  const [schemeConfirmBusy, setSchemeConfirmBusy] = useState(false);
   /** TASK-C.11b：感官确认 + prototype id */
   const [demoConfirmed, setDemoConfirmed] = useState(false);
   const [activePrototypeId, setActivePrototypeId] = useState<string | null>(
@@ -392,7 +402,7 @@ function Console() {
   const [assistantMode, setAssistantMode] =
     useState<AssistantModeSurface | null>(null);
   /**
-   * 打开「新建需求」：带上草稿范围、展开创建表单、并切到合同操作台。
+   * 打开「新建需求」：带上草稿范围、展开创建表单、并切到方案工作台。
    * 必须一起做——首屏不再默认打开 Studio，只 setShowForm 会让表单渲染在看不见的标签里。
    * 同时丢弃上一份未提交草案：换需求就该重新生成，不能让旧理由挂在新意图上。
    */
@@ -790,7 +800,7 @@ function Console() {
     [conn, selected, toDisputeView, taskGraph],
   );
 
-  /** TASK-S.6 + C.11a：右侧唯一入口分流；MAJOR 前先走 ≤2 轮白话选择题 */
+  /** TASK-C.18：右栏真正自由对话；去掉 ≤2 轮选择题门控。Supervisor 旁观更新中间方案。 */
   const handleJourneyBeforeSend = useCallback(
     async (text: string): Promise<"handled" | "passthrough"> => {
       if (!conn || !connected) return "passthrough";
@@ -799,180 +809,52 @@ function Console() {
         detail: { text_len: text.trim().length },
       });
       const trimmed = text.trim();
-      // 澄清进行中：忽略新输入，避免打断选择题
-      if (clarificationState?.status === "asking") {
-        setJourneyCards((prev) => [
-          ...prev.slice(-19),
-          {
-            id: `clarif-wait-${Date.now()}`,
-            kind: "SYSTEM",
-            text: "请先点完上面的选择题（带「推荐」的那项是默认稳妥选项）。",
-          },
-        ]);
-        return "handled";
-      }
-      // 尚未澄清：对较长意图先出选择题（dispute/短指令放行）
+      if (!trimmed) return "passthrough";
+
+      // 随对话刷新方案（不锁用户进选择题）
+      const nextCorpus = schemeCorpus
+        ? `${schemeCorpus}
+${trimmed}`
+        : trimmed;
+      setSchemeCorpus(nextCorpus);
+      setSchemeDraft((cur) =>
+        rebuildSchemeFromCorpus(cur, nextCorpus, {
+          titleHint: trimmed.length > 48 ? `${trimmed.slice(0, 48)}…` : trimmed,
+        }),
+      );
+      setStudioNonce((n) => n + 1);
+
       const looksDispute =
         /不对|质疑|有问题|bug|缺陷|验收失败/.test(trimmed.toLowerCase());
-      // 每次新意图都重新澄清；有 pending 时不重复开场（asking 已在上方提前 return）
-      const needsClarify = trimmed.length >= 6 && !looksDispute;
-      if (needsClarify && !clarificationPendingText) {
-        const started = startClarificationSession(trimmed);
-        setClarificationState(started.state);
-        setClarificationRound(started.round);
-        setClarificationPendingText(trimmed);
-        setJourneyCards((prev) => [
-          ...prev.slice(-19),
-          {
-            id: `clarif-start-${Date.now()}`,
-            kind: "MAJOR_DRAFT",
-            text: "收到。先确认两件小事（最多 2 轮选择题），再给你 Demo 和白话合同。",
-          },
-        ]);
-        return "handled";
+      if (!looksDispute) {
+        // 自由聊：交给右侧 Agent；中间方案已更新
+        return "passthrough";
       }
+
+      // 质疑仍走旅程分流（不阻断后续自由聊）
       setJourneyBusy(true);
       try {
-        const enrich =
-          clarificationState &&
-          (clarificationState.status === "completed" ||
-            clarificationState.status === "capped")
-            ? formatClarificationDefaultsSummary(clarificationState.answers)
-            : "";
-        const message =
-          enrich.length > 0
-            ? `${trimmed}\n\n【澄清默认】${enrich}`
-            : trimmed;
         const result = await submitJourneyMessage(conn, {
-          message,
+          message: trimmed,
           ...(selectedId ? { contract_id: selectedId } : {}),
         });
         const kind = result.route;
-        if (kind === "CHAT") {
-          return "passthrough";
-        }
+        if (kind === "CHAT") return "passthrough";
         const card: JourneyChatCard = {
           id: `journey-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           kind,
           text: result.plain_summary,
         };
         setJourneyCards((prev) => [...prev.slice(-19), card]);
-
         if (kind === "DISPUTE" && result.dispute_report) {
           setDisputeReport(toDisputeView(result.dispute_report));
           setDisputeError(null);
-          setStudioViewportOverride("dispute");
           setStudioNonce((n) => n + 1);
         }
-
         if (result.draft) {
           setDraft(result.draft);
-          // 小事 Fast Path：默认不甩工程师合同表单，改由老板三步台确认开改
-          setShowForm(kind !== "FAST_PATH");
-          setStudioNonce((n) => n + 1);
-          // C.11b：MAJOR 路径自动落 prototypes 并开预览；Fast Path 可 skip
-          if (kind === "MAJOR_DRAFT" && result.skip_demo !== true) {
-            void (async () => {
-              try {
-                const proto = await createSupervisorPrototype(conn, {
-                  title: result.draft?.contract.intent.title ?? trimmed.slice(0, 40),
-                });
-                setActivePrototypeId(proto.prototype_id);
-                setDemoConfirmed(proto.confirmed === true);
-                setPlainContractVisible(false);
-                if (proto.preview_url) {
-                  setRetainedDemoUrl(proto.preview_url);
-                  setDemoPreview({
-                    url: proto.preview_url,
-                    port: Number(new URL(proto.preview_url).port) || 4100,
-                    status: (proto.preview_status as "RUNNING") ?? "RUNNING",
-                    updated_at: new Date().toISOString(),
-                    ...(proto.message ? { message: proto.message } : {}),
-                  });
-                }
-                setStudioViewportOverride("demo");
-                setJourneyCards((prev) => [
-                  ...prev.slice(-19),
-                  {
-                    id: `proto-${Date.now()}`,
-                    kind: "SYSTEM",
-                    text: `已生成隔离 Demo（${proto.relative_root}）。请先试玩并点「确认 Demo」，再签署白话合同。`,
-                  },
-                ]);
-              } catch (err) {
-                setConfirmPrototypeError(
-                  err instanceof Error
-                    ? err.message
-                    : "隔离 Demo 生成失败",
-                );
-              }
-            })();
-          }
-          if (kind === "FAST_PATH") {
-            setDemoConfirmed(true); // skip_demo
-            setPlainContractVisible(true);
-          }
+          setShowForm(false);
         }
-
-        if (result.requirements_updated) {
-          setRequirementsHint(
-            result.requirements_hint ??
-              `需求说明已更新 · ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
-          );
-        }
-
-        if (result.suggest_viewport) {
-          setStudioViewportOverride(result.suggest_viewport);
-        }
-
-        if (
-          kind === "REAL_PLAYTEST" &&
-          result.code === "START_REAL_PLAYTEST" &&
-          selectedId
-        ) {
-          setRealPlaytestBusy(true);
-          setRealPlaytestError(null);
-          try {
-            const delivered = isDeliveredLifecycle(selected?.lifecycle_state);
-            const preview = await startRealPlaytest(conn, {
-              contract_id: selectedId,
-              title: selected?.intent.title,
-              ...(delivered
-                ? {
-                    attach_url: MERGED_PRODUCT_PREVIEW_URLS[0],
-                    stub: false,
-                  }
-                : { stub: true }),
-            });
-            setRealPlaytest({
-              contract_id: preview.contract_id,
-              url: preview.url,
-              port: preview.port,
-              status: preview.status,
-              owned: preview.owned,
-              updated_at: preview.updated_at,
-              ...(preview.message ? { message: preview.message } : {}),
-            });
-            setStudioViewportOverride("playtest");
-            setJourneyCards((prev) => [
-              ...prev.slice(-19),
-              {
-                id: `journey-playtest-${Date.now()}`,
-                kind: "REAL_PLAYTEST",
-                text:
-                  preview.plain_summary ??
-                  `真机预览已就绪：${preview.url}（也可点「在浏览器打开」）`,
-              },
-            ]);
-          } catch (err) {
-            setRealPlaytestError(
-              err instanceof Error ? err.message : "真机预览启动失败",
-            );
-          } finally {
-            setRealPlaytestBusy(false);
-          }
-        }
-
         return "handled";
       } catch (error) {
         const card: JourneyChatCard = {
@@ -993,142 +875,192 @@ function Console() {
       conn,
       connected,
       selectedId,
-      selected,
       toDisputeView,
-      clarificationState,
-      clarificationPendingText,
+      schemeCorpus,
     ],
   );
 
-  const handleClarificationSelect = useCallback(
-    (questionId: string, optionId: string) => {
-      if (!clarificationState || !clarificationRound) return;
-      const question = clarificationRound.questions.find((q) => q.id === questionId);
-      if (!question) return;
-      let nextState = recordClarificationAnswer(
-        clarificationState,
-        question,
-        optionId,
+  const handleSchemeConfirmDecision = useCallback((decisionId: string) => {
+    setSchemeDraft((cur) => (cur ? confirmSchemeDecision(cur, decisionId) : cur));
+  }, []);
+
+  const handleSchemeResolveConflict = useCallback(
+    (conflictId: string, optionId: string) => {
+      setSchemeDraft((cur) =>
+        cur ? resolveSchemeConflict(cur, conflictId, optionId) : cur,
       );
-      if (!isRoundComplete(clarificationRound, nextState.answers)) {
-        setClarificationState(nextState);
-        return;
+    },
+    [],
+  );
+
+  const handleSchemeNotesChange = useCallback((notes: string) => {
+    setSchemeDraft((cur) => (cur ? updateSchemeNotes(cur, notes) : cur));
+  }, []);
+
+  const handleGenerateSchemeDemo = useCallback(async () => {
+    if (!conn || !schemeDraft) return;
+    setSchemeDemoBusy(true);
+    setConfirmPrototypeError(null);
+    try {
+      const proto = await createSupervisorPrototype(conn, {
+        title: schemeDraft.title.slice(0, 60) || "方案 Demo",
+      });
+      setActivePrototypeId(proto.prototype_id);
+      if (proto.preview_url) {
+        setRetainedDemoUrl(proto.preview_url);
+        setDemoPreview({
+          url: proto.preview_url,
+          port: Number(new URL(proto.preview_url).port) || 4100,
+          status: (proto.preview_status as "RUNNING") ?? "RUNNING",
+          updated_at: new Date().toISOString(),
+          ...(proto.message ? { message: proto.message } : {}),
+        });
       }
-      const advanced = advanceClarificationSession(nextState, clarificationRound);
-      setClarificationState(advanced.state);
-      if (advanced.nextRound) {
-        setClarificationRound(advanced.nextRound);
-        setJourneyCards((prev) => [
-          ...prev.slice(-19),
-          {
-            id: `clarif-r${advanced.nextRound!.round_index}-${Date.now()}`,
-            kind: "SYSTEM",
-            text: `第 ${advanced.nextRound!.round_index + 1} 轮澄清（仍带推荐选项）。`,
-          },
-        ]);
-        return;
-      }
-      setClarificationRound(null);
-      const pending = clarificationPendingText;
-      setClarificationPendingText(null);
-      const summary = formatClarificationDefaultsSummary(advanced.state.answers);
       setJourneyCards((prev) => [
         ...prev.slice(-19),
         {
-          id: `clarif-done-${Date.now()}`,
+          id: `scheme-demo-${Date.now()}`,
           kind: "SYSTEM",
-          text: `澄清完成。${summary}。正在为你准备草案与 Demo…`,
+          text: `已按当前方案生成隔离 Demo（${proto.relative_root}）。可在中间方案区预览；满意后点「确认方案」开工。`,
         },
       ]);
-      if (pending && conn && connected) {
-        void (async () => {
-          setJourneyBusy(true);
-          try {
-            const message = `${pending}\n\n【澄清默认】${summary}`;
-            const result = await submitJourneyMessage(conn, {
-              message,
-              ...(selectedId ? { contract_id: selectedId } : {}),
-            });
-            const kind = result.route;
-            setJourneyCards((prev) => [
-              ...prev.slice(-19),
-              {
-                id: `journey-${Date.now()}`,
-                kind,
-                text: result.plain_summary,
-              },
-            ]);
-            if (result.draft) {
-              setDraft(result.draft);
-              setShowForm(kind !== "FAST_PATH");
-              setStudioNonce((n) => n + 1);
-              if (kind === "MAJOR_DRAFT" && result.skip_demo !== true) {
-                try {
-                  const proto = await createSupervisorPrototype(conn, {
-                    title:
-                      result.draft?.contract.intent.title ?? pending.slice(0, 40),
-                  });
-                  setActivePrototypeId(proto.prototype_id);
-                  setDemoConfirmed(proto.confirmed === true);
-                  setPlainContractVisible(false);
-                  if (proto.preview_url) {
-                    setRetainedDemoUrl(proto.preview_url);
-                    setDemoPreview({
-                      url: proto.preview_url,
-                      port: Number(new URL(proto.preview_url).port) || 4100,
-                      status: (proto.preview_status as "RUNNING") ?? "RUNNING",
-                      updated_at: new Date().toISOString(),
-                      ...(proto.message ? { message: proto.message } : {}),
-                    });
-                  }
-                  setStudioViewportOverride("demo");
-                  setJourneyCards((prev) => [
-                    ...prev.slice(-19),
-                    {
-                      id: `proto-${Date.now()}`,
-                      kind: "SYSTEM",
-                      text: `已生成隔离 Demo（${proto.relative_root}）。请先试玩并点「确认 Demo」。`,
-                    },
-                  ]);
-                } catch (err) {
-                  setConfirmPrototypeError(
-                    err instanceof Error ? err.message : "隔离 Demo 生成失败",
-                  );
-                }
-              }
-              if (kind === "FAST_PATH") {
-                setDemoConfirmed(true);
-                setPlainContractVisible(true);
-              }
-            }
-            if (result.suggest_viewport) {
-              setStudioViewportOverride(result.suggest_viewport);
-            }
-            if (result.requirements_updated) {
-              setRequirementsHint(
-                result.requirements_hint ??
-                  `需求说明已更新 · ${new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`,
-              );
-            }
-          } catch (error) {
-            setJourneyCards((prev) => [
-              ...prev.slice(-19),
-              {
-                id: `journey-err-${Date.now()}`,
-                kind: "SYSTEM",
-                text:
-                  error instanceof Error
-                    ? `分流暂时不可用：${error.message}`
-                    : "分流暂时不可用",
-              },
-            ]);
-          } finally {
-            setJourneyBusy(false);
-          }
-        })();
+    } catch (err) {
+      setConfirmPrototypeError(
+        err instanceof Error ? err.message : "Demo 生成失败",
+      );
+    } finally {
+      setSchemeDemoBusy(false);
+    }
+  }, [conn, schemeDraft]);
+
+  /** C.18：确认方案 = 冻结 Spec + 落合同授权 + 建任务图开工（不再要求先确认 Demo） */
+  const handleConfirmScheme = useCallback(async () => {
+    if (!conn || !schemeDraft || schemeDraft.frozen) return;
+    setSchemeConfirmBusy(true);
+    setConfirmPrototypeError(null);
+    try {
+      const intentText = formatSchemeAsIntent(schemeDraft);
+      let workingDraft = draft;
+      if (!workingDraft?.contract) {
+        const result = await submitJourneyMessage(conn, {
+          message: intentText,
+          ...(selectedId ? { contract_id: selectedId } : {}),
+        });
+        if (result.draft) {
+          workingDraft = result.draft;
+          setDraft(result.draft);
+        }
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `scheme-draft-${Date.now()}`,
+            kind: result.route,
+            text: result.plain_summary,
+          },
+        ]);
       }
+      setDemoConfirmed(true);
+      setSchemeDraft(freezeScheme(schemeDraft));
+
+      const asPendingApproval = (contract: SoftwareContract): SoftwareContract =>
+        softwareContractSchema.parse({
+          ...contract,
+          lifecycle_state: "PENDING_APPROVAL",
+          approval: { status: "PENDING_REVIEW" },
+        });
+
+      let contractId = selected?.contract_id;
+      let target = selected;
+      const sourceContract =
+        (!contractId && workingDraft?.contract) ||
+        (target != null &&
+          (target.lifecycle_state === "DRAFT" ||
+            target.approval?.status === "DRAFT"))
+          ? (!contractId && workingDraft?.contract
+              ? workingDraft.contract
+              : target!)
+          : workingDraft?.contract ?? target;
+
+      if (
+        sourceContract &&
+        (!contractId ||
+          target?.lifecycle_state === "DRAFT" ||
+          target?.approval?.status === "DRAFT")
+      ) {
+        const created = await createContractWithAdmission(
+          conn,
+          asPendingApproval(sourceContract),
+        );
+        const saved = created.admission?.contract ?? created.contract;
+        contractId = saved.contract_id;
+        target = saved;
+        setContracts((prev) => {
+          const without = prev.filter((c) => c.contract_id !== saved.contract_id);
+          return [...without, saved];
+        });
+        setSelectedId(contractId);
+      }
+      if (!contractId) {
+        setConfirmPrototypeError("没有可确认的方案合同，请再在右侧补充一点需求后重试。");
+        return;
+      }
+      let list = await listContracts(conn);
+      setContracts(list);
+      let approved = list.find((c) => c.contract_id === contractId) ?? target;
+      if (approved?.lifecycle_state === "PENDING_APPROVAL") {
+        await approveContract(conn, contractId, "local-user");
+        list = await listContracts(conn);
+        setContracts(list);
+        approved = list.find((c) => c.contract_id === contractId) ?? approved;
+      }
+      target = approved ?? target ?? selected;
+      if (target) {
+        const proposal = buildProposalFromContract(target);
+        const graph = await createTaskGraph(conn, proposal);
+        setTaskGraph(graph);
+        setStudioNonce((n) => n + 1);
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `scheme-confirmed-${Date.now()}`,
+            kind: "SYSTEM",
+            text: `方案已确认并冻结。「${target.intent.title}」任务图已建（${graph.nodes.length} 节点），开始写代码。`,
+          },
+        ]);
+        // 自动拉起 Worker（有合同即可）
+        try {
+          const result = await runWorker(conn, target.contract_id);
+          setWorkerResult(result);
+        } catch (err) {
+          setJourneyCards((prev) => [
+            ...prev.slice(-19),
+            {
+              id: `scheme-worker-${Date.now()}`,
+              kind: "SYSTEM",
+              text:
+                err instanceof Error
+                  ? `已确认方案；Worker 稍后可在状态就绪后重试：${err.message}`
+                  : "已确认方案；Worker 稍后可重试。",
+            },
+          ]);
+        }
+      }
+      setPlainContractVisible(false);
+    } catch (error) {
+      setConfirmPrototypeError(
+        error instanceof Error ? error.message : "确认方案失败",
+      );
+    } finally {
+      setSchemeConfirmBusy(false);
+    }
+  }, [conn, schemeDraft, draft, selected, selectedId]);
+
+  // C.18：选择题流程废弃；保留空实现避免旧引用崩（若有）
+  const handleClarificationSelect = useCallback(
+    (_questionId: string, _optionId: string) => {
+      /* no-op: free chat */
     },
-    [clarificationState, clarificationRound, clarificationPendingText, conn, connected, selectedId],
+    [],
   );
 
   const handleStartRealPlaytest = useCallback(async () => {
@@ -2444,41 +2376,14 @@ function Console() {
           />
         }
         rightPanel={
-          // 恢复 Cursor 式骨架：AI 对话回到右栏，是主要的需求沟通入口
+          // C.18：右栏真正自由对话；授权入口收敛到中间「确认方案」
           <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-            {plainAuthorizeView ? (
-              <div className="shrink-0 px-2 pt-2">
-                <PlainContractAuthorizeCard
-                  view={plainAuthorizeView}
-                  busy={authorizeBusy}
-                  onAuthorize={() => {
-                    void handlePlainAuthorize();
-                  }}
-                  onReject={handlePlainReject}
-                  onRevise={handlePlainRevise}
-                />
-              </div>
-            ) : null}
           <AgentChatPane
             transport={chatTransport}
             session={chatSession}
             onBeforeSend={handleJourneyBeforeSend}
             journeyCards={journeyCards}
             journeyBusy={journeyBusy}
-            clarificationQuestions={clarificationRound?.questions}
-            clarificationRoundIndex={clarificationRound?.round_index ?? 0}
-            clarificationSelections={
-              clarificationState
-                ? Object.fromEntries(
-                    clarificationState.answers.map((a) => [
-                      a.question_id,
-                      a.option_id,
-                    ]),
-                  )
-                : undefined
-            }
-            clarificationDisabled={journeyBusy || authorizeBusy}
-            onClarificationSelect={handleClarificationSelect}
             keyConfigured={settings?.configured === true}
             onConfigureKey={() => {
               setSettingsDeepFocus("model-key");
@@ -2856,8 +2761,6 @@ function Console() {
                 ? presentationByContract[selectedId]?.message || null
                 : null
             }
-            activeViewport={studioViewportOverride ?? undefined}
-            onViewportChange={(id) => setStudioViewportOverride(id)}
             contractRail={
               // C.16：需求列表 + 规范与资产在合同操作台左侧栏（单门）
               <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 text-xs">
@@ -2932,155 +2835,47 @@ function Console() {
                 </button>
               </div>
             }
-            demo={
-              <DemoPreviewPane
-                previewUrl={demoPreview?.url ?? null}
-                status={demoPreview?.status ?? null}
-                errorMessage={
-                  confirmPrototypeError ?? demoPreview?.message ?? null
-                }
-                busy={confirmPrototypeBusy}
-                allowConfirmWithoutRunning={Boolean(selected)}
-                onRevise={() => {
-                  setStudioViewportOverride(null);
-                }}
-                onConfirm={() => {
-                  void handleConfirmPrototype();
-                }}
-              />
-            }
-            graph={
-              <TaskGraphPane
-                graph={taskGraph}
-                loading={taskGraphLoading}
-                error={confirmPrototypeError ?? taskGraphError}
-                deliveryNote={
-                  isDeliveredLifecycle(selected?.lifecycle_state)
-                    ? "本合同已合入。下方施工图是合入前的核销快照（可能仍显示失败）；成品请看「真机试玩」，或打开仓库 / 本机 Vite（如 http://127.0.0.1:5180/）。归档在 .stagent/records/。"
-                    : null
-                }
-                onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
-                onConfirmPrototype={() => {
-                  void handleConfirmPrototype();
-                }}
-                confirmPrototypeBusy={confirmPrototypeBusy}
-                onStartNode={(nodeId) => {
-                  void handleStartGraphNode(nodeId);
-                }}
-                onVerifyNode={(nodeId) => {
-                  void handleVerifyGraphNode(nodeId);
-                }}
-                actionBusy={graphActionBusy}
-                onRunWorker={() => {
-                  if (!selected) return;
-                  void runAction("worker", async () => {
-                    const result = await runWorker(conn, selected.contract_id);
-                    setWorkerResult(result);
-                    const restored = await fetchEvidence(
-                      conn,
-                      selected.contract_id,
-                    );
-                    setEvidence(restored);
-                  });
-                }}
-                canRunWorker={
-                  selected?.lifecycle_state === "EXECUTING" &&
-                  evidence?.verdict.status !== "PASSED"
-                }
-                runWorkerBusy={busy === "worker"}
-                runWorkerLabel={
-                  evidence?.verdict.status === "FAILED"
-                    ? "再跑 Worker"
-                    : "运行 Worker"
-                }
-                baseline={baselinePayload}
-            baselineBusy={baselineBusy}
-            onAcceptBaseline={() => {
-              void handleAcceptBaseline();
-            }}
-            onRescanBaseline={() => {
-              void handleRescanBaseline();
-            }}
-            panoramaSummary={
-                  selected
-                    ? {
-                        contractTitle: selected.intent.title,
-                        contractDescription: selected.intent.description,
-                        acceptanceCriteria: selected.intent.acceptance_criteria,
-                        requirementsHint,
-                        riskLevel: selected.intent.risk_level,
-                      }
-                    : null
-                }
-              />
-            }
-            dispute={
-              <DisputeConsolePane
-                contractId={selected?.contract_id ?? null}
-                report={disputeReport}
-                busy={disputeBusy}
-                error={disputeError}
-                onSubmit={async (challenge) => {
-                  await runDisputeSelfCheckUi(challenge);
-                }}
-                onChooseBugFix={() => {
-                  const challenge = disputeReport?.challenge?.trim();
-                  if (!challenge) return;
-                  void runDisputeSelfCheckUi(challenge, "BUG_FIX");
-                }}
-                onChooseRequirementChange={() => {
-                  const challenge = disputeReport?.challenge?.trim();
-                  if (!challenge) return;
-                  void runDisputeSelfCheckUi(challenge, "REQUIREMENT_CHANGE");
-                }}
-              />
-            }
-            contract={
-              <div
-                data-testid="studio-contract-slot"
-                className="flex h-full min-h-0 min-w-0 flex-col overflow-auto"
-              >
-                {bossMode && bossSummary ? (
-                  <BossFastPathDesk
-                    summary={bossSummary}
-                    busy={busy === "create" || busy === "approve"}
-                    onConfirm={confirmBossFastPath}
-                    advanced={renderEngineerContractDesk()}
+            scheme={
+              <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                {showForm ? (
+                  <ContractForm
+                    busy={busy === "create"}
+                    initialPaths={scopeDraft}
+                    draft={draft}
+                    draftBusy={busy === "draft"}
+                    onRequestDraft={requestDraft}
+                    onCreate={(contract) =>
+                      runAction("create", async () => {
+                        const saved = await createContractWithAdmission(
+                          conn,
+                          contract,
+                        );
+                        setSelectedId(saved.contract.contract_id);
+                        setShowForm(false);
+                        setDraft(null);
+                        applyAdmission(saved.admission);
+                      })
+                    }
                   />
-                ) : (
-                  renderEngineerContractDesk()
-                )}
+                ) : null}
+                <SchemeReviewPane
+                  scheme={schemeDraft}
+                  demoUrl={demoPreview?.url ?? retainedDemoUrl ?? null}
+                  demoStatus={demoPreview?.status ?? null}
+                  demoBusy={schemeDemoBusy}
+                  confirmBusy={schemeConfirmBusy || authorizeBusy}
+                  errorMessage={confirmPrototypeError}
+                  onConfirmDecision={handleSchemeConfirmDecision}
+                  onResolveConflict={handleSchemeResolveConflict}
+                  onNotesChange={handleSchemeNotesChange}
+                  onGenerateDemo={() => {
+                    void handleGenerateSchemeDemo();
+                  }}
+                  onConfirmScheme={() => {
+                    void handleConfirmScheme();
+                  }}
+                />
               </div>
-            }
-            playtest={
-              <RealPlaytestPane
-                productHint={
-                  isDeliveredLifecycle(selected?.lifecycle_state)
-                    ? MERGED_PRODUCT_PREVIEW_URLS[0]
-                    : null
-                }
-                previewUrl={
-                  realPlaytest &&
-                  (!selectedId || realPlaytest.contract_id === selectedId)
-                    ? realPlaytest.url
-                    : null
-                }
-                status={
-                  realPlaytest &&
-                  (!selectedId || realPlaytest.contract_id === selectedId)
-                    ? realPlaytest.status
-                    : null
-                }
-                errorMessage={realPlaytestError}
-                contractLabel={selected?.intent.title ?? null}
-                busy={realPlaytestBusy}
-                onStart={() => {
-                  void handleStartRealPlaytest();
-                }}
-                onStop={() => {
-                  void handleStopRealPlaytest();
-                }}
-              />
             }
           />
         }

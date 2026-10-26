@@ -84,7 +84,7 @@ describe("Studio 高度链（走查回归）", () => {
     hasAll(content, ["relative", "min-h-0", "flex-1", "overflow-hidden"]);
 
     // 默认合同视口：出草案按钮在激活面板内，且面板未 hidden
-    const contractPanel = screen.getByTestId("studio-viewport-panel-contract");
+    const contractPanel = screen.getByTestId("studio-viewport-panel-scheme");
     expect(contractPanel).toHaveAttribute("data-active", "true");
     expect(contractPanel).not.toHaveAttribute("hidden");
     expect(contractPanel).toContainElement(screen.getByTestId("request-draft"));
@@ -136,7 +136,7 @@ describe("Studio 高度链（走查回归）", () => {
     hasAll(screen.getByTestId("split-right"), ["min-h-0", "flex-1", "flex"]);
   });
 
-  it("切换到合同视口后出草案按钮仍可见可点（不在 hidden 面板）", () => {
+  it("单页方案审阅下出草案按钮可见可点（不在 hidden 面板）", () => {
     render(
       <StudioViewportShell
         presentationState="DEMO_PREVIEW"
@@ -153,11 +153,12 @@ describe("Studio 高度链（走查回归）", () => {
     );
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
       "data-active-viewport",
-      "demo",
+      "scheme",
     );
     // 切到合同：按钮所在面板激活且无 hidden
-    fireEvent.click(screen.getByTestId("studio-viewport-tab-contract"));
-    const panel = screen.getByTestId("studio-viewport-panel-contract");
+    // C.18：无多视口 Tab；单页方案审阅始终挂载
+    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    const panel = screen.getByTestId("studio-viewport-panel-scheme");
     expect(panel).toHaveAttribute("data-active", "true");
     expect(panel.hidden).toBe(false);
     const btn = screen.getByTestId("request-draft");

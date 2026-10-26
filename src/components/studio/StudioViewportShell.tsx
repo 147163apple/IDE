@@ -1,106 +1,58 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import type { PresentationState } from "@/lib/state/presentation-state";
-import { traceViewportChange } from "@/lib/ui-trace";
-import {
-  resolveDefaultViewport,
-  STUDIO_VIEWPORT_IDS,
-  STUDIO_VIEWPORT_LABEL,
-  type StudioViewportId,
-} from "./viewport-routing";
 
 /**
- * Studio 视口外壳（TASK-C.2 + S.6b 真机试玩 + C.16 单门列表栏）。
+ * Studio 工作台外壳（TASK-C.18：单页方案审阅）。
  *
- * - 顶栏手动切换视口；
- * - 消费 Daemon 的 `presentation_state`：状态一变就回到该态默认视口；
- * - **全部面板始终挂载**，非激活仅 `hidden`——表单填写与 Graph 点亮不会因切换丢失；
- * - C.16：可选左侧「选合同」栏（需求列表 + 规范与资产），不再另开 ActivityBar 门。
+ * - 去掉五视口 Tab（原型试玩 / 任务图谱 / 质疑自查 / 合同审阅 / 真机试玩）
+ * - 中间只挂一个主工作页（方案审阅）
+ * - 可选左侧「选合同 / 规范与资产」栏（C.16 保留）
+ *
+ * 旧五视口组件文件仍留在仓库（兼容单测/回溯），日常入口不再挂载。
  */
 export interface StudioViewportShellProps {
   presentationState?: PresentationState | null | undefined;
-  /** Daemon STATE_CHANGED 带来的白话提示；缺省不显示 */
   presentationMessage?: string | null | undefined;
-  /** 受控：外部指定当前视口（测试或外部门控时用） */
-  activeViewport?: StudioViewportId | undefined;
-  onViewportChange?: ((viewport: StudioViewportId) => void) | undefined;
-  /** C.16：合同操作台左侧「选合同 / 规范与资产」 */
+  /** @deprecated C.18 单页后忽略；保留 prop 避免旧调用方崩 */
+  activeViewport?: string | undefined;
+  /** @deprecated C.18 */
+  onViewportChange?: ((viewport: string) => void) | undefined;
   contractRail?: ReactNode | undefined;
-  demo: ReactNode;
-  graph: ReactNode;
-  dispute: ReactNode;
-  contract: ReactNode;
-  /** TASK-S.6b：真机试玩视口 */
-  playtest: ReactNode;
+  /**
+   * C.18：唯一主内容。优先使用；未传时回退拼旧五插槽（兼容过渡测试）。
+   */
+  scheme?: ReactNode | undefined;
+  /** @deprecated C.18 日常不再展示；仅 fallback */
+  demo?: ReactNode | undefined;
+  graph?: ReactNode | undefined;
+  dispute?: ReactNode | undefined;
+  contract?: ReactNode | undefined;
+  playtest?: ReactNode | undefined;
 }
 
 export function StudioViewportShell(props: StudioViewportShellProps) {
   const presentationState = props.presentationState ?? null;
-  const autoViewport = resolveDefaultViewport(presentationState);
-  const [manualViewport, setManualViewport] = useState<StudioViewportId | null>(
-    null,
+  const mainContent = props.scheme ?? props.contract ?? props.demo ?? (
+    <div className="p-4 text-xs text-muted-foreground">暂无方案内容</div>
   );
-
-  // 展示态流转 → 清掉手动覆盖，回到该态默认视口（任务卡「状态自适应」）
-  useEffect(() => {
-    setManualViewport(null);
-  }, [presentationState]);
-
-  const active: StudioViewportId =
-    props.activeViewport ?? manualViewport ?? autoViewport;
-
-  const select = (id: StudioViewportId) => {
-    setManualViewport(id);
-    props.onViewportChange?.(id);
-    traceViewportChange(id);
-  };
-
-  const panes: Record<StudioViewportId, ReactNode> = {
-    demo: props.demo,
-    graph: props.graph,
-    dispute: props.dispute,
-    contract: props.contract,
-    playtest: props.playtest,
-  };
 
   const main = (
     <div
       data-testid="studio-viewport-shell"
-      data-active-viewport={active}
+      data-single-pane="true"
+      data-active-viewport="scheme"
       data-presentation-state={presentationState ?? ""}
       className="flex h-full min-h-0 flex-1 flex-col"
     >
       <div
-        data-testid="studio-viewport-tabs"
-        role="tablist"
-        aria-label="Studio 视口"
-        className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-2 py-1"
+        data-testid="studio-viewport-header"
+        className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5"
       >
-        {STUDIO_VIEWPORT_IDS.map((id) => {
-          const selected = id === active;
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              id={`studio-tab-${id}`}
-              aria-selected={selected}
-              data-testid={`studio-viewport-tab-${id}`}
-              data-active={selected ? "true" : "false"}
-              onClick={() => select(id)}
-              className={`rounded px-2 py-1 text-xs ${
-                selected
-                  ? "bg-muted font-medium text-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {STUDIO_VIEWPORT_LABEL[id]}
-            </button>
-          );
-        })}
+        <span className="text-xs font-medium text-foreground">方案审阅</span>
         {props.presentationMessage ? (
           <span
             data-testid="studio-presentation-message"
-            className="ml-auto max-w-[50%] truncate text-[11px] text-muted-foreground"
+            className="ml-auto max-w-[60%] truncate text-[11px] text-muted-foreground"
             title={props.presentationMessage}
           >
             {props.presentationMessage}
@@ -112,26 +64,15 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
         data-testid="studio-viewport-content"
         className="relative min-h-0 flex-1 overflow-hidden"
       >
-        {STUDIO_VIEWPORT_IDS.map((id) => {
-          const selected = id === active;
-          return (
-            <div
-              key={id}
-              role="tabpanel"
-              aria-labelledby={`studio-tab-${id}`}
-              data-testid={`studio-viewport-panel-${id}`}
-              data-active={selected ? "true" : "false"}
-              hidden={!selected}
-              className={
-                selected
-                  ? "absolute inset-0 flex min-h-0 flex-col overflow-auto"
-                  : undefined
-              }
-            >
-              {panes[id]}
-            </div>
-          );
-        })}
+        <div
+          role="region"
+          aria-label="方案审阅"
+          data-testid="studio-viewport-panel-scheme"
+          data-active="true"
+          className="absolute inset-0 flex min-h-0 flex-col overflow-auto"
+        >
+          {mainContent}
+        </div>
       </div>
     </div>
   );

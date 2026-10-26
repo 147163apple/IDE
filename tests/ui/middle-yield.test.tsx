@@ -39,7 +39,7 @@ describe("TASK-C.9d 中栏让路 / 设置回跳", () => {
     });
     render(<WorkspaceLayout {...base} commandSurface={surface} />);
     await waitFor(() => {
-      expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+      expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
         "aria-selected",
         "true",
       );

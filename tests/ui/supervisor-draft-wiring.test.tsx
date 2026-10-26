@@ -269,25 +269,25 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     );
   });
 
-  it("Studio 读同一份 supervisor_metadata：白话理由与未决问题都不为空", async () => {
+  it("方案工作台单页挂载草案表单；C.18 无合同审阅视口的 rationale 列表", async () => {
     await openForm();
     submitIntent("把界面的按钮换成圆角");
     await screen.findByTestId("draft-ready");
 
-    // 新建需求时 Studio 就是当前 Tab
-    expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
+    // 新建需求时方案工作台就是当前 Tab
+    expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getAllByTestId("rationale-item").length).toBe(
-      draftResponse.draft.rationale.length,
+    // C.18：中间是方案审阅单页 + 新建表单；旧 SupervisorStudioPane 字段不再日常挂载
+    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(screen.queryByTestId("studio-viewport-tabs")).toBeNull();
+    expect(screen.getByTestId("draft-ready")).toBeInTheDocument();
+    expect(screen.getByTestId("intent-paths")).toHaveValue(
+      draftResponse.draft.plan.writable_paths.join(", "),
     );
-    expect(screen.getByTestId("studio-unresolved-summary")).toHaveTextContent(
-      `共 ${draftResponse.draft.unresolved_questions.length} 条`,
-    );
-    expect(screen.getByTestId("studio-writable-paths")).toHaveTextContent(
-      "src/components/**",
-    );
+    // 白话理由仍可在「项目全景」看到（次入口），不在五视口合同审阅里
+    expect(screen.queryByTestId("studio-unresolved-summary")).toBeNull();
   });
 
   it("未提意图时不出草案：按钮禁用，界面不会假装有理由", async () => {
