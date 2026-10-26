@@ -2,6 +2,7 @@
  * TASK-C.14f：渐进扫回调按阶段触发（供 Daemon 广播 BASELINE_PROGRESS）。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,7 +13,7 @@ const tmpDirs: string[] = [];
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

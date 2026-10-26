@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -91,7 +92,7 @@ describe("W.4 威胁守卫：命令启动前校验", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 清理尽力而为
     }
@@ -331,7 +332,7 @@ describe("W.4 运行时复检：能力漂移与未知通道", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 清理尽力而为
     }

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -29,7 +30,8 @@ function newRepo(): string {
 
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
-    fs.rmSync(d, { recursive: true, force: true });
+    // 清理不是断言：环境拒绝删除（SAFE_DELETE_*）不该把用例判红
+    safeRmSync(d);
   }
 });
 

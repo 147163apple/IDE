@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,7 +10,7 @@ describe("GET /api/repo/tree (C.10f)", () => {
   let daemon: StagentDaemon | null = null;
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("requires auth and returns relative file paths", async () => {

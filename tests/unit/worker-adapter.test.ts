@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -363,7 +364,7 @@ describe("C. Worktree 边界：不可穿透至宿主项目根", () => {
       ).toThrowError(WorkerBoundaryError);
     } finally {
       try {
-        fs.rmSync(tmp, { recursive: true, force: true });
+        safeRmSync(tmp);
       } catch {
         // 同上：清理失败不影响断言结论
       }
@@ -485,7 +486,7 @@ describe("E. AiWorker 集成：装配 → 调用 → 网关落盘 → 崩溃上�
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 受限执行环境可能拒绝删除临时目录；.tmp/vitest 由 global setup 定期裁剪
     }

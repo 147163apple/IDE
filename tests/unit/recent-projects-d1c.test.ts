@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -16,7 +17,7 @@ describe("TASK-D.1c 最近项目落盘（本机配置，非业务仓）", () => 
 
   afterEach(() => {
     if (home) {
-      fs.rmSync(home, { recursive: true, force: true });
+      safeRmSync(home);
     }
   });
 

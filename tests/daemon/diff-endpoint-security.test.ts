@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -91,7 +92,7 @@ describe("C.5 Diff 端点：合同 ID 与路径包含性", () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 清理尽力而为
     }

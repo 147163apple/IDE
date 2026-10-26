@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -131,7 +132,7 @@ describe("W.2 / 五大受控 MCP 工具", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 受限环境可能拒绝删除临时目录；.tmp/vitest 由 global setup 裁剪
     }
@@ -401,7 +402,7 @@ describe("W.2 / 工具按合同授权挂载（与 W.1 resolveExposedTools 对接
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 同上
     }

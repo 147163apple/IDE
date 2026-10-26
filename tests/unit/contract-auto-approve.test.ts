@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -82,7 +83,7 @@ describe("TASK-D.2 合同 Scope × 保护清单 审批准入", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("清单为空（自由模式）→ 自动批准并写入静默备案，零待审批卡", async () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -52,7 +53,7 @@ describe("D-4：目标分支前进的合并门禁与二选一决策（HTTP 接�
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       /* 受限环境可能拦截删除 */
     }

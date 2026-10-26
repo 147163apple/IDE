@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import http from "node:http";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import WebSocket from "ws";
@@ -145,7 +146,7 @@ afterEach(async () => {
   if (daemon?.isRunning) await daemon.stop();
   daemon = null;
   try {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   } catch {
     /* 受限环境可能拦截删除 */
   }

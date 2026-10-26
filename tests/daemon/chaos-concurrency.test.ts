@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -74,7 +75,7 @@ describe("Chaos 3 / 双开并发抢占：状态转移排他性", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const worktreeFor = (contractId: string) =>
@@ -245,7 +246,7 @@ describe("Chaos 3 / HTTP 层并发语义：409 Conflict", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const auth = () => ({

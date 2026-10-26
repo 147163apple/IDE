@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -45,7 +46,7 @@ describe("E2E / 差异化拦截：可恢复熔断 vs 安全中止", () => {
 
   afterAll(async () => {
     await daemon?.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const auth = () => ({
@@ -149,7 +150,7 @@ describe("E2E / 差异化拦截：可恢复熔断 vs 安全中止", () => {
       await expect(worker.run()).rejects.toBeInstanceOf(WorkerScopeError);
       expect(fs.existsSync(path.join(worktree, "src", "ok.ts"))).toBe(false);
     } finally {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     }
   });
 });

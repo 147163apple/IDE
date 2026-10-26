@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -86,7 +87,7 @@ describe("Chaos 1 / 中途拔线党：崩溃恢复与锁清理", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const worktreeFor = (contractId: string) =>

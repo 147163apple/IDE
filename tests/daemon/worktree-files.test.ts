@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,7 +15,7 @@ describe("TASK-C.3 编辑器保存的服务端强制校验", () => {
   let daemon: StagentDaemon | null = null;
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("越权保存 403 + 违规记录 + 文件无改动；合法保存 200", async () => {

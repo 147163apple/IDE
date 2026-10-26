@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -63,7 +64,7 @@ describe("M5 / Daemon 权威合同管线", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("合同持久化到 .stagent/contracts 并可查询/列表", () => {
@@ -187,7 +188,7 @@ describe("M5 / Test Integrity：Evidence tests_modified 留痕", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("验证流程中改动测试文件时，Evidence 记录 tests_modified=true", async () => {

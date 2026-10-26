@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -109,7 +110,7 @@ describe("未跟踪文件采集（真实 git）", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("嵌套目录内的每个未跟踪文件都被单独捕获", async () => {
@@ -258,7 +259,7 @@ describe("编排器：未跟踪文件越界阻断", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   function worktreeOf(contractId: string): string {

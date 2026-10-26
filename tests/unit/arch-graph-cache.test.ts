@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -34,7 +35,7 @@ describe("4.2 /api/arch/graph：src 收敛与 mtime 缓存", () => {
   afterEach(() => {
     clearArchGraphCache();
     try {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     } catch {
       // 清理尽力而为
     }

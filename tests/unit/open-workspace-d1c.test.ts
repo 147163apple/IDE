@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { EventEmitter } from "node:events";
@@ -28,7 +29,7 @@ describe("TASK-D.1c open-workspace", () => {
   let tmp: string;
 
   afterEach(() => {
-    if (tmp) fs.rmSync(tmp, { recursive: true, force: true });
+    if (tmp) safeRmSync(tmp);
   });
 
   it("tryReuse：无锁返回 null", async () => {
@@ -147,7 +148,7 @@ describe("TASK-D.1c open-workspace", () => {
       expect(session.port).toBe(3007);
       expect(session.token).toBe("d".repeat(64));
     } finally {
-      fs.rmSync(packageRoot, { recursive: true, force: true });
+      safeRmSync(packageRoot);
     }
   });
 

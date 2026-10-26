@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -157,7 +158,7 @@ describe("W.3 命令白名单与参数策略", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 清理尽力而为
     }

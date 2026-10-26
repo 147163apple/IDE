@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -38,7 +39,7 @@ describe("M5-fix / 受控 AI Worker", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   const makeContract = (overrides: { maxCostMinorUnits?: number } = {}) => {
@@ -179,7 +180,7 @@ describe("M5-fix / 编排器 runWorker", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("审批后运行 Worker，改动落入 Worktree，随后验证通过进入 AUDITED", async () => {

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -46,7 +47,7 @@ afterEach(() => {
   // 宿主的批量删除保护会拦截递归删除临时目录；这里只做尽力清理，
   // 拦截不影响用例结论（目录落在系统临时区，由系统回收）。
   try {
-    fs.rmSync(repoRoot, { recursive: true, force: true });
+    safeRmSync(repoRoot);
   } catch {
     // ignore: sandbox policy may block recursive deletion
   }

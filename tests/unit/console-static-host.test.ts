@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
@@ -31,7 +32,7 @@ describe("console static-host（TASK-D.1b / D.1d）", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    safeRmSync(tmp);
   });
 
   it("discoverConsoleAssets 需要 index-*.js", () => {

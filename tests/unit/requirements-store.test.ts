@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ beforeEach(() => {
 
 afterEach(() => {
   try {
-    fs.rmSync(repoRoot, { recursive: true, force: true });
+    safeRmSync(repoRoot);
   } catch {
     // 宿主批量删除保护可能拦截；临时目录交给系统回收
   }

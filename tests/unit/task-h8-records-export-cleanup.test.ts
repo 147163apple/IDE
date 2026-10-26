@@ -2,6 +2,7 @@
  * TASK-H.8：脱敏 zip 无明文密钥；清理幂等且不删源码。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -21,7 +22,7 @@ function tmp(): string {
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

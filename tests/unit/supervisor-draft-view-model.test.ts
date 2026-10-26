@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { generateContractDraft } from "../../daemon/supervisor/draft-generator";
@@ -56,7 +57,8 @@ async function realDraft(repoRoot: string, intent: string) {
 
 afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    // 清理不是断言：环境拒绝删除（SAFE_DELETE_*）不该把用例判红
+    safeRmSync(dir);
   }
 });
 

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type {
@@ -471,7 +472,7 @@ describe("原子落盘 writeJsonAtomic", () => {
     for (const dir of tmpDirs.splice(0)) {
       // 清理失败不得影响断言结论（沙箱可能拦截 TMPDIR 的 unlink）
       try {
-        fs.rmSync(dir, { recursive: true, force: true });
+        safeRmSync(dir);
       } catch {
         // ignore
       }

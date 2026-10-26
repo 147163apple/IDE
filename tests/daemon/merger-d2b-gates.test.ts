@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -101,7 +102,7 @@ describe("TASK-D.2b / 合并前未跟踪文件门禁", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("合同外未跟踪文件阻断合并：抛 E_OUT_OF_SCOPE_UNTRACKED 且无任何合并副作用", async () => {
@@ -236,7 +237,7 @@ describe("TASK-D.2b / 存量合同零静默授权", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("v1.2.0 DRAFT 加载后仍为 DRAFT，绝不静默授权", () => {

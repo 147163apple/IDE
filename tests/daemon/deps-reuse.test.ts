@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -32,8 +33,8 @@ describe("Task 1.2: Dependency Reuse and Cache Isolation", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(tempHost, { recursive: true, force: true });
-      fs.rmSync(tempWorktree, { recursive: true, force: true });
+      safeRmSync(tempHost);
+      safeRmSync(tempWorktree);
     } catch {
       // Ignore cleanup error
     }
@@ -79,7 +80,7 @@ describe("Task 1.2: Dependency Reuse and Cache Isolation", () => {
       expect(result.success).toBe(false);
       expect(result.warning).toContain("does not exist");
     } finally {
-      fs.rmSync(emptyHost, { recursive: true, force: true });
+      safeRmSync(emptyHost);
     }
   });
 

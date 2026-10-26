@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -40,7 +41,7 @@ describe("E2E / happy path：创建 → 审批 → 执行 → 验证 → 人工�
 
   afterAll(async () => {
     await daemon?.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const auth = () => ({

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -39,7 +40,7 @@ function makeRepo(withPackageJson: boolean): string {
 afterEach(() => {
   for (const dir of tempDirs.splice(0)) {
     try {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     } catch {
       // 受限执行环境可能禁止删除临时目录；清理失败不应把断言判成失败。
     }

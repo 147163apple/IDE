@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
@@ -80,7 +81,7 @@ describe("W.4 / 编排器威胁守卫与证据门禁", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 清理尽力而为
     }

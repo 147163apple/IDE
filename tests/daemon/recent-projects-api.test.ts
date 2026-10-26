@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -61,8 +62,8 @@ describe("TASK-D.1c recent-projects API", () => {
     daemon = null;
     if (prevHome === undefined) delete process.env["STAGENT_HOME"];
     else process.env["STAGENT_HOME"] = prevHome;
-    fs.rmSync(repo, { recursive: true, force: true });
-    fs.rmSync(home, { recursive: true, force: true });
+    safeRmSync(repo);
+    safeRmSync(home);
   });
 
   it("无 Token 拒绝 GET/POST", async () => {
@@ -181,7 +182,7 @@ describe("TASK-D.1c recent-projects API", () => {
         /已经在跑|不要重复启动|E_WORKSPACE_LOCKED/,
       );
     } finally {
-      fs.rmSync(other, { recursive: true, force: true });
+      safeRmSync(other);
     }
   });
 

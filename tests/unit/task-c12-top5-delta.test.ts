@@ -2,6 +2,7 @@
  * TASK-C.12a～e：API Top5 Delta 验收单测（EO-07/01/02/05/06/03/04）。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -58,7 +59,7 @@ afterEach(() => {
   resetExecTokenStoreForTests();
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

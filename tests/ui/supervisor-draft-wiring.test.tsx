@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import {
   afterAll,
@@ -176,7 +177,7 @@ beforeAll(async () => {
 
 afterAll(() => {
   for (const dir of tmpDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    safeRmSync(dir);
   }
 });
 

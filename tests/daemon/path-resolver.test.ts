@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -21,7 +22,7 @@ describe("Task 1.3: Safe Worktree Path Resolver", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tempRoot, { recursive: true, force: true });
+    safeRmSync(tempRoot);
   });
 
   it("should safely resolve normal relative paths inside worktree", () => {

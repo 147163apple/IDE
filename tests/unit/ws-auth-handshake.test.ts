@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { WebSocket } from "ws";
@@ -205,7 +206,7 @@ describe("TASK-D.1 首帧 AUTH 握手（PASS-1：立即 4401 切断）", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("错误 Token：以 4401 切断，且不是等满超时才断的", async () => {

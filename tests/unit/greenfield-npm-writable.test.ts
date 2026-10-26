@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -31,7 +32,7 @@ function msgs(...texts: string[]): SupervisorMessage[] {
 
 afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    safeRmSync(dir);
   }
 });
 

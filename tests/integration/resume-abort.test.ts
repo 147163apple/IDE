@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -44,7 +45,7 @@ describe("M8 / Resume 与 Abort 动作端点（Bearer 保护）", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const auth = () => ({

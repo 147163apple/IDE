@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -140,7 +141,7 @@ describe("assertIsolatedGitCwd：放行合法隔离目录", () => {
     try {
       expect(assertIsolatedGitCwd(repo)).toBe(fs.realpathSync(repo));
     } finally {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     }
   });
 
@@ -150,7 +151,7 @@ describe("assertIsolatedGitCwd：放行合法隔离目录", () => {
     try {
       expect(assertIsolatedGitCwd(dir)).toBe(fs.realpathSync(dir));
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     }
   });
 
@@ -239,7 +240,7 @@ describe("execGit 集成：宿主 .git/config 零触碰、零锁残留", () => {
       expect(read.stdout).toBe("Stagent Test");
       expect(fs.existsSync(path.join(repo, ".git", "config.lock"))).toBe(false);
     } finally {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     }
   });
 });

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
@@ -109,7 +110,7 @@ afterEach(async () => {
   for (const dir of tmpRoots.splice(0)) {
     // 清理失败不得影响断言结论（受限环境会拦截部分 unlink）
     try {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     } catch {
       /* ignore */
     }

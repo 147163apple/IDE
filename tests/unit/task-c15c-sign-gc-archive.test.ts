@@ -2,6 +2,7 @@
  * TASK-C.15c / EO-05：签署白名单 GC + MERGED→DELIVERED 失败停 MERGED。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,7 +21,7 @@ function tmp(): string {
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

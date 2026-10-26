@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -62,7 +63,7 @@ describe("TASK-P.1 保护清单与本轮授权", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 临时目录清理是尽力而为（与仓库其他测试一致）
     }
@@ -235,7 +236,7 @@ describe("TASK-P.1 Auto-Checkpoint 与整轮撤销", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 临时目录清理是尽力而为（与仓库其他测试一致）
     }

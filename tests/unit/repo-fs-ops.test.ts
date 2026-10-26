@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,7 +16,7 @@ import {
 describe("repo-fs-ops (TASK-C.10i)", () => {
   let root: string;
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   function makeRepo(): string {

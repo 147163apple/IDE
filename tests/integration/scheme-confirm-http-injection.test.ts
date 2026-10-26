@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -80,7 +81,7 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     }
     daemon = null;
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 沙箱可能拦截删除；临时目录残留不影响断言
     }

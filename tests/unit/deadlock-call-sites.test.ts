@@ -20,6 +20,7 @@ import {
   type SoftwareContract,
 } from "../../src/lib/contract.schema";
 import { initRepo } from "../helpers/e2e-repo";
+import { diskDeleteBlocked, safeRmSync } from "../helpers/tmp";
 
 /**
  * TASK-D.3：D-2 / D-5 的**生产调用点**验收。
@@ -38,26 +39,8 @@ const tmpDirs: string[] = [];
  * try/catch 会吞掉），于是「锁文件已消失」在**全量运行**里不可观测——
  * 那不是锁没释放，而是环境拒绝执行删除。此时只断言租约事件
  * （D-2 真正的契约），盘上断言退化为跳过，并在用例名/注释里写明原因。
+ * 探测逻辑已抽到 `tests/helpers/tmp.ts`，与各文件的临时目录清理共用同一判据。
  */
-function diskDeleteBlocked(): boolean {
-  const base = path.join(process.cwd(), ".tmp", "unit-d3-sites");
-  fs.mkdirSync(base, { recursive: true });
-  const dir = fs.mkdtempSync(path.join(base, "probe-"));
-  const probe = path.join(dir, "probe.lock");
-  fs.writeFileSync(probe, "probe");
-  try {
-    fs.rmSync(probe, { force: true });
-  } catch {
-    /* 被沙箱拒绝：下面按 existsSync 判定 */
-  }
-  const blocked = fs.existsSync(probe);
-  try {
-    fs.rmSync(dir, { recursive: true, force: true });
-  } catch {
-    /* 同上 */
-  }
-  return blocked;
-}
 
 function newRepo(): string {
   const base = path.join(process.cwd(), ".tmp", "unit-d3-sites");
@@ -72,7 +55,7 @@ afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
     try {
       resetContractLocks(dir);
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     } catch {
       /* 受限环境可能拦截删除 */
     }

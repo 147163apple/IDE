@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -85,7 +86,7 @@ describe("进程树彻底回收（无孤儿泄漏）", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(tmp, { recursive: true, force: true });
+    safeRmSync(tmp);
   });
 
   /** 心跳停止写入 = 没有任何一代进程存活 */

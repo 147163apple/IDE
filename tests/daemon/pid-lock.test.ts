@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -20,7 +21,7 @@ describe("Task 1.1: PID Lock Management", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      safeRmSync(tempDir);
     } catch {
       // Ignore cleanup error
     }

@@ -2,6 +2,7 @@
  * TASK-H.5：最小成功草案 → 非空 contract_id 可回读；打断创建 → 不可签署成功态。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -29,7 +30,7 @@ function tmp(): string {
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -91,7 +92,7 @@ describe("TASK-C.14d dirty_exclusions → forbidden_paths", () => {
     root = makeRepo();
   });
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   it("Dirty Check 产出 dirty_exclusions 物理清单", async () => {

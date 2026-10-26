@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import http from "node:http";
@@ -84,7 +85,7 @@ describe("Task 1.1: Stagent Daemon Server Lifecycle", () => {
     }
     daemon = null;
     try {
-      fs.rmSync(tempDir, { recursive: true, force: true });
+      safeRmSync(tempDir);
     } catch {
       // Ignore cleanup error
     }

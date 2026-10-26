@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -152,7 +153,7 @@ describe("W.3 / G-09 工具与命令分列记账", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 受限环境可能拒绝删除临时目录；.tmp/vitest 由 global setup 裁剪
     }
@@ -284,7 +285,7 @@ describe("W.3 / AiWorker 在熔断后终止会话", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 同上
     }
@@ -368,7 +369,7 @@ describe("W.3 / 环境变量白名单与 env-file 授权", () => {
   afterEach(() => {
     process.env = { ...originalEnv };
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 同上
     }
@@ -476,7 +477,7 @@ describe("W.3 / 别名参数白名单（解释器逃逸与选项注入）", () =
 
   afterEach(() => {
     try {
-      fs.rmSync(worktree, { recursive: true, force: true });
+      safeRmSync(worktree);
     } catch {
       // 同上
     }

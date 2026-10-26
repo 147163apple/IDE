@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { readDiffFiles, isInsideWorktree } from "../../daemon/diff/diff-files";
@@ -34,7 +35,7 @@ describe("TASK-C.5 文件级 Diff 数据（真实 git）", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 清理尽力而为
     }

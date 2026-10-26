@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { WebSocket } from "ws";
@@ -130,7 +131,7 @@ describe("M4 / TASK-D.1 Local IPC / WebSocket 通信桥", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("session-token 落盘为 0600，PID 文件仅存元数据", () => {

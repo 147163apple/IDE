@@ -10,6 +10,7 @@
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { execSync } from "node:child_process";
@@ -54,7 +55,7 @@ describe("TASK-C.14e OS sandbox", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     } catch {
       // ignore
     }

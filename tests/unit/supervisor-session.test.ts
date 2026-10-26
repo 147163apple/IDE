@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -44,7 +45,7 @@ function makeClock(startIso = "2026-10-20T00:00:00.000Z") {
 afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     } catch {
       // 沙箱可能拦截 unlink，不影响断言结论
     }

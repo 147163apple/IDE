@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import http from "node:http";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -25,7 +26,8 @@ afterEach(async () => {
     if (s) await s.stop();
   }
   for (const dir of tmpRoots.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    // 清理不是断言：环境拒绝删除（SAFE_DELETE_*）不该把用例判红
+    safeRmSync(dir);
   }
 });
 

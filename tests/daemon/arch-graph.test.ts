@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -45,7 +46,7 @@ describe("M6 / TASK-B.1 AST 增量依赖图", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   it("解析 tsconfig paths 别名", () => {

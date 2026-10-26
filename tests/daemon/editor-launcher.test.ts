@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import {
@@ -21,7 +22,7 @@ describe("M7 / TASK-C.3 外部编辑器安全调起", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const fakeSpawn = (behaviour: "spawn" | "ENOENT"): SpawnFn => {

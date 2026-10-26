@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
@@ -75,7 +76,7 @@ describe("TASK-C.14a sandbox scanner", () => {
     root = makeRepo();
   });
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   it("不执行带副作用的项目配置（负例）", () => {
@@ -128,7 +129,7 @@ describe("TASK-C.14b progressive + store", () => {
     root = makeRepo();
   });
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   it("落盘在 .stagent/records/baseline/ 且无 contract_000", async () => {
@@ -266,7 +267,7 @@ describe("TASK-C.14c dirty + guard + scope", () => {
       const merged = mergeBaselineProtectIntoForbidden(root, [".git/"]);
       expect(merged.filter((p) => p.startsWith("tmp/"))).toHaveLength(306);
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     }
   });
 
@@ -305,7 +306,7 @@ describe("TASK-C.14c dirty + guard + scope", () => {
       expect(merged).toContain("src/dirty.ts");
       expect(merged).toContain(".git/");
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     }
   });
 
@@ -367,7 +368,7 @@ describe("TASK-C.14c dirty + guard + scope", () => {
         expect(n.status_plain).toContain("未经自动化测试验证");
       }
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     }
   });
 
@@ -380,7 +381,7 @@ describe("TASK-C.14c dirty + guard + scope", () => {
       expect(report.untracked).toContain("scratch.tmp");
       expect(report.steward_message).toBeTruthy();
     } finally {
-      fs.rmSync(root, { recursive: true, force: true });
+      safeRmSync(root);
     }
   });
 });

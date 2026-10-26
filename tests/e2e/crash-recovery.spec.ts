@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -47,7 +48,7 @@ describe("E2E / 崩溃恢复：PREPARING 回退与 EXECUTING 恢复", () => {
   });
 
   afterAll(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("Daemon 启动后自动自愈：PREPARING 回退、EXECUTING 保留 patch 并恢复", async () => {

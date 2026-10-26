@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -13,7 +14,7 @@ describe("POST /api/repo/delete (C.10h)", () => {
   let daemon: StagentDaemon | null = null;
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   async function boot() {

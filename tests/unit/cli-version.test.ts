@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { describe, it, expect } from "vitest";
@@ -39,7 +40,7 @@ describe("stagent CLI 版本展示", () => {
       fs.writeFileSync(broken, "{ not json");
       expect(readCliVersion(broken)).toBe("0.0.0");
     } finally {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     }
   });
 });

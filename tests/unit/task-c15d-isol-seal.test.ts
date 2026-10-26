@@ -2,6 +2,7 @@
  * TASK-C.15d：P0 AC-ISOL drafts 隔离 + EO-09 worktree seal。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,7 +29,7 @@ function tmp(): string {
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

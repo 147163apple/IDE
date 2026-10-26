@@ -1,6 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import path from "node:path";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import {
   parseArgs,
@@ -78,7 +79,7 @@ describe("resolveConsoleUiTarget", () => {
 
   afterEach(() => {
     if (tmp) {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 
@@ -127,7 +128,7 @@ describe("tryReuseRunningDaemon", () => {
       const result = await tryReuseRunningDaemon(tmp);
       expect(result).toBeNull();
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 
@@ -154,7 +155,7 @@ describe("tryReuseRunningDaemon", () => {
       });
       expect(result).toBeNull();
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 
@@ -182,7 +183,7 @@ describe("tryReuseRunningDaemon", () => {
       });
       expect(result).toEqual({ port: 3009, token });
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 });

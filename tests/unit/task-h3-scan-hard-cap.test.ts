@@ -2,6 +2,7 @@
  * TASK-H.3：超文件数上限 → 截断标志/白话；超时可测；只读证明不被绕过。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,7 +21,7 @@ function tmp(): string {
 afterEach(() => {
   for (const d of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(d, { recursive: true, force: true });
+      safeRmSync(d);
     } catch {
       /* ignore */
     }

@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -7,7 +8,7 @@ import { listRepoTreePaths } from "../../daemon/editor/worktree-files";
 describe("listRepoTreePaths (C.10f explorer)", () => {
   let root: string;
   afterEach(() => {
-    fs.rmSync(root, { recursive: true, force: true });
+    safeRmSync(root);
   });
 
   it("lists nested files and skips ignored dirs", () => {

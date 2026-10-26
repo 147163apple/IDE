@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -95,7 +96,7 @@ describe("TASK-D.1 WebSocket 安全边界", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("PASS-2 非法 Origin：Upgrade 阶段直接 403 拒绝", async () => {
@@ -218,7 +219,7 @@ describe("TASK-D.1 连接速率限制（G-12 防 DoS）", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("窗口内第 4 个连接被 429 拒绝", async () => {
@@ -244,7 +245,7 @@ describe("TASK-D.1 默认端口范围", () => {
       expect(info.port).toBeLessThanOrEqual(3010);
     } finally {
       if (daemon.isRunning) await daemon.stop();
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     }
   });
 });

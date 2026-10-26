@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import {
@@ -38,7 +39,7 @@ describe("Task 1.2: Git Worktree Manager Lifecycle", () => {
 
   afterEach(async () => {
     try {
-      fs.rmSync(tempRepo, { recursive: true, force: true });
+      safeRmSync(tempRepo);
     } catch {
       // Ignore cleanup error
     }
@@ -188,7 +189,7 @@ describe("TASK-C.10p: ensureTaskWorktree for graph start/verify", () => {
 
   afterEach(() => {
     try {
-      fs.rmSync(tempRepo, { recursive: true, force: true });
+      safeRmSync(tempRepo);
     } catch {
       /* ignore */
     }

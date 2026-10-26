@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -85,8 +86,8 @@ describe("M6 / TASK-B.2 文件监听与 Evidence STALE 联动", () => {
   afterEach(async () => {
     await watcher?.stop();
     watcher = null;
-    fs.rmSync(worktree, { recursive: true, force: true });
-    fs.rmSync(evidenceDir, { recursive: true, force: true });
+    safeRmSync(worktree);
+    safeRmSync(evidenceDir);
   });
 
   it("忽略 .stagent / .git / node_modules", () => {

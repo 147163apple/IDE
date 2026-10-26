@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -96,7 +97,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(repo, { recursive: true, force: true });
+  safeRmSync(repo);
 });
 
 describe("E2E / G-07 故障注入回归（8 大分支）", () => {

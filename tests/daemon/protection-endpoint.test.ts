@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import http from "node:http";
@@ -53,7 +54,7 @@ describe("P.1 GET /api/protection 模式三态", () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
     try {
-      fs.rmSync(repo, { recursive: true, force: true });
+      safeRmSync(repo);
     } catch {
       // 临时目录清理尽力而为
     }

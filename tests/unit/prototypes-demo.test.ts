@@ -2,6 +2,7 @@
  * TASK-C.11b：Demo 落盘 .stagent/prototypes + 确认门禁
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,7 +18,7 @@ const dirs: string[] = [];
 
 afterEach(() => {
   for (const d of dirs.splice(0)) {
-    fs.rmSync(d, { recursive: true, force: true });
+    safeRmSync(d);
   }
 });
 

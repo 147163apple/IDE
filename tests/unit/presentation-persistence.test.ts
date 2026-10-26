@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
@@ -45,7 +46,7 @@ function newRepo(): string {
 afterEach(() => {
   for (const dir of tmpDirs.splice(0)) {
     try {
-      fs.rmSync(dir, { recursive: true, force: true });
+      safeRmSync(dir);
     } catch {
       /* 受限环境可能拦截 unlink，不影响断言 */
     }

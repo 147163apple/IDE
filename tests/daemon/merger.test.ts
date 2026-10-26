@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
@@ -72,7 +73,7 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("AUDITED + PASSED 时执行 squash merge，写入四字段 Trailer 并清理 Worktree", async () => {

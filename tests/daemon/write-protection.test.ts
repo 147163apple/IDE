@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 
@@ -33,8 +34,8 @@ describe("M8-fix / TASK-A.3 写保护探测与依赖降级", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
-    fs.rmSync(worktree, { recursive: true, force: true });
+    safeRmSync(repo);
+    safeRmSync(worktree);
   });
 
   it.skipIf(process.platform === "win32")(

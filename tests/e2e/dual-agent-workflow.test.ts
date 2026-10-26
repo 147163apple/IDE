@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 
 import { ContractOrchestrator } from "../../daemon/pipeline/orchestrator";
@@ -91,7 +92,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(repo, { recursive: true, force: true });
+  safeRmSync(repo);
 });
 
 describe("E2E / Vibe 自由模式全链路（零弹窗 + 自动检查点 + 一键撤销）", () => {

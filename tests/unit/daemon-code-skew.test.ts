@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { isDaemonCodeStale } from "../../daemon/core/open-workspace";
@@ -30,7 +31,7 @@ describe("isDaemonCodeStale (C.10h 热修 · 源码新于 Daemon 启动)", () =>
         }),
       ).toBe(true);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 
@@ -44,7 +45,7 @@ describe("isDaemonCodeStale (C.10h 热修 · 源码新于 Daemon 启动)", () =>
         }),
       ).toBe(false);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 
@@ -61,7 +62,7 @@ describe("isDaemonCodeStale (C.10h 热修 · 源码新于 Daemon 启动)", () =>
         }),
       ).toBe(false);
     } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
+      safeRmSync(tmp);
     }
   });
 });

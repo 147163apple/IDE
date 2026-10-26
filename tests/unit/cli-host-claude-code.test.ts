@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { safeRmSync } from "../helpers/tmp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CLAUDE_CODE_VERIFIED_ON,
@@ -19,7 +20,7 @@ let tmp: string;
 beforeEach(() => {
   tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "stagent-w5a-")));
 });
-afterEach(() => fs.rmSync(tmp, { recursive: true, force: true }));
+afterEach(() => safeRmSync(tmp));
 
 /** 假 claude：忽略参数，按 stream-json 吐行；FAKE_IGNORE_SIGINT=1 时不理 SIGINT */
 function fakeCli(script: string): string {

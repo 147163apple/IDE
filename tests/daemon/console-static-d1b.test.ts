@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import path from "node:path";
 import os from "node:os";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
@@ -40,8 +41,8 @@ describe("Daemon console static host (TASK-D.1b)", () => {
       await daemon.stop();
       daemon = null;
     }
-    fs.rmSync(repo, { recursive: true, force: true });
-    fs.rmSync(packageRoot, { recursive: true, force: true });
+    safeRmSync(repo);
+    safeRmSync(packageRoot);
   });
 
   it("同源托管 / 与 assets；无 Authorization 的 /api/state 仍 401", async () => {

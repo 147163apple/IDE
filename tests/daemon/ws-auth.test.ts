@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { WebSocket } from "ws";
@@ -103,7 +104,7 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("合法 Token 的首帧 AUTH：收到 AUTH_OK，随后 PING/PONG 正常", async () => {

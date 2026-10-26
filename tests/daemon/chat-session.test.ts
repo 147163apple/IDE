@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -60,7 +61,7 @@ describe("TASK-C.6 会话管理器", () => {
     repo = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-chat-"));
     events = [];
   });
-  afterEach(() => fs.rmSync(repo, { recursive: true, force: true }));
+  afterEach(() => safeRmSync(repo));
 
   const make = (adapter: ChatAdapter) =>
     new ChatSessionManager({
@@ -168,7 +169,7 @@ describe("TASK-C.6 会话 HTTP + WS 帧", () => {
   let daemon: StagentDaemon | null = null;
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("创建会话、发消息、打断，未鉴权 401", async () => {

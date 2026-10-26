@@ -3,6 +3,7 @@
  * 症状：` M styles.css` → 漏计，或 slice(3) 后显示成 `tyles.css`。
  */
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,7 +21,7 @@ const temps: string[] = [];
 
 afterEach(() => {
   for (const dir of temps.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true });
+    safeRmSync(dir);
   }
 });
 

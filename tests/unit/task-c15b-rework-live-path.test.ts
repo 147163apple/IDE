@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
+import { safeRmSync } from "../helpers/tmp";
 import os from "node:os";
 import path from "node:path";
 import { ContractStore } from "../../daemon/pipeline/contract-store";
@@ -73,7 +74,7 @@ describe("TASK-C.15b live path / orchestrator", () => {
   });
 
   afterEach(() => {
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   it("approve 签署后落盘 rework-counter 并冻结 assertion_id", async () => {
@@ -186,7 +187,7 @@ describe("TASK-C.15b live path / HTTP API", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    fs.rmSync(repo, { recursive: true, force: true });
+    safeRmSync(repo);
   });
 
   const auth = () => ({
