@@ -63,6 +63,10 @@ export interface AgentChatPaneProps {
   commandPhase?: "no_key" | "idle" | "in_progress" | undefined;
   /** 与指挥面一致的主 CTA test id */
   primaryCtaTestId?: string | undefined;
+  /** 确认方案事务期间锁定右侧输入；已签署后保持锁定。 */
+  locked?: boolean | undefined;
+  /** 锁定原因（白话） */
+  lockedReason?: string | undefined;
   /**
    * TASK-C.9b：模式变化时通知父级（中栏提示与右栏一致）。
    * 不含设置深链回跳（归 C.9d）。
@@ -89,6 +93,8 @@ export function AgentChatPane({
   keyConfigured,
   commandPhase,
   primaryCtaTestId,
+  locked,
+  lockedReason,
   onAssistantModeChange,
 }: AgentChatPaneProps) {
   // C.10l：有注入则复用父级实例；否则自管（测试路径）
@@ -201,6 +207,10 @@ export function AgentChatPane({
   }
 
   const submit = () => {
+    if (locked === true) {
+      traceCtaDisabled("journey-send", "scheme_confirmation_locked");
+      return;
+    }
     // C.9b：向导态不得假装流式干活——点发送只导向配置
     if (assistant.mode === "wizard") {
       onConfigureKey?.();
@@ -209,7 +219,10 @@ export function AgentChatPane({
     const text = draft.trim();
     if (!text) return;
     if (routing || journeyBusy) {
-      traceCtaDisabled("journey-send", journeyBusy ? "journey_busy" : "routing");
+      traceCtaDisabled(
+        "journey-send",
+        journeyBusy ? "journey_busy" : "routing",
+      );
       return;
     }
     if (!assistant.canSendAsWork) {
@@ -233,6 +246,7 @@ export function AgentChatPane({
   };
 
   const sendDisabled =
+    locked === true ||
     routing ||
     journeyBusy === true ||
     (!sessionReady && !chat.sessionId) ||
@@ -253,6 +267,14 @@ export function AgentChatPane({
       data-assistant-mode={assistant.mode}
       className="flex h-full flex-col gap-2 text-xs"
     >
+      {locked === true ? (
+        <div
+          data-testid="agent-chat-locked"
+          className="rounded border border-emerald-700/40 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-950"
+        >
+          {lockedReason ?? "方案已进入确认/施工，右栏本轮已锁定。"}
+        </div>
+      ) : null}
       {showJourneyActive ? (
         <div
           data-testid="journey-active"
@@ -409,15 +431,17 @@ export function AgentChatPane({
             }
           }}
           placeholder={
-            assistant.mode === "wizard"
-              ? "先配置模型钥匙，再回来说话（不会假装发送）"
-              : assistant.mode === "practice"
-                ? "练习沙箱：可试界面，不会改项目"
-                : routing || journeyBusy
-                  ? "正在分流处理…"
-                  : chat.busy
-                    ? "助手正在回答，可继续输入排队"
-                    : "说出你的需求：质疑、新功能或小改…"
+            locked === true
+              ? "方案已确认/正在确认，本轮右栏已锁定"
+              : assistant.mode === "wizard"
+                ? "先配置模型钥匙，再回来说话（不会假装发送）"
+                : assistant.mode === "practice"
+                  ? "练习沙箱：可试界面，不会改项目"
+                  : routing || journeyBusy
+                    ? "正在分流处理…"
+                    : chat.busy
+                      ? "助手正在回答，可继续输入排队"
+                      : "说出你的需求：质疑、新功能或小改…"
           }
           disabled={sendDisabled}
           className="min-h-[48px] flex-1 rounded border p-1"

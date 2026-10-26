@@ -51,6 +51,20 @@ import {
   writePrototype,
 } from "./supervisor/demo/prototypes";
 import {
+  evaluateLatestDemoGate,
+  evaluateSnapshotDemoGate,
+  type DemoSignGateDecision,
+} from "./supervisor/demo/signing-gate";
+import {
+  readSchemeSnapshot,
+  writeSchemeSnapshot,
+  SchemeSnapshotConflictError,
+} from "./pipeline/scheme-snapshot-store";
+import {
+  assertContractScopeAllowed,
+  WritableScopePolicyError,
+} from "./supervisor/scope-gate";
+import {
   createRealPreviewServer,
   writeRealPlaytestStub,
   type RealPreviewServer,
@@ -188,10 +202,7 @@ import {
   DirtyWorktreeConfirmationRequiredError,
   WorktreeError,
 } from "./git/worktree-manager";
-import {
-  ensureGitInit,
-  inspectGitRepo,
-} from "./git/ensure-git-repo";
+import { ensureGitInit, inspectGitRepo } from "./git/ensure-git-repo";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
@@ -1260,6 +1271,119 @@ export class StagentDaemon {
    * 3. **Zero-Tool**：不调用任何特权动作（批准 / 合并 / 执行命令）——
    *    这里连 orchestrator 都不 import 使用。
    */
+  /**
+   * TASK-C.22 / SSOT v2.0.2 §5.2.1：确认方案不可变快照。
+   * POST /api/supervisor/scheme/freeze
+   * GET  /api/supervisor/scheme/freeze?confirmation_id=...
+   */
+  private async handleSchemeSnapshot(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    parsedUrl: URL,
+  ): Promise<void> {
+    if (method === "GET") {
+      const confirmationId =
+        parsedUrl.searchParams.get("confirmation_id") ?? "";
+      const snapshot = readSchemeSnapshot(this.repoRoot, confirmationId);
+      if (!snapshot) {
+        this.sendJson(res, 404, {
+          error: "scheme_snapshot_not_found",
+          code: "E_SCHEME_SNAPSHOT_NOT_FOUND",
+        });
+        return;
+      }
+      this.sendJson(res, 200, { snapshot });
+      return;
+    }
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+
+    let body: {
+      confirmation_id?: unknown;
+      scheme?: unknown;
+      demo?: unknown;
+      decision?: unknown;
+    };
+    try {
+      body = (await this.readJsonBody(req)) as typeof body;
+    } catch (err) {
+      this.sendJson(res, 400, {
+        error: "invalid_json",
+        message: (err as Error).message,
+      });
+      return;
+    }
+
+    const confirmationId =
+      typeof body.confirmation_id === "string" ? body.confirmation_id : "";
+    const scheme = body.scheme as Record<string, unknown> | undefined;
+    const demo = body.demo as Record<string, unknown> | undefined;
+    const decision = body.decision as Record<string, unknown> | undefined;
+    const validDemoStatuses = new Set([
+      "none",
+      "building",
+      "ready",
+      "failed",
+      "degraded_flowcard",
+    ]);
+    if (
+      !scheme ||
+      typeof scheme["scheme_id"] !== "string" ||
+      typeof scheme["scheme_revision"] !== "number" ||
+      !Number.isInteger(scheme["scheme_revision"]) ||
+      scheme["scheme_revision"] < 1 ||
+      !demo ||
+      typeof demo["status"] !== "string" ||
+      !validDemoStatuses.has(demo["status"]) ||
+      !decision ||
+      typeof decision["code"] !== "string" ||
+      typeof decision["message"] !== "string" ||
+      !["none", "interactive", "degraded"].includes(
+        String(decision["demo_mode"]),
+      )
+    ) {
+      this.sendJson(res, 400, {
+        error: "invalid_scheme_snapshot",
+        code: "E_SCHEME_SNAPSHOT_INVALID",
+        message: "scheme / demo / decision 字段不完整",
+      });
+      return;
+    }
+
+    try {
+      const written = writeSchemeSnapshot(this.repoRoot, {
+        confirmation_id: confirmationId,
+        scheme:
+          scheme as unknown as import("../src/lib/journey/scheme-draft").SchemeDraft,
+        demo: demo as unknown as import("../src/lib/journey/scheme-draft").DemoGate,
+        decision: {
+          code: decision["code"],
+          message: decision["message"],
+          demo_mode: decision["demo_mode"] as
+            "none" | "interactive" | "degraded",
+        },
+      });
+      this.sendJson(res, written.idempotent ? 200 : 201, {
+        snapshot_id: written.snapshot.snapshot_id,
+        digest: written.snapshot.digest,
+        idempotent: written.idempotent,
+      });
+    } catch (err) {
+      if (err instanceof SchemeSnapshotConflictError) {
+        this.sendJson(res, 409, {
+          error: "scheme_confirmation_conflict",
+          code: err.code,
+          message: err.message,
+        });
+        return;
+      }
+      this.sendActionError(res, err);
+    }
+  }
+
   private async handleSupervisorDraft(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -2565,9 +2689,9 @@ export class StagentDaemon {
       });
       return;
     }
-    const requestId =
-      (req as http.IncomingMessage & { stagentRequestId?: string })
-        .stagentRequestId;
+    const requestId = (
+      req as http.IncomingMessage & { stagentRequestId?: string }
+    ).stagentRequestId;
     let accepted = 0;
     for (const raw of rawList.slice(0, 50)) {
       if (!raw || typeof raw !== "object") continue;
@@ -2705,11 +2829,10 @@ export class StagentDaemon {
 
       // TASK-C.17：澄清旅程落盘（journey-<cid>.jsonl + 可选 SupervisorSession）
       const journeyContractId =
-        result.contract_id ??
-        (contractId !== "" ? contractId : undefined);
-      const requestId =
-        (req as http.IncomingMessage & { stagentRequestId?: string })
-          .stagentRequestId;
+        result.contract_id ?? (contractId !== "" ? contractId : undefined);
+      const requestId = (
+        req as http.IncomingMessage & { stagentRequestId?: string }
+      ).stagentRequestId;
       try {
         appendJourneyTurn(this.repoRoot, {
           role: "user",
@@ -3031,8 +3154,9 @@ export class StagentDaemon {
 
     // TASK-C.17：API 请求默认 JSONL（静态资源跳过）
     const requestId = newRequestId();
-    (req as http.IncomingMessage & { stagentRequestId?: string }).stagentRequestId =
-      requestId;
+    (
+      req as http.IncomingMessage & { stagentRequestId?: string }
+    ).stagentRequestId = requestId;
     const startedAt = Date.now();
     const shouldLogHttp =
       pathname.startsWith("/api/") ||
@@ -3272,11 +3396,15 @@ export class StagentDaemon {
       });
       void info;
       if (!result.ok) {
-        this.sendJson(res, result.code === "E_GIT_INIT_UNCONFIRMED" ? 409 : 500, {
-          error: result.message,
-          code: result.code ?? "E_GIT_INIT_FAILED",
-          ...result,
-        });
+        this.sendJson(
+          res,
+          result.code === "E_GIT_INIT_UNCONFIRMED" ? 409 : 500,
+          {
+            error: result.message,
+            code: result.code ?? "E_GIT_INIT_FAILED",
+            ...result,
+          },
+        );
         return;
       }
       this.sendJson(res, 200, result);
@@ -3460,6 +3588,15 @@ export class StagentDaemon {
       return;
     }
 
+    if (pathname === "/api/supervisor/scheme/freeze") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleSchemeSnapshot(req, res, method, parsedUrl);
+      return;
+    }
+
     if (pathname === "/api/supervisor/draft") {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -3514,12 +3651,45 @@ export class StagentDaemon {
 
       if (method === "POST" && pathname === "/api/contracts") {
         try {
-          const body = (await this.readJsonBody(req)) as { contract?: unknown };
+          const body = (await this.readJsonBody(req)) as {
+            contract?: unknown;
+            confirmation_id?: string;
+          };
           if (!body.contract) {
             this.sendJson(res, 400, { error: "contract is required" });
             return;
           }
           const contract = softwareContractSchema.parse(body.contract);
+          assertContractScopeAllowed(
+            this.repoRoot,
+            contract.authorization.file_system_scope.writable_paths,
+          );
+          let snapshotDemoGate: DemoSignGateDecision | undefined;
+          if (body.confirmation_id) {
+            const snapshot = readSchemeSnapshot(
+              this.repoRoot,
+              body.confirmation_id,
+            );
+            if (!snapshot) {
+              this.sendJson(res, 409, {
+                error: "scheme_snapshot_not_found",
+                code: "E_SCHEME_SNAPSHOT_NOT_FOUND",
+                message: "确认快照不存在或已损坏，拒绝创建可签署合同",
+              });
+              return;
+            }
+            snapshotDemoGate = evaluateSnapshotDemoGate(
+              snapshot,
+              (prototypeId) => readDemoConfirm(this.repoRoot, prototypeId),
+            );
+            if (!snapshotDemoGate.ok) {
+              this.sendJson(res, 409, {
+                error: snapshotDemoGate.message,
+                code: snapshotDemoGate.code,
+              });
+              return;
+            }
+          }
           const saved = store.save(contract);
           this.emitContractUpdate(saved);
           // TASK-D.2 核心目标 1：创建即准入裁决——无交集自动批准（零点击），有交集登记白话卡
@@ -3527,7 +3697,9 @@ export class StagentDaemon {
             ReturnType<typeof this.orchestrator.admit>
           > | null = null;
           if (saved.lifecycle_state === "PENDING_APPROVAL") {
-            admission = await this.orchestrator.admit(saved.contract_id);
+            admission = await this.orchestrator.admit(saved.contract_id, {
+              ...(snapshotDemoGate ? { demoGate: snapshotDemoGate } : {}),
+            });
             if (admission.contract.lifecycle_state !== saved.lifecycle_state) {
               this.emitContractUpdate(admission.contract);
             }
@@ -3537,6 +3709,14 @@ export class StagentDaemon {
             admission,
           });
         } catch (err) {
+          if (err instanceof WritableScopePolicyError) {
+            this.sendJson(res, 403, {
+              error: err.message,
+              code: err.code,
+              rejected: err.rejected,
+            });
+            return;
+          }
           this.sendJson(res, 400, { error: (err as Error).message });
         }
         return;
@@ -3767,17 +3947,69 @@ export class StagentDaemon {
             const body = (await this.readJsonBody(req)) as {
               reviewer?: string;
               acknowledge_dirty?: boolean;
+              confirmation_id?: string;
             };
+            const current = store.get(contractId);
+            if (!current) {
+              this.sendJson(res, 404, { error: "Contract not found" });
+              return;
+            }
+            assertContractScopeAllowed(
+              this.repoRoot,
+              current.authorization.file_system_scope.writable_paths,
+            );
+
+            let demoGate: DemoSignGateDecision;
+            if (body.confirmation_id) {
+              const snapshot = readSchemeSnapshot(
+                this.repoRoot,
+                body.confirmation_id,
+              );
+              if (!snapshot) {
+                this.sendJson(res, 409, {
+                  error: "scheme_snapshot_not_found",
+                  code: "E_SCHEME_SNAPSHOT_NOT_FOUND",
+                  message: "确认快照不存在或已损坏，拒绝签署",
+                });
+                return;
+              }
+              demoGate = evaluateSnapshotDemoGate(snapshot, (prototypeId) =>
+                readDemoConfirm(this.repoRoot, prototypeId),
+              );
+            } else {
+              // 旧路径没有快照：保守回退最新 Demo 记录；从未生成才允许。
+              demoGate = evaluateLatestDemoGate(this.repoRoot);
+            }
+            if (!demoGate.ok) {
+              this.sendJson(res, 409, {
+                error: demoGate.message,
+                code: demoGate.code,
+                ...(demoGate.prototype_id
+                  ? { prototype_id: demoGate.prototype_id }
+                  : {}),
+              });
+              return;
+            }
+
             const contract = await this.orchestrator.approve(
               contractId,
               body.reviewer ?? "local-user",
               {
                 acknowledgeDirty: body.acknowledge_dirty === true,
+                demoGate,
               },
             );
             this.emitContractUpdate(contract);
             this.sendJson(res, 200, { contract });
           } catch (err) {
+            if (err instanceof WritableScopePolicyError) {
+              this.sendJson(res, 403, {
+                error: err.message,
+                code: err.code,
+                rejected: err.rejected,
+              });
+              return;
+            }
             if (err instanceof DirtyWorktreeConfirmationRequiredError) {
               this.sendJson(res, 409, {
                 error: "worktree_dirty_confirmation_required",
@@ -4107,8 +4339,6 @@ export class StagentDaemon {
     });
   }
 
-
-
   /** TASK-C.14f：推送基线进度（与 GET /api/baseline 同形） */
   private broadcastBaselineProgress(
     archive: BaselineArchive | null,
@@ -4121,7 +4351,11 @@ export class StagentDaemon {
       this.baselineScanInFlight !== null;
     this.broadcast("BASELINE_PROGRESS", {
       phase,
-      scanning: scanning && phase !== "done" && phase !== "failed" && phase !== "accepted",
+      scanning:
+        scanning &&
+        phase !== "done" &&
+        phase !== "failed" &&
+        phase !== "accepted",
       accept_label: "认可此基线作为后续参考",
       grants_construction: false as const,
       archive,
@@ -4186,8 +4420,7 @@ export class StagentDaemon {
           this.broadcastBaselineProgress(archive, "deep");
         },
         onDone: (archive) => {
-          const phase =
-            archive.phase === "failed" ? "failed" : "done";
+          const phase = archive.phase === "failed" ? "failed" : "done";
           this.broadcastBaselineProgress(archive, phase);
         },
       },

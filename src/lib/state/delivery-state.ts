@@ -106,7 +106,9 @@ export const DELIVERY_TRANSITIONS: Readonly<
 > = {
   PLAN_DRAFTING: ["PLAN_READY", "PLAN_CONFIRMED", "ABORTED"],
   PLAN_READY: ["PLAN_CONFIRMED", "PLAN_DRAFTING", "ABORTED"],
-  PLAN_CONFIRMED: ["DEMO_READY", "ABORTED"],
+  // v2.0.2：Demo 是可选增强项。PLAN_CONFIRMED 可经「确认方案」直接签署，
+  // 也可先生成 Demo 再签署；是否允许直签由 evaluateSchemeConfirmation 守卫。
+  PLAN_CONFIRMED: ["DEMO_READY", "CONTRACT_SIGNED", "ABORTED"],
   DEMO_READY: ["CONTRACT_SIGNED", "PLAN_CONFIRMED", "ABORTED"],
   CONTRACT_SIGNED: ["IMPLEMENTING", "PAUSED", "ABORTED"],
   IMPLEMENTING: ["PAUSED", "VERIFYING", "ABORTED"],
@@ -143,9 +145,7 @@ export function assertDeliveryTransition(
 }
 
 /** Demo 就绪事件 → 主干 DEMO_READY */
-export function projectDemoReadyEvent(
-  event: string,
-): DeliveryState | null {
+export function projectDemoReadyEvent(event: string): DeliveryState | null {
   if ((DEMO_READY_EVENTS as readonly string[]).includes(event)) {
     return "DEMO_READY";
   }
@@ -206,16 +206,25 @@ export function projectDeliveryState(input: {
 }
 
 /**
- * can_sign 硬谓词（EO-06 / C.12d）：
- * - INTERACTIVE_DEMO + 已确认 → 可签
+ * can_sign 硬谓词（EO-06 / C.12d / C.22 SSOT v2.0.1）：
+ * - 未生成 Demo（allow_without_demo）→ 以静态方案为准可签
+ * - 已生成 INTERACTIVE_DEMO + 已确认 → 可签
  * - 流程卡 / 降级卡必须显式 accept_degraded（带 ⚠️ 约定）才可签
- * - 未确认 / 冒充交互 → 失败
+ * - 已生成但未确认 / 冒充交互 → 失败
  */
 export function canSign(input: {
   demo_mode: DemoMode | null | undefined;
   confirmed: boolean;
   accept_degraded?: boolean;
+  /**
+   * C.22 / SSOT §2.1§4.6：用户从未生成 Demo，允许以静态图表方案直接开工。
+   * 与「已生成未确认」互斥——已生成时不得传 true 来偷渡。
+   */
+  allow_without_demo?: boolean;
 }): { ok: true } | { ok: false; reason: string } {
+  if (input.allow_without_demo === true) {
+    return { ok: true };
+  }
   if (!input.demo_mode) {
     return { ok: false, reason: "缺少 demo_mode，禁止签署" };
   }

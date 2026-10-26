@@ -1,6 +1,7 @@
 import type { SoftwareContract } from "./contract.schema";
 import type { EvidenceBundle } from "./evidence.schema";
 import type { SupervisorProposalV1, TaskGraph } from "./graph/task-graph";
+import type { DemoGate, SchemeDraft } from "./journey/scheme-draft";
 
 /**
  * Daemon REST 客户端（浏览器侧唯一数据入口）。
@@ -355,13 +356,19 @@ export async function createContract(
 export async function createContractWithAdmission(
   conn: DaemonConnection,
   contract: SoftwareContract,
+  options?: { confirmationId?: string },
 ): Promise<{ contract: SoftwareContract; admission: AdmissionView | null }> {
   const body = await request<{
     contract: SoftwareContract;
     admission?: AdmissionView | null;
   }>(conn, "/api/contracts", {
     method: "POST",
-    body: JSON.stringify({ contract }),
+    body: JSON.stringify({
+      contract,
+      ...(options?.confirmationId
+        ? { confirmation_id: options.confirmationId }
+        : {}),
+    }),
   });
   return { contract: body.contract, admission: body.admission ?? null };
 }
@@ -408,11 +415,20 @@ export async function approveContract(
   conn: DaemonConnection,
   contractId: string,
   reviewer: string,
+  options?: { confirmationId?: string },
 ): Promise<SoftwareContract> {
   const body = await request<{ contract: SoftwareContract }>(
     conn,
     `/api/contracts/${encodeURIComponent(contractId)}/approve`,
-    { method: "POST", body: JSON.stringify({ reviewer }) },
+    {
+      method: "POST",
+      body: JSON.stringify({
+        reviewer,
+        ...(options?.confirmationId
+          ? { confirmation_id: options.confirmationId }
+          : {}),
+      }),
+    },
   );
   return body.contract;
 }
@@ -1593,7 +1609,6 @@ export async function getRealPlaytestStatus(
   );
 }
 
-
 // ---------------------------------------------------------------------------
 // TASK-C.11b/c：隔离 Demo prototypes + 感官确认
 // ---------------------------------------------------------------------------
@@ -1634,6 +1649,32 @@ export async function confirmSupervisorPrototype(
       action: "confirm",
       prototype_id: input.prototype_id,
     }),
+  });
+}
+
+export interface SchemeSnapshotView {
+  snapshot_id: string;
+  digest: string;
+  idempotent: boolean;
+}
+
+/** TASK-C.22：确认方案不可变快照（幂等）。 */
+export async function freezeSchemeSnapshot(
+  conn: DaemonConnection,
+  input: {
+    confirmation_id: string;
+    scheme: SchemeDraft;
+    demo: DemoGate;
+    decision: {
+      code: string;
+      message: string;
+      demo_mode: "none" | "interactive" | "degraded";
+    };
+  },
+): Promise<SchemeSnapshotView> {
+  return request<SchemeSnapshotView>(conn, "/api/supervisor/scheme/freeze", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }
 

@@ -61,6 +61,7 @@ import {
   createTaskGraph,
   createSupervisorPrototype,
   confirmSupervisorPrototype,
+  freezeSchemeSnapshot,
   fetchPresentationSnapshot,
   listContracts,
   loadConnection,
@@ -108,10 +109,7 @@ import {
 } from "@/lib/in-progress-lifecycle";
 import type { AssistantModeSurface } from "@/lib/assistant-mode";
 import type { StudioViewportId } from "@/components/studio/viewport-routing";
-import {
-  traceCtaClick,
-  traceCtaDisabled,
-} from "@/lib/ui-trace";
+import { traceCtaClick, traceCtaDisabled } from "@/lib/ui-trace";
 import { MonacoEditorPane } from "@/components/MonacoEditorPane";
 import {
   ProtectionApprovalCard,
@@ -134,10 +132,17 @@ import {
   confirmSchemeDecision,
   resolveSchemeConflict,
   updateSchemeNotes,
-  freezeScheme,
+  evaluateSchemeConfirmation,
   formatSchemeAsIntent,
+  freezeScheme,
+  EMPTY_DEMO_GATE,
+  type DemoGate,
   type SchemeDraft,
 } from "@/lib/journey/scheme-draft";
+import {
+  newSchemeConfirmationId,
+  runConfirmSchemeAtomic,
+} from "@/lib/journey/confirm-scheme-atomic";
 import {
   grayOutTaskGraphNodes,
   shouldGrayAfterDispute,
@@ -282,10 +287,7 @@ function Console() {
     let cancelled = false;
     void (async () => {
       try {
-        const hist = await fetchJourneyHistory(
-          conn,
-          selectedId ?? undefined,
-        );
+        const hist = await fetchJourneyHistory(conn, selectedId ?? undefined);
         if (cancelled) return;
         const cards: JourneyChatCard[] = [];
         for (const turn of hist.turns) {
@@ -313,7 +315,6 @@ function Console() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅连接/选合同变化时还原
   }, [conn, connected, selectedId]);
 
   const [confirmPrototypeBusy, setConfirmPrototypeBusy] = useState(false);
@@ -338,7 +339,18 @@ function Console() {
   const [schemeDraft, setSchemeDraft] = useState<SchemeDraft | null>(null);
   const [schemeCorpus, setSchemeCorpus] = useState("");
   const [schemeDemoBusy, setSchemeDemoBusy] = useState(false);
+  const [schemeDemoGate, setSchemeDemoGate] =
+    useState<DemoGate>(EMPTY_DEMO_GATE);
   const [schemeConfirmBusy, setSchemeConfirmBusy] = useState(false);
+  const [schemeChatLocked, setSchemeChatLocked] = useState(false);
+  /**
+   * TASK-C.22：确认方案的幂等键。
+   * 同一修订重试必须复用同一 id——否则网络抖动会签出两份合同；
+   * 修订变了就换新 id，旧 id 再由 Daemon 侧 `E_CONFIRMATION_ID_REUSED` 兜底。
+   */
+  const schemeConfirmIdRef = useRef<{ revision: number; id: string } | null>(
+    null,
+  );
   /** TASK-C.11b：感官确认 + prototype id */
   const [demoConfirmed, setDemoConfirmed] = useState(false);
   const [activePrototypeId, setActivePrototypeId] = useState<string | null>(
@@ -357,6 +369,14 @@ function Console() {
     attempted_path?: string;
   } | null>(null);
   const [scopePausedBusy, setScopePausedBusy] = useState(false);
+
+  const schemeConfirmation = useMemo(
+    () =>
+      schemeDraft
+        ? evaluateSchemeConfirmation(schemeDraft, schemeDemoGate)
+        : null,
+    [schemeDraft, schemeDemoGate],
+  );
 
   /** C.10o：图谱开工/核销忙态与失败黄条（与建图错误共用顶栏） */
   const [graphActionBusy, setGraphActionBusy] = useState(false);
@@ -411,6 +431,18 @@ function Console() {
     setDraft(null);
     setShowForm(true);
     setStudioNonce((n) => n + 1);
+    /**
+     * 已签署的方案是冻结态：`rebuildSchemeFromCorpus` 会原样返回冻结稿，
+     * 右栏看起来能打字、其实改动全被丢弃。所以换需求必须同时丢弃旧方案
+     * 与确认幂等键，让右栏回到可写态。
+     */
+    setSchemeDraft(null);
+    setSchemeCorpus("");
+    setSchemeDemoGate(EMPTY_DEMO_GATE);
+    setSchemeChatLocked(false);
+    setDemoConfirmed(false);
+    setActivePrototypeId(null);
+    schemeConfirmIdRef.current = null;
   }, []);
 
   const fileTree = useMemo(() => buildFileTree(repoPaths), [repoPaths]);
@@ -824,8 +856,9 @@ ${trimmed}`
       );
       setStudioNonce((n) => n + 1);
 
-      const looksDispute =
-        /不对|质疑|有问题|bug|缺陷|验收失败/.test(trimmed.toLowerCase());
+      const looksDispute = /不对|质疑|有问题|bug|缺陷|验收失败/.test(
+        trimmed.toLowerCase(),
+      );
       if (!looksDispute) {
         // 自由聊：交给右侧 Agent；中间方案已更新
         return "passthrough";
@@ -871,17 +904,13 @@ ${trimmed}`
         setJourneyBusy(false);
       }
     },
-    [
-      conn,
-      connected,
-      selectedId,
-      toDisputeView,
-      schemeCorpus,
-    ],
+    [conn, connected, selectedId, toDisputeView, schemeCorpus],
   );
 
   const handleSchemeConfirmDecision = useCallback((decisionId: string) => {
-    setSchemeDraft((cur) => (cur ? confirmSchemeDecision(cur, decisionId) : cur));
+    setSchemeDraft((cur) =>
+      cur ? confirmSchemeDecision(cur, decisionId) : cur,
+    );
   }, []);
 
   const handleSchemeResolveConflict = useCallback(
@@ -899,13 +928,21 @@ ${trimmed}`
 
   const handleGenerateSchemeDemo = useCallback(async () => {
     if (!conn || !schemeDraft) return;
+    const generatedForRevision = schemeDraft.scheme_revision;
     setSchemeDemoBusy(true);
     setConfirmPrototypeError(null);
+    setSchemeDemoGate({
+      status: "building",
+      scheme_revision: generatedForRevision,
+      decision_revision: null,
+      prototype_id: activePrototypeId,
+    });
     try {
       const proto = await createSupervisorPrototype(conn, {
         title: schemeDraft.title.slice(0, 60) || "方案 Demo",
       });
       setActivePrototypeId(proto.prototype_id);
+      setDemoConfirmed(false);
       if (proto.preview_url) {
         setRetainedDemoUrl(proto.preview_url);
         setDemoPreview({
@@ -916,28 +953,116 @@ ${trimmed}`
           ...(proto.message ? { message: proto.message } : {}),
         });
       }
+      setSchemeDemoGate({
+        status: "ready",
+        scheme_revision: generatedForRevision,
+        decision_revision: null,
+        prototype_id: proto.prototype_id,
+      });
       setJourneyCards((prev) => [
         ...prev.slice(-19),
         {
           id: `scheme-demo-${Date.now()}`,
           kind: "SYSTEM",
-          text: `已按当前方案生成隔离 Demo（${proto.relative_root}）。可在中间方案区预览；满意后点「确认方案」开工。`,
+          text: `已按当前方案生成隔离 Demo（${proto.relative_root}）。请在中间方案区试玩并显式确认 Demo，再确认方案。`,
         },
       ]);
     } catch (err) {
+      setSchemeDemoGate({
+        status: "failed",
+        scheme_revision: generatedForRevision,
+        decision_revision: null,
+        prototype_id: null,
+      });
       setConfirmPrototypeError(
         err instanceof Error ? err.message : "Demo 生成失败",
       );
     } finally {
       setSchemeDemoBusy(false);
     }
-  }, [conn, schemeDraft]);
+  }, [conn, schemeDraft, activePrototypeId]);
 
-  /** C.18：确认方案 = 冻结 Spec + 落合同授权 + 建任务图开工（不再要求先确认 Demo） */
+  const handleConfirmSchemeDemo = useCallback(async () => {
+    if (!conn || !schemeDraft || !activePrototypeId) return;
+    const decisionRevision = schemeDraft.scheme_revision;
+    setSchemeDemoBusy(true);
+    setConfirmPrototypeError(null);
+    try {
+      await confirmSupervisorPrototype(conn, {
+        prototype_id: activePrototypeId,
+      });
+      setDemoConfirmed(true);
+      setSchemeDemoGate((current) => ({
+        ...current,
+        status: "ready",
+        decision_revision: decisionRevision,
+        prototype_id: activePrototypeId,
+      }));
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `scheme-demo-confirmed-${Date.now()}`,
+          kind: "SYSTEM",
+          text: "Demo 已对当前方案确认。现在可以点「确认方案」开工。",
+        },
+      ]);
+    } catch (err) {
+      setConfirmPrototypeError(
+        err instanceof Error ? err.message : "Demo 确认失败",
+      );
+    } finally {
+      setSchemeDemoBusy(false);
+    }
+  }, [conn, schemeDraft, activePrototypeId]);
+
+  const handleAcceptDegradedDemo = useCallback(() => {
+    if (!schemeDraft) return;
+    const revision = schemeDraft.scheme_revision;
+    setDemoConfirmed(true);
+    setConfirmPrototypeError(null);
+    setSchemeDemoGate({
+      status: "degraded_flowcard",
+      scheme_revision: revision,
+      decision_revision: revision,
+      prototype_id: activePrototypeId,
+      risk_flags: ["NO_INTERACTIVE_DEMO"],
+    });
+    setJourneyCards((prev) => [
+      ...prev.slice(-19),
+      {
+        id: `scheme-demo-degraded-${Date.now()}`,
+        kind: "SYSTEM",
+        text: "已接受仅用流程图/架构图说明开工。合同将带 NO_INTERACTIVE_DEMO 风险标记。",
+      },
+    ]);
+  }, [schemeDraft, activePrototypeId]);
+
+  /**
+   * TASK-C.22 / SSOT v2.0.2 §5.2.1：「确认方案」= 五阶段原子事务。
+   *
+   * 顺序不可调整：静默右栏 → 在冻结修订上求值 → 快照 → 签署+备工 → 提交。
+   * - 求值统一走 `evaluateSchemeConfirmation`（与 Daemon 同一谓词）；
+   * - 快照后的任何失败都必须 `compensate`，不允许半签半开；
+   * - 补偿失败保持右栏锁定并明确告知需人工处理，不假装成功。
+   */
   const handleConfirmScheme = useCallback(async () => {
-    if (!conn || !schemeDraft || schemeDraft.frozen) return;
+    if (!conn || !schemeDraft || schemeDraft.frozen || schemeConfirmBusy)
+      return;
     setSchemeConfirmBusy(true);
     setConfirmPrototypeError(null);
+
+    const expectedRevision = schemeDraft.scheme_revision;
+    if (schemeConfirmIdRef.current?.revision !== expectedRevision) {
+      schemeConfirmIdRef.current = {
+        revision: expectedRevision,
+        id: newSchemeConfirmationId(),
+      };
+    }
+    const confirmationId = schemeConfirmIdRef.current.id;
+
+    // 事务外前置：把方案解析成一份可签署的合同骨架。
+    // 故意放在 quiesce 之前——失败时右栏尚未锁定，用户可继续改需求后重试。
+    let sourceContract: SoftwareContract | null = null;
     try {
       const intentText = formatSchemeAsIntent(schemeDraft);
       let workingDraft = draft;
@@ -959,64 +1084,105 @@ ${trimmed}`
           },
         ]);
       }
-      setDemoConfirmed(true);
-      setSchemeDraft(freezeScheme(schemeDraft));
+      const reusable =
+        selected != null &&
+        selected.lifecycle_state !== "DRAFT" &&
+        selected.approval?.status !== "DRAFT"
+          ? selected
+          : null;
+      sourceContract = reusable ?? workingDraft?.contract ?? selected;
+    } catch (error) {
+      setConfirmPrototypeError(
+        error instanceof Error ? error.message : "方案转合同失败",
+      );
+      setSchemeConfirmBusy(false);
+      return;
+    }
 
-      const asPendingApproval = (contract: SoftwareContract): SoftwareContract =>
-        softwareContractSchema.parse({
-          ...contract,
-          lifecycle_state: "PENDING_APPROVAL",
-          approval: { status: "PENDING_REVIEW" },
+    if (!sourceContract) {
+      setConfirmPrototypeError(
+        "没有可确认的方案合同，请再在右侧补充一点需求后重试。",
+      );
+      setSchemeConfirmBusy(false);
+      return;
+    }
+    const contractSource: SoftwareContract = sourceContract;
+
+    /**
+     * signAndPrepare 内部暂存，供 compensate 精确回收本次已建的合同。
+     * 用对象而不是两个 let：签名在回调里赋值，TS 无法对 `let` 做跨闭包收窄，
+     * 直接读会得到 `never`。
+     */
+    const staging: {
+      contractId: string | null;
+      target: SoftwareContract | null;
+    } = { contractId: null, target: null };
+
+    const result = await runConfirmSchemeAtomic({
+      confirmationId,
+      scheme: schemeDraft,
+      demo: schemeDemoGate,
+      expectedRevision,
+
+      // 1. 先停流式，再禁右栏；右栏一旦锁定就不再接受 Supervisor Patch。
+      quiesceRightChat: async () => {
+        await chatSession.stop();
+        setSchemeChatLocked(true);
+      },
+
+      // 2. 不可变快照（幂等：同 id + 同内容返回原快照）。
+      persistSnapshot: async ({ confirmation_id, scheme, demo, decision }) => {
+        const view = await freezeSchemeSnapshot(conn, {
+          confirmation_id,
+          scheme,
+          demo,
+          decision: {
+            code: decision.code,
+            message: decision.message,
+            demo_mode: decision.demo_mode,
+          },
         });
+        return {
+          snapshot_id: view.snapshot_id,
+          digest: view.digest,
+          idempotent: view.idempotent,
+        };
+      },
 
-      let contractId = selected?.contract_id;
-      let target = selected;
-      const sourceContract =
-        (!contractId && workingDraft?.contract) ||
-        (target != null &&
-          (target.lifecycle_state === "DRAFT" ||
-            target.approval?.status === "DRAFT"))
-          ? (!contractId && workingDraft?.contract
-              ? workingDraft.contract
-              : target!)
-          : workingDraft?.contract ?? target;
-
-      if (
-        sourceContract &&
-        (!contractId ||
-          target?.lifecycle_state === "DRAFT" ||
-          target?.approval?.status === "DRAFT")
-      ) {
+      // 3. 签署 + 施工准备：建合同（带 confirmation_id）→ 批准 → 建任务图。
+      signAndPrepare: async ({ confirmation_id, onContractCreated }) => {
         const created = await createContractWithAdmission(
           conn,
-          asPendingApproval(sourceContract),
+          softwareContractSchema.parse({
+            ...contractSource,
+            lifecycle_state: "PENDING_APPROVAL",
+            approval: { status: "PENDING_REVIEW" },
+          }),
+          { confirmationId: confirmation_id },
         );
         const saved = created.admission?.contract ?? created.contract;
-        contractId = saved.contract_id;
-        target = saved;
-        setContracts((prev) => {
-          const without = prev.filter((c) => c.contract_id !== saved.contract_id);
-          return [...without, saved];
+        staging.contractId = saved.contract_id;
+        // 合同一落库就回报事务：后面建任务图失败时，补偿拿得到要吊销的那一份
+        onContractCreated?.(saved.contract_id);
+        setContracts((prev) => [
+          ...prev.filter((c) => c.contract_id !== saved.contract_id),
+          saved,
+        ]);
+        setSelectedId(saved.contract_id);
+
+        await approveContract(conn, saved.contract_id, "local-user", {
+          confirmationId: confirmation_id,
         });
-        setSelectedId(contractId);
-      }
-      if (!contractId) {
-        setConfirmPrototypeError("没有可确认的方案合同，请再在右侧补充一点需求后重试。");
-        return;
-      }
-      let list = await listContracts(conn);
-      setContracts(list);
-      let approved = list.find((c) => c.contract_id === contractId) ?? target;
-      if (approved?.lifecycle_state === "PENDING_APPROVAL") {
-        await approveContract(conn, contractId, "local-user");
-        list = await listContracts(conn);
+        const list = await listContracts(conn);
         setContracts(list);
-        approved = list.find((c) => c.contract_id === contractId) ?? approved;
-      }
-      target = approved ?? target ?? selected;
-      if (target) {
-        const proposal = buildProposalFromContract(target);
-        const graph = await createTaskGraph(conn, proposal);
+        const approved =
+          list.find((c) => c.contract_id === saved.contract_id) ?? saved;
+        staging.target = approved;
+
+        const graph = await createTaskGraph(
+          conn,
+          buildProposalFromContract(approved),
+        );
         setTaskGraph(graph);
         setStudioNonce((n) => n + 1);
         setJourneyCards((prev) => [
@@ -1024,36 +1190,97 @@ ${trimmed}`
           {
             id: `scheme-confirmed-${Date.now()}`,
             kind: "SYSTEM",
-            text: `方案已确认并冻结。「${target.intent.title}」任务图已建（${graph.nodes.length} 节点），开始写代码。`,
+            text: `方案已确认并冻结。「${approved.intent.title}」任务图已建（${graph.nodes.length} 节点），开始写代码。`,
           },
         ]);
-        // 自动拉起 Worker（有合同即可）
-        try {
-          const result = await runWorker(conn, target.contract_id);
-          setWorkerResult(result);
-        } catch (err) {
-          setJourneyCards((prev) => [
-            ...prev.slice(-19),
-            {
-              id: `scheme-worker-${Date.now()}`,
-              kind: "SYSTEM",
-              text:
-                err instanceof Error
-                  ? `已确认方案；Worker 稍后可在状态就绪后重试：${err.message}`
-                  : "已确认方案；Worker 稍后可重试。",
-            },
-          ]);
-        }
-      }
-      setPlainContractVisible(false);
-    } catch (error) {
+        return { contract_id: saved.contract_id };
+      },
+
+      // 4. 补偿：终止本次已建合同（吊销 token、清 Worktree 由 Daemon 负责）。
+      compensate: async ({ contract_id, cause }) => {
+        const target = contract_id ?? staging.contractId;
+        if (!target) return;
+        await abortContract(conn, target, "local-user");
+        setContracts((prev) => prev.filter((c) => c.contract_id !== target));
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `scheme-compensated-${Date.now()}`,
+            kind: "SYSTEM",
+            text: `确认失败已回滚：${cause}`,
+          },
+        ]);
+      },
+
+      // 5. 只有成功提交才恢复右栏；失败保持锁定（已签署态不允许再聊改本轮）。
+      restoreRightChat: () => setSchemeChatLocked(false),
+    });
+
+    if (!result.ok) {
+      const compensationFailed = result.code === "E_COMPENSATION_FAILED";
       setConfirmPrototypeError(
-        error instanceof Error ? error.message : "确认方案失败",
+        result.reason ?? "确认方案失败，请检查方案与 Demo 状态后重试。",
       );
-    } finally {
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `scheme-confirm-failed-${Date.now()}`,
+          kind: "SYSTEM",
+          text: compensationFailed
+            ? `确认在「${result.failedAt}」阶段失败且补偿未完成，右栏保持锁定，需人工处理：${result.reason ?? ""}`
+            : `确认未生效（${result.failedAt}）：${result.reason ?? "未知原因"}`,
+        },
+      ]);
       setSchemeConfirmBusy(false);
+      return;
     }
-  }, [conn, schemeDraft, draft, selected, selectedId]);
+
+    // COMMIT：方案冻结，右栏保持锁定——冻结后右栏的修改只会被静默丢弃。
+    setSchemeDraft(result.frozen ?? freezeScheme(schemeDraft));
+    setDemoConfirmed(true);
+    setPlainContractVisible(false);
+    if (result.idempotent) {
+      setJourneyCards((prev) => [
+        ...prev.slice(-19),
+        {
+          id: `scheme-confirm-replay-${Date.now()}`,
+          kind: "SYSTEM",
+          text: "这次确认与上一笔相同，已按幂等处理，未重复签署。",
+        },
+      ]);
+    }
+
+    const committed = staging.target;
+    if (committed) {
+      // 自动拉起 Worker：失败不回滚签署（合同已生效），只如实告知可重试。
+      try {
+        const worker = await runWorker(conn, committed.contract_id);
+        setWorkerResult(worker);
+      } catch (err) {
+        setJourneyCards((prev) => [
+          ...prev.slice(-19),
+          {
+            id: `scheme-worker-${Date.now()}`,
+            kind: "SYSTEM",
+            text:
+              err instanceof Error
+                ? `已确认方案；Worker 稍后可在状态就绪后重试：${err.message}`
+                : "已确认方案；Worker 稍后可重试。",
+          },
+        ]);
+      }
+    }
+    setSchemeConfirmBusy(false);
+  }, [
+    conn,
+    schemeDraft,
+    draft,
+    selected,
+    selectedId,
+    schemeDemoGate,
+    schemeConfirmBusy,
+    chatSession,
+  ]);
 
   // C.18：选择题流程废弃；保留空实现避免旧引用崩（若有）
   const handleClarificationSelect = useCallback(
@@ -1154,9 +1381,7 @@ ${trimmed}`
       let pid = activePrototypeId;
       if (!pid) {
         const title =
-          selected?.intent.title ??
-          draft?.contract.intent.title ??
-          "隔离 Demo";
+          selected?.intent.title ?? draft?.contract.intent.title ?? "隔离 Demo";
         const proto = await createSupervisorPrototype(conn, { title });
         pid = proto.prototype_id;
         setActivePrototypeId(pid);
@@ -1228,7 +1453,9 @@ ${trimmed}`
     try {
       // 与老板快路径一致：落盘须为 PENDING_APPROVAL。
       // 直接把 DRAFT 交给 approve 会 E_INVALID_STATE_TRANSITION。
-      const asPendingApproval = (contract: SoftwareContract): SoftwareContract =>
+      const asPendingApproval = (
+        contract: SoftwareContract,
+      ): SoftwareContract =>
         softwareContractSchema.parse({
           ...contract,
           lifecycle_state: "PENDING_APPROVAL",
@@ -1243,7 +1470,9 @@ ${trimmed}`
           (target.lifecycle_state === "DRAFT" ||
             target.approval?.status === "DRAFT"));
       const source = needsPersist
-        ? (!contractId && draft?.contract ? draft.contract : target!)
+        ? !contractId && draft?.contract
+          ? draft.contract
+          : target!
         : null;
 
       if (source) {
@@ -1255,7 +1484,9 @@ ${trimmed}`
         contractId = saved.contract_id;
         target = saved;
         setContracts((prev) => {
-          const without = prev.filter((c) => c.contract_id !== saved.contract_id);
+          const without = prev.filter(
+            (c) => c.contract_id !== saved.contract_id,
+          );
           return [...without, saved];
         });
         setSelectedId(contractId);
@@ -1648,41 +1879,49 @@ ${trimmed}`
     return () => {
       cancelled = true;
     };
-  }, [connected, conn, selectedId, selected?.lifecycle_state, selected?.intent.title]);
+  }, [
+    connected,
+    conn,
+    selectedId,
+    selected?.lifecycle_state,
+    selected?.intent.title,
+  ]);
 
-
-  const loadBaseline = useCallback(async (opts?: { quiet?: boolean }) => {
-    if (!connected || !conn) return;
-    // 首屏/无档案时立刻亮基线卡（scanning），避免只剩旧「还没有可展示的项目摘要」空态
-    if (!opts?.quiet) {
-      setBaselinePayload((prev) =>
-        prev?.archive
-          ? prev
-          : {
-              archive: null,
-              scanning: true,
-              accept_label: "认可此基线作为后续参考",
-              grants_construction: false,
-            },
-      );
-    }
-    try {
-      const payload = await fetchBaselineArchive(conn);
-      setBaselinePayload(payload);
-    } catch {
-      // 基线失败不挡主界面；保留 scanning 占位或上一份
-      setBaselinePayload((prev) =>
-        prev?.archive
-          ? { ...prev, scanning: false }
-          : {
-              archive: null,
-              scanning: false,
-              accept_label: "认可此基线作为后续参考",
-              grants_construction: false,
-            },
-      );
-    }
-  }, [connected, conn]);
+  const loadBaseline = useCallback(
+    async (opts?: { quiet?: boolean }) => {
+      if (!connected || !conn) return;
+      // 首屏/无档案时立刻亮基线卡（scanning），避免只剩旧「还没有可展示的项目摘要」空态
+      if (!opts?.quiet) {
+        setBaselinePayload((prev) =>
+          prev?.archive
+            ? prev
+            : {
+                archive: null,
+                scanning: true,
+                accept_label: "认可此基线作为后续参考",
+                grants_construction: false,
+              },
+        );
+      }
+      try {
+        const payload = await fetchBaselineArchive(conn);
+        setBaselinePayload(payload);
+      } catch {
+        // 基线失败不挡主界面；保留 scanning 占位或上一份
+        setBaselinePayload((prev) =>
+          prev?.archive
+            ? { ...prev, scanning: false }
+            : {
+                archive: null,
+                scanning: false,
+                accept_label: "认可此基线作为后续参考",
+                grants_construction: false,
+              },
+        );
+      }
+    },
+    [connected, conn],
+  );
 
   // TASK-C.14f：首屏 GET 一次；后续由 BASELINE_PROGRESS WS 覆盖（不再 2s 轮询）
   useEffect(() => {
@@ -2340,552 +2579,572 @@ ${trimmed}`
           onDismiss={() => setScopePaused(null)}
         />
         <WorkspaceLayout
-        repoName={repoName}
-        repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
-        baseBranch={currentBranch}
-        runMode={
-          protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
-        }
-        contract={workspaceContract}
-        protectedCount={protection?.entries.length ?? 0}
-        files={fileTree}
-        filesLoading={filesLoading}
-        onDeletePath={async (relPath) => {
-          await deleteRepoPath(conn, relPath);
-          await loadRepoTree();
-        }}
-        onCreatePath={async ({ parent, name, kind }) => {
-          const r = await createRepoPath(conn, { parent, name, kind });
-          await loadRepoTree();
-          return r.path;
-        }}
-        onRenamePath={async ({ from, to }) => {
-          await renameRepoPath(conn, { from, to });
-          await loadRepoTree();
-        }}
-        onRevealPath={async (relPath) => {
-          await revealRepoPath(conn, relPath);
-        }}
-        confirmSlot={
-          // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
-          <ProtectionConfirmCard
-            admission={admission}
-            busy={busy === "admit" || busy === "deny-admission"}
-            onApprove={onApproveAdmission}
-            onDeny={onDenyAdmission}
-          />
-        }
-        rightPanel={
-          // C.18：右栏真正自由对话；授权入口收敛到中间「确认方案」
-          <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-          <AgentChatPane
-            transport={chatTransport}
-            session={chatSession}
-            onBeforeSend={handleJourneyBeforeSend}
-            journeyCards={journeyCards}
-            journeyBusy={journeyBusy}
-            keyConfigured={settings?.configured === true}
-            onConfigureKey={() => {
-              setSettingsDeepFocus("model-key");
-              setSettingsReturnArmed(true);
-              setSettingsNonce((n) => n + 1);
-            }}
-            commandPhase={commandSurface.phase}
-            primaryCtaTestId={commandSurface.primaryCtaTestId}
-            onAssistantModeChange={setAssistantMode}
-          />
-          </div>
-        }
-        supervisorContent={
-          // C.16：项目全景深页（操作台左侧栏次入口）；数据全部来自合同/保护清单
-          <SupervisorTab
-            repoName={repoName}
-            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
-            baseBranch={currentBranch}
-            contractCount={contracts.length}
-            contract={supervisorContract}
-            architecture={
-              // 架构总览：原来挤在左栏 260px 里，现在在中央宽屏铺开
-              <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="opacity-60">
-                    {graph
-                      ? `${graph.stats.nodes} 节点 · ${graph.stats.edges} 条依赖 · ${graph.cycles.length} 处环`
-                      : "尚未加载依赖拓扑"}
-                  </span>
-                  <button
-                    type="button"
-                    data-testid="load-arch-graph"
-                    onClick={() => void loadArchGraph()}
-                    className="shrink-0 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
-                  >
-                    {graph ? "刷新依赖拓扑" : "加载架构图"}
-                  </button>
-                </div>
-                {graph ? (
-                  <div className="flex h-[520px] flex-col overflow-hidden rounded border border-border">
-                    <FilterToolbar
-                      query={query}
-                      onQueryChange={setQuery}
-                      showCycles={showCycles}
-                      onToggleCycles={setShowCycles}
-                      nodeCount={graph.stats.nodes}
-                      edgeCount={graph.stats.edges}
-                      selectedCount={selectedPaths.length}
-                      matches={matches}
-                    />
-                    <RadarGraph
-                      nodes={graph.graph.nodes}
-                      edges={graph.graph.edges}
-                      cycles={graph.cycles}
-                      selected={selectedPaths}
-                      onSelectionChange={setSelectedPaths}
-                      focusPath={focusPath}
-                      showCycles={showCycles}
-                      className="min-h-0 flex-1"
-                    />
-                    <ScopeSelector
-                      selected={selectedPaths}
-                      onApply={(paths) => openNewRequirement(paths)}
-                      onClear={() => setSelectedPaths([])}
-                    />
-                  </div>
-                ) : (
-                  <p className="opacity-70">
-                    连接 Daemon
-                    后可加载依赖拓扑；圈选出的文件会直接带进新建需求的范围。
-                  </p>
-                )}
-              </div>
-            }
-            protection={{
-              mode: protection?.mode ?? "VIBE",
-              entries: protection?.entries.length ?? 0,
-              checkpoint: protection?.checkpoint?.at ?? null,
-            }}
-            admission={
-              admission
-                ? {
-                    decision: admission.decision,
-                    reason: admission.reason ?? null,
-                    cardId: admission.cardId ?? null,
-                  }
-                : null
-            }
-            busy={busy === "admit" || busy === "deny-admission"}
-            onApprove={
-              admission ? () => onApproveAdmission(admission) : undefined
-            }
-            onDeny={admission ? () => onDenyAdmission(admission) : undefined}
-            onOpenConsole={() => setStudioNonce((n) => n + 1)}
-          />
-        }
-        openStudioRequest={studioNonce}
-        openSupervisorRequest={supervisorNonce}
-        onOpenStudioGraph={() => {
-          setStudioViewportOverride("graph");
-          setStudioNonce((n) => n + 1);
-        }}
-        studioGraphActive={studioViewportOverride === "graph"}
-        openSettingsRequest={settingsNonce}
-        settingsDeepFocus={settingsDeepFocus}
-        closeSettingsRequest={closeSettingsNonce}
-        commandSurface={commandSurface}
-        terminalPanel={
-          // 底栏验证输出抽屉，数据源与合同操作台内终端一致
-          <StructuredTerminal
-            lines={stream.terminal
-              .filter((t) => !selected || t.contractId === selected.contract_id)
-              .map((t) => ({ stream: t.stream, line: t.line, at: t.at }))}
-          />
-        }
-        openRequest={openRequest}
-        renderFile={(filePath, bound) => {
-          const contractId = bound
-            ? (workspaceContract?.contractId ?? null)
-            : null;
-          const io = fileIoFor(contractId);
-          return (
-            <MonacoEditorPane
-              key={`${contractId ?? "main"}:${filePath}`}
-              path={filePath}
-              io={io}
-              reloadKey={reloadKeys[filePath] ?? 0}
+          repoName={repoName}
+          repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+          baseBranch={currentBranch}
+          runMode={
+            protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+          }
+          contract={workspaceContract}
+          protectedCount={protection?.entries.length ?? 0}
+          files={fileTree}
+          filesLoading={filesLoading}
+          onDeletePath={async (relPath) => {
+            await deleteRepoPath(conn, relPath);
+            await loadRepoTree();
+          }}
+          onCreatePath={async ({ parent, name, kind }) => {
+            const r = await createRepoPath(conn, { parent, name, kind });
+            await loadRepoTree();
+            return r.path;
+          }}
+          onRenamePath={async ({ from, to }) => {
+            await renameRepoPath(conn, { from, to });
+            await loadRepoTree();
+          }}
+          onRevealPath={async (relPath) => {
+            await revealRepoPath(conn, relPath);
+          }}
+          confirmSlot={
+            // C.2：至多一张白话是/否卡；无交集时 applyAdmission 已置 null，此处不渲染
+            <ProtectionConfirmCard
+              admission={admission}
+              busy={busy === "admit" || busy === "deny-admission"}
+              onApprove={onApproveAdmission}
+              onDeny={onDenyAdmission}
             />
-          );
-        }}
-        graphContent={
-          /*
+          }
+          rightPanel={
+            // C.18：右栏真正自由对话；授权入口收敛到中间「确认方案」
+            <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+              <AgentChatPane
+                transport={chatTransport}
+                session={chatSession}
+                onBeforeSend={handleJourneyBeforeSend}
+                journeyCards={journeyCards}
+                journeyBusy={journeyBusy}
+                keyConfigured={settings?.configured === true}
+                onConfigureKey={() => {
+                  setSettingsDeepFocus("model-key");
+                  setSettingsReturnArmed(true);
+                  setSettingsNonce((n) => n + 1);
+                }}
+                commandPhase={commandSurface.phase}
+                primaryCtaTestId={commandSurface.primaryCtaTestId}
+                onAssistantModeChange={setAssistantMode}
+                locked={schemeChatLocked}
+                lockedReason={
+                  schemeDraft?.frozen
+                    ? "方案已签署并冻结，右栏本轮已锁定。要改需求请点「新建需求」重新开始。"
+                    : "正在确认方案，本轮右栏已暂停接收新输入；确认完成后自动解除。"
+                }
+              />
+            </div>
+          }
+          supervisorContent={
+            // C.16：项目全景深页（操作台左侧栏次入口）；数据全部来自合同/保护清单
+            <SupervisorTab
+              repoName={repoName}
+              repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+              baseBranch={currentBranch}
+              contractCount={contracts.length}
+              contract={supervisorContract}
+              architecture={
+                // 架构总览：原来挤在左栏 260px 里，现在在中央宽屏铺开
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="opacity-60">
+                      {graph
+                        ? `${graph.stats.nodes} 节点 · ${graph.stats.edges} 条依赖 · ${graph.cycles.length} 处环`
+                        : "尚未加载依赖拓扑"}
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="load-arch-graph"
+                      onClick={() => void loadArchGraph()}
+                      className="shrink-0 rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                    >
+                      {graph ? "刷新依赖拓扑" : "加载架构图"}
+                    </button>
+                  </div>
+                  {graph ? (
+                    <div className="flex h-[520px] flex-col overflow-hidden rounded border border-border">
+                      <FilterToolbar
+                        query={query}
+                        onQueryChange={setQuery}
+                        showCycles={showCycles}
+                        onToggleCycles={setShowCycles}
+                        nodeCount={graph.stats.nodes}
+                        edgeCount={graph.stats.edges}
+                        selectedCount={selectedPaths.length}
+                        matches={matches}
+                      />
+                      <RadarGraph
+                        nodes={graph.graph.nodes}
+                        edges={graph.graph.edges}
+                        cycles={graph.cycles}
+                        selected={selectedPaths}
+                        onSelectionChange={setSelectedPaths}
+                        focusPath={focusPath}
+                        showCycles={showCycles}
+                        className="min-h-0 flex-1"
+                      />
+                      <ScopeSelector
+                        selected={selectedPaths}
+                        onApply={(paths) => openNewRequirement(paths)}
+                        onClear={() => setSelectedPaths([])}
+                      />
+                    </div>
+                  ) : (
+                    <p className="opacity-70">
+                      连接 Daemon
+                      后可加载依赖拓扑；圈选出的文件会直接带进新建需求的范围。
+                    </p>
+                  )}
+                </div>
+              }
+              protection={{
+                mode: protection?.mode ?? "VIBE",
+                entries: protection?.entries.length ?? 0,
+                checkpoint: protection?.checkpoint?.at ?? null,
+              }}
+              admission={
+                admission
+                  ? {
+                      decision: admission.decision,
+                      reason: admission.reason ?? null,
+                      cardId: admission.cardId ?? null,
+                    }
+                  : null
+              }
+              busy={busy === "admit" || busy === "deny-admission"}
+              onApprove={
+                admission ? () => onApproveAdmission(admission) : undefined
+              }
+              onDeny={admission ? () => onDenyAdmission(admission) : undefined}
+              onOpenConsole={() => setStudioNonce((n) => n + 1)}
+            />
+          }
+          openStudioRequest={studioNonce}
+          openSupervisorRequest={supervisorNonce}
+          onOpenStudioGraph={() => {
+            setStudioViewportOverride("graph");
+            setStudioNonce((n) => n + 1);
+          }}
+          studioGraphActive={studioViewportOverride === "graph"}
+          openSettingsRequest={settingsNonce}
+          settingsDeepFocus={settingsDeepFocus}
+          closeSettingsRequest={closeSettingsNonce}
+          commandSurface={commandSurface}
+          terminalPanel={
+            // 底栏验证输出抽屉，数据源与合同操作台内终端一致
+            <StructuredTerminal
+              lines={stream.terminal
+                .filter(
+                  (t) => !selected || t.contractId === selected.contract_id,
+                )
+                .map((t) => ({ stream: t.stream, line: t.line, at: t.at }))}
+            />
+          }
+          openRequest={openRequest}
+          renderFile={(filePath, bound) => {
+            const contractId = bound
+              ? (workspaceContract?.contractId ?? null)
+              : null;
+            const io = fileIoFor(contractId);
+            return (
+              <MonacoEditorPane
+                key={`${contractId ?? "main"}:${filePath}`}
+                path={filePath}
+                io={io}
+                reloadKey={reloadKeys[filePath] ?? 0}
+              />
+            );
+          }}
+          graphContent={
+            /*
             Task Graph Tab（C.7 + C.10q）：全景/施工双视角；施工侧为本轮功能汇总与执行 DAG。
             数据全部来自 Daemon 快照：首屏 GET + TASK_GRAPH_UPDATED 帧。
           */
-          <TaskGraphPane
-            graph={taskGraph}
-            loading={taskGraphLoading}
-            error={confirmPrototypeError ?? taskGraphError}
-            deliveryNote={
-              isDeliveredLifecycle(selected?.lifecycle_state)
-                ? "本合同已合入。下方施工图是合入前的核销快照（可能仍显示失败）；成品请看「真机试玩」，或打开仓库 / 本机 Vite（如 http://127.0.0.1:5180/）。归档在 .stagent/records/。"
-                : null
-            }
-            onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
-            onConfirmPrototype={() => {
-              void handleConfirmPrototype();
-            }}
-            confirmPrototypeBusy={confirmPrototypeBusy}
-            onStartNode={(nodeId) => {
-              void handleStartGraphNode(nodeId);
-            }}
-            onVerifyNode={(nodeId) => {
-              void handleVerifyGraphNode(nodeId);
-            }}
-            actionBusy={graphActionBusy}
-            onRunWorker={() => {
-                  if (!selected) return;
-                  void runAction("worker", async () => {
-                    const result = await runWorker(conn, selected.contract_id);
-                    setWorkerResult(result);
-                    const restored = await fetchEvidence(
-                      conn,
-                      selected.contract_id,
-                    );
-                    setEvidence(restored);
-                  });
-                }}
-                canRunWorker={
-                  selected?.lifecycle_state === "EXECUTING" &&
-                  evidence?.verdict.status !== "PASSED"
-                }
-                runWorkerBusy={busy === "worker"}
-                runWorkerLabel={
-                  evidence?.verdict.status === "FAILED"
-                    ? "再跑 Worker"
-                    : "运行 Worker"
-                }
-            baseline={baselinePayload}
-            baselineBusy={baselineBusy}
-            onAcceptBaseline={() => {
-              void handleAcceptBaseline();
-            }}
-            onRescanBaseline={() => {
-              void handleRescanBaseline();
-            }}
-            panoramaSummary={
-              selected
-                ? {
-                    contractTitle: selected.intent.title,
-                    contractDescription: selected.intent.description,
-                    acceptanceCriteria: selected.intent.acceptance_criteria,
-                    requirementsHint,
-                    riskLevel: selected.intent.risk_level,
-                  }
-                : null
-            }
-          />
-        }
-        middleBanner={
-          <>
-            {assistantMode && assistantMode.mode !== "real" ? (
-              <div
-                data-testid="assistant-mode-middle-hint"
-                data-assistant-mode={assistantMode.mode}
-                className="border-b border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
-              >
-                {assistantMode.middleHint}
-              </div>
-            ) : null}
-            {selected && staleContracts.has(selected.contract_id) ? (
-              <div
-                data-testid="evidence-stale-banner"
-                role="alert"
-                className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-800"
-              >
-                ⚠
-                代码在验证之后被改动过，之前的验收证据已失效（STALE），请重新「执行验证」后再合并。
-              </div>
-            ) : null}
-          </>
-        }
-        onNewRequirement={() => openNewRequirement(selectedPaths)}
-        settingsContent={
-          /*
+            <TaskGraphPane
+              graph={taskGraph}
+              loading={taskGraphLoading}
+              error={confirmPrototypeError ?? taskGraphError}
+              deliveryNote={
+                isDeliveredLifecycle(selected?.lifecycle_state)
+                  ? "本合同已合入。下方施工图是合入前的核销快照（可能仍显示失败）；成品请看「真机试玩」，或打开仓库 / 本机 Vite（如 http://127.0.0.1:5180/）。归档在 .stagent/records/。"
+                  : null
+              }
+              onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
+              onConfirmPrototype={() => {
+                void handleConfirmPrototype();
+              }}
+              confirmPrototypeBusy={confirmPrototypeBusy}
+              onStartNode={(nodeId) => {
+                void handleStartGraphNode(nodeId);
+              }}
+              onVerifyNode={(nodeId) => {
+                void handleVerifyGraphNode(nodeId);
+              }}
+              actionBusy={graphActionBusy}
+              onRunWorker={() => {
+                if (!selected) return;
+                void runAction("worker", async () => {
+                  const result = await runWorker(conn, selected.contract_id);
+                  setWorkerResult(result);
+                  const restored = await fetchEvidence(
+                    conn,
+                    selected.contract_id,
+                  );
+                  setEvidence(restored);
+                });
+              }}
+              canRunWorker={
+                selected?.lifecycle_state === "EXECUTING" &&
+                evidence?.verdict.status !== "PASSED"
+              }
+              runWorkerBusy={busy === "worker"}
+              runWorkerLabel={
+                evidence?.verdict.status === "FAILED"
+                  ? "再跑 Worker"
+                  : "运行 Worker"
+              }
+              baseline={baselinePayload}
+              baselineBusy={baselineBusy}
+              onAcceptBaseline={() => {
+                void handleAcceptBaseline();
+              }}
+              onRescanBaseline={() => {
+                void handleRescanBaseline();
+              }}
+              panoramaSummary={
+                selected
+                  ? {
+                      contractTitle: selected.intent.title,
+                      contractDescription: selected.intent.description,
+                      acceptanceCriteria: selected.intent.acceptance_criteria,
+                      requirementsHint,
+                      riskLevel: selected.intent.risk_level,
+                    }
+                  : null
+              }
+            />
+          }
+          middleBanner={
+            <>
+              {assistantMode && assistantMode.mode !== "real" ? (
+                <div
+                  data-testid="assistant-mode-middle-hint"
+                  data-assistant-mode={assistantMode.mode}
+                  className="border-b border-border/60 bg-muted/40 px-3 py-1 text-xs text-muted-foreground"
+                >
+                  {assistantMode.middleHint}
+                </div>
+              ) : null}
+              {selected && staleContracts.has(selected.contract_id) ? (
+                <div
+                  data-testid="evidence-stale-banner"
+                  role="alert"
+                  className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs text-amber-800"
+                >
+                  ⚠
+                  代码在验证之后被改动过，之前的验收证据已失效（STALE），请重新「执行验证」后再合并。
+                </div>
+              ) : null}
+            </>
+          }
+          onNewRequirement={() => openNewRequirement(selectedPaths)}
+          settingsContent={
+            /*
             设置 Tab：连接地址、Session Token、实时流、网关受控、模型 Key、
             Worktree 绝对路径、撤销本轮——原来全堆在顶栏，现在只在这里。
           */
-          <SettingsTab
-            conn={conn}
-            onConnChange={(next) => {
-              // 先落盘（saveConnection 会归一 Token/地址），再回读进内存：
-              // 界面上看到的连接，必须与实际发出去的 header 完全一致
-              saveConnection(next);
-              setConn(loadConnection());
-            }}
-            connected={connected}
-            daemonPort={daemonPort}
-            repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
-            baseBranch={currentBranch}
-            runMode={
-              protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
-            }
-            protectedCount={protection?.entries.length ?? 0}
-            workerControl={
-              selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"
-            }
-            streamStatus={stream.status}
-            worktreePath={workspaceContract?.worktreePath ?? null}
-            executionStatus={
-              selected
-                ? EXECUTION_STATUS_LABEL[
-                    toExecutionStatus(selected.lifecycle_state)
-                  ]
-                : null
-            }
-            modelKeySlot={
-              <ModelKeyPanel
-                conn={conn}
-                settings={settings}
-                onSaved={(next) => setSettings(next)}
-              />
-            }
-            checkpoint={protection?.checkpoint?.roundId ?? null}
-            onUndoRound={
-              protection?.checkpoint ? () => void onUndoRound() : undefined
-            }
-            undoBusy={protectionBusy}
-            onRefresh={() => void refresh()}
-            focusSection={settingsDeepFocus}
-            onReturnToChat={
-              settingsReturnArmed
-                ? () => {
-                    setCloseSettingsNonce((n) => n + 1);
-                    setSettingsReturnArmed(false);
-                    setSettingsDeepFocus(null);
-                  }
-                : undefined
-            }
-            chatSession={
-              chatTransport
-                ? {
-                    adapters: chatSession.adapters,
-                    sessions: chatSession.sessions,
-                    sessionId: chatSession.sessionId,
-                    newSession: chatSession.newSession,
-                    selectSession: chatSession.selectSession,
-                  }
-                : null
-            }
-          />
-        }
-        banner={
-          <>
-            {protection?.corrupt && (
-              <div
-                data-testid="protection-corrupt-banner"
-                role="alert"
-                className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
-              >
-                保护清单损坏，AI 所有改动暂时被拦。请修复或删除{" "}
-                <code>.stagent/protection.json</code> 后刷新页面（原因：
-                {protection.corrupt}）
-              </div>
-            )}
-            {/* 至多一张卡：合同准入正在等用户决策时，不再叠加 P.1 的通用命中卡 */}
-            {!shouldConfirmAdmission(admission) &&
-              protection?.round.pending[0] && (
-                <ProtectionApprovalCard
-                  card={protection.round.pending[0]}
-                  busy={protectionBusy}
-                  onDecide={(id, d) => void onDecideProtection(id, d)}
+            <SettingsTab
+              conn={conn}
+              onConnChange={(next) => {
+                // 先落盘（saveConnection 会归一 Token/地址），再回读进内存：
+                // 界面上看到的连接，必须与实际发出去的 header 完全一致
+                saveConnection(next);
+                setConn(loadConnection());
+              }}
+              connected={connected}
+              daemonPort={daemonPort}
+              repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
+              baseBranch={currentBranch}
+              runMode={
+                protection && protection.mode !== "VIBE" ? "PROTECTED" : "VIBE"
+              }
+              protectedCount={protection?.entries.length ?? 0}
+              workerControl={
+                selected?.worker_spec.control_mode ?? "GATEWAY_ENFORCED"
+              }
+              streamStatus={stream.status}
+              worktreePath={workspaceContract?.worktreePath ?? null}
+              executionStatus={
+                selected
+                  ? EXECUTION_STATUS_LABEL[
+                      toExecutionStatus(selected.lifecycle_state)
+                    ]
+                  : null
+              }
+              modelKeySlot={
+                <ModelKeyPanel
+                  conn={conn}
+                  settings={settings}
+                  onSaved={(next) => setSettings(next)}
                 />
-              )}
-            {!recDismissed &&
-              recommendations.length > 0 &&
-              (protection?.entries.length ?? 0) === 0 && (
-                <ProtectionRecommendationCard
-                  recommendations={recommendations}
-                  busy={protectionBusy}
-                  onApply={(names) => void onApplyRecommendations(names)}
-                  onDismiss={dismissRecommendations}
-                />
-              )}
-            {undoInfo && (
-              <div
-                data-testid="undo-info"
-                className="border-b border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700"
-              >
-                {undoInfo}
-              </div>
-            )}
-            {error && (
-              <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
-                {error}
-              </div>
-            )}
-
-            {stream.alerts.length > 0 && (
-              <div
-                data-testid="scope-alerts"
-                className="space-y-1 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700"
-              >
-                {stream.alerts.map((alert) => (
-                  <div key={alert.id} className="flex items-center gap-2">
-                    <AlertTriangle className="h-3 w-3 shrink-0" />
-                    <span className="font-mono font-semibold">
-                      {alert.code}
-                    </span>
-                    <span className="truncate">{alert.message}</span>
-                    <span className="text-[10px] opacity-70">
-                      {alert.contractId.slice(-8)}
-                    </span>
-                    <button
-                      onClick={() => stream.dismissAlert(alert.id)}
-                      className="ml-auto shrink-0 px-1 text-amber-700/70 hover:text-amber-900"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        }
-        studioContent={
-          <StudioViewportShell
-            presentationState={
-              selectedId
-                ? (presentationByContract[selectedId]?.state ?? null)
-                : null
-            }
-            presentationMessage={
-              selectedId
-                ? presentationByContract[selectedId]?.message || null
-                : null
-            }
-            contractRail={
-              // C.16：需求列表 + 规范与资产在合同操作台左侧栏（单门）
-              <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 text-xs">
-
-                <div className="text-[11px] font-medium text-foreground">
-                  本项目需求
+              }
+              checkpoint={protection?.checkpoint?.roundId ?? null}
+              onUndoRound={
+                protection?.checkpoint ? () => void onUndoRound() : undefined
+              }
+              undoBusy={protectionBusy}
+              onRefresh={() => void refresh()}
+              focusSection={settingsDeepFocus}
+              onReturnToChat={
+                settingsReturnArmed
+                  ? () => {
+                      setCloseSettingsNonce((n) => n + 1);
+                      setSettingsReturnArmed(false);
+                      setSettingsDeepFocus(null);
+                    }
+                  : undefined
+              }
+              chatSession={
+                chatTransport
+                  ? {
+                      adapters: chatSession.adapters,
+                      sessions: chatSession.sessions,
+                      sessionId: chatSession.sessionId,
+                      newSession: chatSession.newSession,
+                      selectSession: chatSession.selectSession,
+                    }
+                  : null
+              }
+            />
+          }
+          banner={
+            <>
+              {protection?.corrupt && (
+                <div
+                  data-testid="protection-corrupt-banner"
+                  role="alert"
+                  className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+                >
+                  保护清单损坏，AI 所有改动暂时被拦。请修复或删除{" "}
+                  <code>.stagent/protection.json</code> 后刷新页面（原因：
+                  {protection.corrupt}）
                 </div>
-                <div data-testid="requirement-list" className="min-h-[80px]">
-                  <div className="px-1 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                    需求（合同 {contracts.length}）
-                  </div>
-                  {contracts.length === 0 && (
-                    <div className="px-1 py-2 text-xs leading-relaxed text-muted-foreground">
-                      暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
+              )}
+              {/* 至多一张卡：合同准入正在等用户决策时，不再叠加 P.1 的通用命中卡 */}
+              {!shouldConfirmAdmission(admission) &&
+                protection?.round.pending[0] && (
+                  <ProtectionApprovalCard
+                    card={protection.round.pending[0]}
+                    busy={protectionBusy}
+                    onDecide={(id, d) => void onDecideProtection(id, d)}
+                  />
+                )}
+              {!recDismissed &&
+                recommendations.length > 0 &&
+                (protection?.entries.length ?? 0) === 0 && (
+                  <ProtectionRecommendationCard
+                    recommendations={recommendations}
+                    busy={protectionBusy}
+                    onApply={(names) => void onApplyRecommendations(names)}
+                    onDismiss={dismissRecommendations}
+                  />
+                )}
+              {undoInfo && (
+                <div
+                  data-testid="undo-info"
+                  className="border-b border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-700"
+                >
+                  {undoInfo}
+                </div>
+              )}
+              {error && (
+                <div className="border-b border-destructive/40 bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+                  {error}
+                </div>
+              )}
+
+              {stream.alerts.length > 0 && (
+                <div
+                  data-testid="scope-alerts"
+                  className="space-y-1 border-b border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700"
+                >
+                  {stream.alerts.map((alert) => (
+                    <div key={alert.id} className="flex items-center gap-2">
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span className="font-mono font-semibold">
+                        {alert.code}
+                      </span>
+                      <span className="truncate">{alert.message}</span>
+                      <span className="text-[10px] opacity-70">
+                        {alert.contractId.slice(-8)}
+                      </span>
+                      <button
+                        onClick={() => stream.dismissAlert(alert.id)}
+                        className="ml-auto shrink-0 px-1 text-amber-700/70 hover:text-amber-900"
+                      >
+                        ×
+                      </button>
                     </div>
-                  )}
-                  {contracts.map((contract) => (
-                    <button
-                      key={contract.contract_id}
-                      type="button"
-                      data-testid="requirement-list-item"
-                      onClick={() => {
-                        setSelectedId(contract.contract_id);
-                        setEvidence(null);
-                        setWorkerResult(null);
-                        setDiff(null);
-                        setDiffFiles(null);
-                        setAdmission(null);
-                        setDraft(null);
-                        setDisputeReport(null);
-                        setDisputeError(null);
-                        setStudioViewportOverride(null);
-                        setConfirmPrototypeError(null);
-                        setRequirementsHint(null);
-                        setStudioNonce((n) => n + 1);
-                      }}
-                      className={`block w-full border-b border-border/50 px-2 py-2 text-left hover:bg-sidebar-accent ${
-                        selectedId === contract.contract_id
-                          ? "bg-sidebar-accent"
-                          : ""
-                      }`}
-                    >
-                      <div className="truncate text-xs">
-                        {contract.intent.title}
-                      </div>
-                      <div className="mt-1 text-[10px] text-muted-foreground">
-                        {contract.lifecycle_state} ·{" "}
-                        {contract.contract_id.slice(-8)}
-                      </div>
-                    </button>
                   ))}
                 </div>
-                <div className="border-t border-border pt-2">
-                  <div className="mb-1 text-[11px] font-medium text-foreground">
-                    规范与资产
+              )}
+            </>
+          }
+          studioContent={
+            <StudioViewportShell
+              presentationState={
+                selectedId
+                  ? (presentationByContract[selectedId]?.state ?? null)
+                  : null
+              }
+              presentationMessage={
+                selectedId
+                  ? presentationByContract[selectedId]?.message || null
+                  : null
+              }
+              contractRail={
+                // C.16：需求列表 + 规范与资产在合同操作台左侧栏（单门）
+                <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 text-xs">
+                  <div className="text-[11px] font-medium text-foreground">
+                    本项目需求
                   </div>
-                  <FileTreeSpecsSection
-                    assets={specAssets}
-                    open={specsOpen}
-                    onToggle={() => setSpecsOpen((v) => !v)}
-                    onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
-                    generation={specsGeneration}
+                  <div data-testid="requirement-list" className="min-h-[80px]">
+                    <div className="px-1 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                      需求（合同 {contracts.length}）
+                    </div>
+                    {contracts.length === 0 && (
+                      <div className="px-1 py-2 text-xs leading-relaxed text-muted-foreground">
+                        暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
+                      </div>
+                    )}
+                    {contracts.map((contract) => (
+                      <button
+                        key={contract.contract_id}
+                        type="button"
+                        data-testid="requirement-list-item"
+                        onClick={() => {
+                          setSelectedId(contract.contract_id);
+                          setEvidence(null);
+                          setWorkerResult(null);
+                          setDiff(null);
+                          setDiffFiles(null);
+                          setAdmission(null);
+                          setDraft(null);
+                          setDisputeReport(null);
+                          setDisputeError(null);
+                          setStudioViewportOverride(null);
+                          setConfirmPrototypeError(null);
+                          setRequirementsHint(null);
+                          setStudioNonce((n) => n + 1);
+                        }}
+                        className={`block w-full border-b border-border/50 px-2 py-2 text-left hover:bg-sidebar-accent ${
+                          selectedId === contract.contract_id
+                            ? "bg-sidebar-accent"
+                            : ""
+                        }`}
+                      >
+                        <div className="truncate text-xs">
+                          {contract.intent.title}
+                        </div>
+                        <div className="mt-1 text-[10px] text-muted-foreground">
+                          {contract.lifecycle_state} ·{" "}
+                          {contract.contract_id.slice(-8)}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="border-t border-border pt-2">
+                    <div className="mb-1 text-[11px] font-medium text-foreground">
+                      规范与资产
+                    </div>
+                    <FileTreeSpecsSection
+                      assets={specAssets}
+                      open={specsOpen}
+                      onToggle={() => setSpecsOpen((v) => !v)}
+                      onOpen={(path) =>
+                        setOpenRequest({ path, nonce: Date.now() })
+                      }
+                      generation={specsGeneration}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    data-testid="studio-open-panorama"
+                    onClick={() => setSupervisorNonce((n) => n + 1)}
+                    className="mt-auto rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    项目全景与准入
+                  </button>
+                </div>
+              }
+              scheme={
+                <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+                  {showForm ? (
+                    <ContractForm
+                      busy={busy === "create"}
+                      initialPaths={scopeDraft}
+                      draft={draft}
+                      draftBusy={busy === "draft"}
+                      onRequestDraft={requestDraft}
+                      onCreate={(contract) =>
+                        runAction("create", async () => {
+                          const saved = await createContractWithAdmission(
+                            conn,
+                            contract,
+                          );
+                          setSelectedId(saved.contract.contract_id);
+                          setShowForm(false);
+                          setDraft(null);
+                          applyAdmission(saved.admission);
+                        })
+                      }
+                    />
+                  ) : null}
+                  <SchemeReviewPane
+                    scheme={schemeDraft}
+                    demoUrl={demoPreview?.url ?? retainedDemoUrl ?? null}
+                    demoStatus={demoPreview?.status ?? null}
+                    demoGate={schemeDemoGate}
+                    demoBusy={schemeDemoBusy}
+                    confirmBusy={schemeConfirmBusy || authorizeBusy}
+                    errorMessage={confirmPrototypeError}
+                    confirmation={schemeConfirmation ?? undefined}
+                    onConfirmDecision={handleSchemeConfirmDecision}
+                    onResolveConflict={handleSchemeResolveConflict}
+                    onNotesChange={handleSchemeNotesChange}
+                    onGenerateDemo={() => {
+                      void handleGenerateSchemeDemo();
+                    }}
+                    onRetryDemo={() => {
+                      void handleGenerateSchemeDemo();
+                    }}
+                    onConfirmDemo={() => {
+                      void handleConfirmSchemeDemo();
+                    }}
+                    onAcceptDegradedDemo={() => {
+                      handleAcceptDegradedDemo();
+                    }}
+                    onConfirmScheme={() => {
+                      void handleConfirmScheme();
+                    }}
                   />
                 </div>
-                <button
-                  type="button"
-                  data-testid="studio-open-panorama"
-                  onClick={() => setSupervisorNonce((n) => n + 1)}
-                  className="mt-auto rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                >
-                  项目全景与准入
-                </button>
-              </div>
-            }
-            scheme={
-              <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-                {showForm ? (
-                  <ContractForm
-                    busy={busy === "create"}
-                    initialPaths={scopeDraft}
-                    draft={draft}
-                    draftBusy={busy === "draft"}
-                    onRequestDraft={requestDraft}
-                    onCreate={(contract) =>
-                      runAction("create", async () => {
-                        const saved = await createContractWithAdmission(
-                          conn,
-                          contract,
-                        );
-                        setSelectedId(saved.contract.contract_id);
-                        setShowForm(false);
-                        setDraft(null);
-                        applyAdmission(saved.admission);
-                      })
-                    }
-                  />
-                ) : null}
-                <SchemeReviewPane
-                  scheme={schemeDraft}
-                  demoUrl={demoPreview?.url ?? retainedDemoUrl ?? null}
-                  demoStatus={demoPreview?.status ?? null}
-                  demoBusy={schemeDemoBusy}
-                  confirmBusy={schemeConfirmBusy || authorizeBusy}
-                  errorMessage={confirmPrototypeError}
-                  onConfirmDecision={handleSchemeConfirmDecision}
-                  onResolveConflict={handleSchemeResolveConflict}
-                  onNotesChange={handleSchemeNotesChange}
-                  onGenerateDemo={() => {
-                    void handleGenerateSchemeDemo();
-                  }}
-                  onConfirmScheme={() => {
-                    void handleConfirmScheme();
-                  }}
-                />
-              </div>
-            }
-          />
-        }
-        footer={
-          <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">
-            <span>本机服务：{conn.baseUrl}</span>
-            <span className="ml-auto">v0.1 · 有证据才合入</span>
-          </footer>
-        }
-      />
+              }
+            />
+          }
+          footer={
+            <footer className="flex h-6 items-center gap-4 bg-primary px-3 text-xs text-primary-foreground">
+              <span>本机服务：{conn.baseUrl}</span>
+              <span className="ml-auto">v0.1 · 有证据才合入</span>
+            </footer>
+          }
+        />
       </>
     </div>
   );

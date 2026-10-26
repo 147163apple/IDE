@@ -20,8 +20,14 @@ import {
 } from "../core/exec-token";
 import { runBoundaryStop } from "../guard/boundary-stop";
 import { loadBaselineDirtyExclusions } from "../baseline/scope-defaults";
-import { readDemoConfirm } from "../supervisor/demo/prototypes";
-import { canSign, projectDeliveryState, type DeliveryState } from "../../src/lib/state/delivery-state";
+import {
+  evaluateLatestDemoGate,
+  type DemoSignGateDecision,
+} from "../supervisor/demo/signing-gate";
+import {
+  projectDeliveryState,
+  type DeliveryState,
+} from "../../src/lib/state/delivery-state";
 import {
   loadReworkCounter,
   saveReworkCounter,
@@ -204,7 +210,10 @@ export class ContractOrchestrator {
     return this.execTokenStore.revokeExecToken(contractId);
   }
 
-  private issueExecForContract(contract: SoftwareContract, worktreePath: string): string {
+  private issueExecForContract(
+    contract: SoftwareContract,
+    worktreePath: string,
+  ): string {
     const writable =
       contract.authorization.file_system_scope.writable_paths ?? [];
     const issued = this.execTokenStore.issueExecToken({
@@ -279,16 +288,16 @@ export class ContractOrchestrator {
   }
 
   /** TASK-C.15b：拆流钩子（老断言返工 vs 新需求 Out-of-Scope） */
-  splitAssertion(
-    contractId: string,
-    assertionText: string,
-  ): SplitFlowResult {
+  splitAssertion(contractId: string, assertionText: string): SplitFlowResult {
     const result = splitAssertionRequest(
       this.repoRoot,
       contractId,
       assertionText,
     );
-    if (result.kind === "rework_existing" && result.snapshot.phase === "escalated") {
+    if (
+      result.kind === "rework_existing" &&
+      result.snapshot.phase === "escalated"
+    ) {
       this.revokeExecTokenFor(contractId);
       const cur = this.store.get(contractId);
       if (
@@ -306,7 +315,9 @@ export class ContractOrchestrator {
   }
 
   /** 签署后冻结验收断言 */
-  private seedReworkOnApprove(contract: SoftwareContract): ReworkCounterSnapshot {
+  private seedReworkOnApprove(
+    contract: SoftwareContract,
+  ): ReworkCounterSnapshot {
     return seedReworkCounterFromAcceptance(
       this.repoRoot,
       contract.contract_id,
@@ -322,7 +333,11 @@ export class ContractOrchestrator {
   async approve(
     contractId: string,
     reviewer: string,
-    options?: { acknowledgeDirty?: boolean },
+    options?: {
+      acknowledgeDirty?: boolean;
+      /** 新主路径由 Daemon HTTP 层按冻结快照求值后传入；旧路径回退最新记录。 */
+      demoGate?: DemoSignGateDecision;
+    },
   ): Promise<SoftwareContract> {
     return withContractLock(
       contractLockPath(this.repoRoot, contractId),
@@ -337,22 +352,17 @@ export class ContractOrchestrator {
           );
         }
 
-        // TASK-C.12d：仅当用户已确认 Demo 时硬校验 can_sign（未确认/无记录不挡旧 approve 路径）
+        // TASK-C.22 / SSOT v2.0.2：Demo 门禁对“已生成未确认”也必须拒绝。
+        // 新主路径传入快照求值结果；旧路径回退最新 Demo 记录。
         {
-          const demoRec = readDemoConfirm(this.repoRoot);
-          if (demoRec?.confirmed) {
-            const can = canSign({
-              demo_mode: demoRec.demo_mode ?? "INTERACTIVE_DEMO",
-              confirmed: true,
-              accept_degraded: demoRec.accept_degraded,
-            });
-            if (!can.ok) {
-              const err = new Error(
-                `[E_CAN_SIGN_DENIED] ${can.reason}`,
-              ) as Error & { code: string };
-              err.code = "E_CAN_SIGN_DENIED";
-              throw err;
-            }
+          const demoGate =
+            options?.demoGate ?? evaluateLatestDemoGate(this.repoRoot);
+          if (!demoGate.ok) {
+            const err = new Error(
+              `[${demoGate.code}] ${demoGate.message}`,
+            ) as Error & { code?: string };
+            err.code = demoGate.code;
+            throw err;
           }
         }
 
@@ -430,7 +440,10 @@ export class ContractOrchestrator {
    * - **失败关闭**：清单读取/规则比对异常一律按「有冲突」阻断，绝不静默放行；
    * - **幂等**：合同不处于待审批态时返回 `SKIPPED`，重复调用不会重建 Worktree。
    */
-  async admit(contractId: string): Promise<AdmissionResult> {
+  async admit(
+    contractId: string,
+    options?: { demoGate?: DemoSignGateDecision },
+  ): Promise<AdmissionResult> {
     const current = this.store.get(contractId);
     if (!current) throw new Error(`Contract not found: ${contractId}`);
 
@@ -499,7 +512,9 @@ export class ContractOrchestrator {
         approved_this_round: approvedThisRound,
       });
       try {
-        const approved = await this.approve(contractId, "stagent-auto");
+        const approved = await this.approve(contractId, "stagent-auto", {
+          ...(options?.demoGate ? { demoGate: options.demoGate } : {}),
+        });
         return {
           decision: "AUTO_APPROVED",
           contract: approved,
@@ -1002,7 +1017,9 @@ export class ContractOrchestrator {
       }
 
       const { gateway, costMonitor } = this.buildRuntime(current, signal);
-      const modelClient = options.modelClient ?? new OpenAiWorkerClient({ repoRoot: this.repoRoot });
+      const modelClient =
+        options.modelClient ??
+        new OpenAiWorkerClient({ repoRoot: this.repoRoot });
       const worker = new AiWorker({ gateway, costMonitor, modelClient });
 
       try {

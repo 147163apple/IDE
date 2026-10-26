@@ -7,21 +7,33 @@
  * - 最底只有「确认方案」（冻结 Spec → 开工）；无「继续澄清」按钮
  */
 
-import type { SchemeDraft } from "@/lib/journey/scheme-draft";
+import type {
+  DemoGate,
+  SchemeConfirmationDecision,
+  SchemeDraft,
+} from "@/lib/journey/scheme-draft";
+import {
+  EMPTY_DEMO_GATE,
+  evaluateSchemeConfirmation,
+} from "@/lib/journey/scheme-draft";
 
 export interface SchemeReviewPaneProps {
   scheme: SchemeDraft | null;
   demoUrl?: string | null | undefined;
   demoStatus?: string | null | undefined;
+  demoGate?: DemoGate | undefined;
   demoBusy?: boolean | undefined;
   confirmBusy?: boolean | undefined;
   errorMessage?: string | null | undefined;
+  confirmation?: SchemeConfirmationDecision | undefined;
   onConfirmDecision?: ((decisionId: string) => void) | undefined;
   onResolveConflict?:
-    | ((conflictId: string, optionId: string) => void)
-    | undefined;
+    ((conflictId: string, optionId: string) => void) | undefined;
   onNotesChange?: ((notes: string) => void) | undefined;
   onGenerateDemo?: (() => void) | undefined;
+  onConfirmDemo?: (() => void) | undefined;
+  onRetryDemo?: (() => void) | undefined;
+  onAcceptDegradedDemo?: (() => void) | undefined;
   onConfirmScheme?: (() => void) | undefined;
 }
 
@@ -50,12 +62,34 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
   const frozen = scheme?.frozen === true;
   const openConflicts =
     scheme?.conflicts.filter((c) => c.chosenId === null).length ?? 0;
+  const demoGate = props.demoGate ?? EMPTY_DEMO_GATE;
+  const confirmation =
+    props.confirmation ??
+    (scheme
+      ? evaluateSchemeConfirmation(scheme, demoGate)
+      : {
+          ok: false,
+          code: "E_SCHEME_NOT_REVIEWABLE" as const,
+          message: "方案尚未生成",
+          reasons: ["方案尚未生成"],
+          demo_mode: "none" as const,
+        });
   const canConfirm =
-    Boolean(scheme) &&
-    !frozen &&
-    openConflicts === 0 &&
-    (scheme?.completeness ?? 0) >= 40 &&
-    props.confirmBusy !== true;
+    Boolean(scheme) && confirmation.ok && props.confirmBusy !== true;
+  const demoConfirmed =
+    scheme != null &&
+    (demoGate.status === "ready" || demoGate.status === "degraded_flowcard") &&
+    demoGate.scheme_revision === scheme.scheme_revision &&
+    demoGate.decision_revision === scheme.scheme_revision;
+  /**
+   * 「过期」只表示 **冻结修订不一致**：Demo 是上一版方案生成的。
+   * 不能把「刚生成但还没点确认」也算进来——那会让确认按钮直接禁用，
+   * 用户永远点不到「确认此 Demo」。
+   */
+  const demoStale =
+    scheme != null &&
+    (demoGate.status === "ready" || demoGate.status === "degraded_flowcard") &&
+    demoGate.scheme_revision !== scheme.scheme_revision;
 
   if (!scheme || (!scheme.title && scheme.modules.length === 0)) {
     return (
@@ -171,9 +205,7 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
                         data-testid="scheme-conflict-option"
                         disabled={frozen}
                         data-selected={selected ? "true" : "false"}
-                        onClick={() =>
-                          props.onResolveConflict?.(c.id, o.id)
-                        }
+                        onClick={() => props.onResolveConflict?.(c.id, o.id)}
                         className={`rounded border px-2 py-1 text-[11px] disabled:opacity-40 ${
                           selected
                             ? "border-amber-800 bg-amber-600/20 font-medium"
@@ -242,10 +274,7 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
       </section>
 
       {props.errorMessage ? (
-        <p
-          data-testid="scheme-error"
-          className="mb-2 text-xs text-destructive"
-        >
+        <p data-testid="scheme-error" className="mb-2 text-xs text-destructive">
           {props.errorMessage}
         </p>
       ) : null}
@@ -267,7 +296,74 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
         </section>
       ) : null}
 
-      {/* Demo 是方案展示一部分：只在够完整时出现在方案区下方 */}
+      {/* Demo 是可选增强项；失败只能重试或显式降级，不静默偷换。 */}
+      {!frozen && demoGate.status === "failed" ? (
+        <section
+          data-testid="scheme-demo-failed"
+          className="mb-3 rounded border border-rose-700/40 bg-rose-500/10 p-2 text-[11px]"
+        >
+          <p className="font-medium text-rose-900">Demo 生成失败。</p>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            <button
+              type="button"
+              data-testid="scheme-demo-retry"
+              disabled={props.demoBusy === true}
+              onClick={() =>
+                props.onRetryDemo
+                  ? props.onRetryDemo()
+                  : props.onGenerateDemo?.()
+              }
+              className="rounded border px-2 py-1 disabled:opacity-40"
+            >
+              重试生成
+            </button>
+            <button
+              type="button"
+              data-testid="scheme-demo-accept-degraded"
+              disabled={props.demoBusy === true}
+              onClick={() => props.onAcceptDegradedDemo?.()}
+              className="rounded border border-amber-700/50 bg-amber-500/10 px-2 py-1 disabled:opacity-40"
+            >
+              接受仅用流程图说明开工（标风险）
+            </button>
+          </div>
+        </section>
+      ) : null}
+
+      {!frozen &&
+      props.demoUrl &&
+      demoGate.status === "ready" &&
+      !demoConfirmed ? (
+        <div className="mb-3 rounded border border-sky-600/40 bg-sky-500/10 p-2 text-[11px]">
+          <p>
+            {demoStale
+              ? "方案已改过，这个 Demo 与当前版本不对应。请重新生成后再确认。"
+              : "请先试玩，并显式确认用于当前方案。"}
+          </p>
+          <button
+            type="button"
+            data-testid="scheme-demo-confirm"
+            disabled={props.demoBusy === true || demoStale}
+            onClick={() => props.onConfirmDemo?.()}
+            className="mt-1.5 rounded border border-sky-700/50 px-2 py-1 disabled:opacity-40"
+          >
+            确认此 Demo
+          </button>
+        </div>
+      ) : null}
+
+      {!frozen && demoConfirmed ? (
+        <p
+          data-testid="scheme-demo-confirmed"
+          className="mb-3 rounded border border-emerald-700/30 bg-emerald-500/10 px-2 py-1 text-[11px] text-emerald-900"
+        >
+          {demoGate.status === "degraded_flowcard"
+            ? "已接受流程图降级，确认方案时会复述风险。"
+            : "Demo 已对当前方案确认。"}
+        </p>
+      ) : null}
+
+      {/* 方案达到 demoReady 才出现生成入口；这不是开工前置。 */}
       {scheme.demoReady && !frozen ? (
         <div className="mb-3">
           <button
@@ -277,13 +373,25 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
             onClick={() => props.onGenerateDemo?.()}
             className="rounded border border-sky-700/50 bg-sky-600/90 px-3 py-1.5 text-xs text-white disabled:opacity-40"
           >
-            {props.demoBusy ? "生成中…" : "生成 Demo"}
+            {props.demoBusy
+              ? "生成中…"
+              : props.demoUrl
+                ? "重新生成 Demo"
+                : "生成 Demo"}
           </button>
         </div>
       ) : null}
 
       {/* 最底只有确认方案；无「继续澄清」 */}
       <div className="mt-auto border-t border-border pt-3">
+        {!confirmation.ok && !frozen ? (
+          <p
+            data-testid="scheme-confirm-blocked"
+            className="mb-2 text-[11px] text-amber-800"
+          >
+            {confirmation.message}
+          </p>
+        ) : null}
         <button
           type="button"
           data-testid="scheme-confirm"
@@ -298,7 +406,8 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
               : "确认方案"}
         </button>
         <p className="mt-1.5 text-[10px] text-muted-foreground">
-          确认后冻结 Spec 并直接开工写代码。不满意请继续在右侧聊，或改上方备注——不会出现「继续澄清」按钮。
+          确认后冻结 Spec 并直接开工写代码。Demo
+          是可选增强项；已生成则须先确认或显式接受降级。
         </p>
       </div>
     </div>

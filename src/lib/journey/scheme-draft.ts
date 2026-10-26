@@ -1,8 +1,13 @@
 /**
- * TASK-C.18：方案草案（中间「方案审阅」单页的数据模型）。
+ * TASK-C.18 / C.22：方案草案（中间「方案审阅」单页的数据模型）。
  *
- * 薄切片：规则/启发式从对话与意图拼出模块图与决策；不求完美 LLM 画图。
- * completeness≥60 才允许「生成 Demo」；确认方案后 frozen。
+ * C.18：规则/启发式从对话与意图拼出模块图与决策。
+ * C.22（SSOT v2.0.1）：
+ * - demoReady = 四条硬性布尔底线（≥2 模块、≥1 主流程、无 OPEN 冲突、
+ *   ≥1 轮有效业务输入）；completeness 仅展示，不参与门禁
+ * - user_pinned 字段级脏检查：随聊合并不覆盖已 pin
+ * - canConfirmScheme 是向后兼容别名；真实门禁统一走
+ *   evaluateSchemeConfirmation（含 Demo 与 revision 绑定）
  */
 
 export interface SchemeDecision {
@@ -13,6 +18,8 @@ export interface SchemeDecision {
   /** 用户是否已确认（含采纳推荐） */
   confirmed: boolean;
   source: "ai_default" | "user";
+  /** 用户手改过该决策 → 随聊不得覆盖 */
+  user_pinned?: boolean;
 }
 
 export interface SchemeConflict {
@@ -20,9 +27,24 @@ export interface SchemeConflict {
   question: string;
   options: { id: string; label: string }[];
   chosenId: string | null;
+  user_pinned?: boolean;
 }
 
+/** 可 pin 的顶层字段键 */
+export type SchemePinnedField =
+  | "title"
+  | "summary"
+  | "modules"
+  | "notes"
+  | "mermaidArchitecture"
+  | "mermaidFlow"
+  | "mermaidMindmap";
+
 export interface SchemeDraft {
+  /** 本轮方案身份；确认/快照/审计共用，不随标题变化。 */
+  scheme_id: string;
+  /** 内容修订号；任何用户或 Supervisor 写入都递增。 */
+  scheme_revision: number;
   title: string;
   summary: string;
   modules: string[];
@@ -31,13 +53,66 @@ export interface SchemeDraft {
   mermaidMindmap: string;
   decisions: SchemeDecision[];
   conflicts: SchemeConflict[];
-  /** 0–100 */
+  /** 0–100；只做展示，不参与 demoReady / 确认门禁 */
   completeness: number;
   demoReady: boolean;
   frozen: boolean;
   /** 用户手改备注 */
   notes: string;
   updatedAt: string;
+  /** 字段级脏标记：被用户手改过的顶层字段 */
+  pinned_fields: SchemePinnedField[];
+  /** 有效业务属性输入轮次（非寒暄） */
+  business_input_rounds: number;
+}
+
+/**
+ * Demo 生成/确认状态。
+ *
+ * 注意：`ready` 只表示“已生成、可试玩”，不表示用户已确认。
+ * 是否与当前方案匹配由 `status + scheme_revision + decision_revision` 共同决定。
+ */
+export type DemoGateStatus =
+  | "none"
+  | "building"
+  | "ready"
+  | "failed"
+  | "degraded_flowcard";
+
+export interface DemoGate {
+  status: DemoGateStatus;
+  /** 原型生成时的方案修订号 */
+  scheme_revision: number | null;
+  /** 用户确认 Demo / 接受降级时的方案修订号 */
+  decision_revision: number | null;
+  prototype_id?: string | null;
+  risk_flags?: string[];
+}
+
+export const EMPTY_DEMO_GATE: DemoGate = {
+  status: "none",
+  scheme_revision: null,
+  decision_revision: null,
+};
+
+export type SchemeConfirmationCode =
+  | "OK"
+  | "E_SCHEME_ALREADY_FROZEN"
+  | "E_SCHEME_REVISION_MISMATCH"
+  | "E_SCHEME_CONFLICTS_OPEN"
+  | "E_SCHEME_NOT_REVIEWABLE"
+  | "E_DEMO_BUILDING"
+  | "E_DEMO_FAILED"
+  | "E_DEMO_CONFIRMATION_REQUIRED"
+  | "E_DEMO_STALE";
+
+export interface SchemeConfirmationDecision {
+  ok: boolean;
+  code: SchemeConfirmationCode;
+  message: string;
+  /** 命中的全部原因，供 UI 一次说清，不只显示第一条。 */
+  reasons: string[];
+  demo_mode: "none" | "interactive" | "degraded";
 }
 
 const MODULE_HINTS: { re: RegExp; label: string }[] = [
@@ -49,9 +124,23 @@ const MODULE_HINTS: { re: RegExp; label: string }[] = [
   { re: /看板|仪表|dashboard/i, label: "总览看板" },
 ];
 
+/** 寒暄/无效输入：不算业务轮次 */
+const SMALLTALK_RE =
+  /^(你好|您好|在吗|嗨|hi|hello|谢谢|感谢|好的|嗯|哦|ok|okay)[\s!！.。?？]*$/i;
+
+/** 含业务属性的实质陈述 */
+const BUSINESS_ATTR_RE =
+  /进度|财务|预算|预警|报表|模块|流程|用户|权限|数据|假数据|真库|界面|文案|受众|客户|员工|桌面|软件|功能|验收|告警|匹配|管控|看板|登录/;
+
+function newSchemeId(): string {
+  return `scheme-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
 export function emptySchemeDraft(partial?: Partial<SchemeDraft>): SchemeDraft {
   const now = new Date().toISOString();
   return {
+    scheme_id: newSchemeId(),
+    scheme_revision: 1,
     title: "",
     summary: "",
     modules: [],
@@ -65,6 +154,8 @@ export function emptySchemeDraft(partial?: Partial<SchemeDraft>): SchemeDraft {
     frozen: false,
     notes: "",
     updatedAt: now,
+    pinned_fields: [],
+    business_input_rounds: 0,
     ...partial,
   };
 }
@@ -194,62 +285,300 @@ export function scoreCompleteness(draft: SchemeDraft): number {
   return Math.min(100, score);
 }
 
+/** 是否有可表达的主流程（≥1 条） */
+export function hasMainFlow(draft: Pick<SchemeDraft, "modules" | "mermaidFlow">): boolean {
+  if (draft.modules.length >= 1 && draft.mermaidFlow.trim().includes("flowchart")) {
+    return true;
+  }
+  return /-->/.test(draft.mermaidFlow);
+}
+
 /**
- * 用整段对话语料刷新方案（不冻结时）。保留已确认决策与已抉择冲突。
+ * SSOT v2.0.2 §2.2：`demoReady` 恰由四条布尔底线决定。
+ * completeness 只在 UI 展示，绝不参与本函数——否则“辅助分”会变成隐藏硬门禁。
+ */
+export function computeDemoReady(draft: SchemeDraft): boolean {
+  const openConflicts = draft.conflicts.filter((c) => c.chosenId === null).length;
+  return (
+    draft.modules.length >= 2 &&
+    hasMainFlow(draft) &&
+    openConflicts === 0 &&
+    draft.business_input_rounds >= 1
+  );
+}
+
+function isReviewableScheme(draft: SchemeDraft): boolean {
+  return (
+    draft.title.trim().length >= 2 &&
+    (draft.summary.trim().length >= 8 || draft.modules.length >= 1)
+  );
+}
+
+/**
+ * 唯一确认门禁（SSOT v2.0.2 §3.5）。
+ *
+ * 允许：
+ * - 从未生成 Demo（demo.status=none）；
+ * - Demo 对当前 revision 生成且用户对同一 revision 显式确认；
+ * - Demo 已失败/不可用，用户对当前 revision 显式接受流程图降级。
+ *
+ * 拒绝：
+ * - 生成/确认后方案又改过（revision 不一致）；
+ * - 已生成但未确认；
+ * - building / failed 尚未处置。
+ */
+export function evaluateSchemeConfirmation(
+  draft: SchemeDraft,
+  demo: DemoGate = EMPTY_DEMO_GATE,
+): SchemeConfirmationDecision {
+  const reasons: string[] = [];
+
+  if (draft.frozen) {
+    return {
+      ok: false,
+      code: "E_SCHEME_ALREADY_FROZEN",
+      message: "方案已冻结，不能重复确认",
+      reasons: ["方案已冻结"],
+      demo_mode: "none",
+    };
+  }
+
+  const openConflicts = draft.conflicts.filter((c) => c.chosenId === null).length;
+  if (openConflicts > 0) {
+    reasons.push(`仍有 ${openConflicts} 条未决冲突`);
+  }
+  if (!isReviewableScheme(draft)) {
+    reasons.push("方案摘要不足，至少需要可读标题与摘要/模块");
+  }
+  if (reasons.length > 0) {
+    return {
+      ok: false,
+      code:
+        openConflicts > 0
+          ? "E_SCHEME_CONFLICTS_OPEN"
+          : "E_SCHEME_NOT_REVIEWABLE",
+      message: reasons.join("；"),
+      reasons,
+      demo_mode: "none",
+    };
+  }
+
+  if (demo.status === "building") {
+    return {
+      ok: false,
+      code: "E_DEMO_BUILDING",
+      message: "Demo 仍在生成，请等完成或先重试",
+      reasons: ["Demo 仍在生成"],
+      demo_mode: "none",
+    };
+  }
+  if (demo.status === "failed") {
+    return {
+      ok: false,
+      code: "E_DEMO_FAILED",
+      message: "Demo 生成失败，请重试或显式接受流程图降级",
+      reasons: ["Demo 生成失败，尚未处置"],
+      demo_mode: "none",
+    };
+  }
+
+  if (demo.status === "none") {
+    return {
+      ok: true,
+      code: "OK",
+      message: "未生成 Demo，按静态方案签署",
+      reasons: [],
+      demo_mode: "none",
+    };
+  }
+
+  const demoMode = demo.status === "degraded_flowcard" ? "degraded" : "interactive";
+  if (demo.scheme_revision !== draft.scheme_revision) {
+    return {
+      ok: false,
+      code: "E_DEMO_STALE",
+      message: "方案已修改，Demo 与当前方案不再对应；请重新生成/确认",
+      reasons: ["Demo 基于旧版方案"],
+      demo_mode: demoMode,
+    };
+  }
+  if (demo.decision_revision !== draft.scheme_revision) {
+    return {
+      ok: false,
+      code: "E_DEMO_CONFIRMATION_REQUIRED",
+      message:
+        demo.status === "degraded_flowcard"
+          ? "请先显式接受流程图降级"
+          : "Demo 已生成，请先确认 Demo",
+      reasons: ["Demo 未对当前方案确认"],
+      demo_mode: demoMode,
+    };
+  }
+
+  return {
+    ok: true,
+    code: "OK",
+    message:
+      demo.status === "degraded_flowcard"
+        ? "已接受流程图降级，按标风险方案签署"
+        : "Demo 已对当前方案确认",
+    reasons: [],
+    demo_mode: demoMode,
+  };
+}
+
+/**
+ * 向后兼容别名。只表达“静态方案本身是否可确认”，不代替完整门禁。
+ * 新代码必须使用 `evaluateSchemeConfirmation`。
+ */
+export function canConfirmScheme(draft: SchemeDraft): boolean {
+  return evaluateSchemeConfirmation(draft, EMPTY_DEMO_GATE).ok;
+}
+
+export function isEffectiveBusinessInput(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 4) return false;
+  if (SMALLTALK_RE.test(t)) return false;
+  return BUSINESS_ATTR_RE.test(t) || t.length >= 16;
+}
+
+function isPinned(draft: SchemeDraft, field: SchemePinnedField): boolean {
+  return draft.pinned_fields.includes(field);
+}
+
+/**
+ * 用整段对话语料刷新方案（不冻结时）。
+ * 保留已确认决策、已抉择冲突、以及 user_pinned 字段。
  */
 export function rebuildSchemeFromCorpus(
   previous: SchemeDraft | null,
   corpus: string,
-  opts?: { titleHint?: string },
+  opts?: { titleHint?: string; incrementBusinessRound?: boolean },
 ): SchemeDraft {
   const text = corpus.trim();
-  const title =
+  if (previous?.frozen === true) {
+    return { ...previous, frozen: true };
+  }
+
+  const pinned = previous?.pinned_fields ?? [];
+  const titleFromHint =
     opts?.titleHint?.trim() ||
-    previous?.title ||
     (text.length > 40 ? `${text.slice(0, 40)}…` : text) ||
     "未命名方案";
-  const modules = extractModules(text);
+  const title = pinned.includes("title") && previous?.title
+    ? previous.title
+    : previous?.title && previous.title.length > titleFromHint.length
+      ? previous.title
+      : titleFromHint || previous?.title || "未命名方案";
+
+  const modules = pinned.includes("modules") && previous
+    ? previous.modules
+    : extractModules(text);
+
   const baseDecisions = defaultDecisions(modules);
   const prevDec = new Map((previous?.decisions ?? []).map((d) => [d.id, d]));
+  /**
+   * 只在用户真正动过时沿用旧值：`user_pinned` 是可选项，
+   * 直接用 `undefined` 赋值会违反 exactOptionalPropertyTypes，
+   * 故用条件展开而不是显式写回 undefined。
+   */
+  const carry = (old: { user_pinned?: boolean }) =>
+    old.user_pinned !== undefined ? { user_pinned: old.user_pinned } : {};
   const decisions = baseDecisions.map((d) => {
     const old = prevDec.get(d.id);
     if (!old) return d;
+    const pinnedByUser = old.user_pinned === true || old.source === "user";
     return {
       ...d,
       confirmed: old.confirmed,
       source: old.source,
-      recommended: old.source === "user" ? old.recommended : d.recommended,
+      recommended: pinnedByUser ? old.recommended : d.recommended,
+      ...carry(old),
     };
   });
+
   const freshConflicts = detectConflicts(text, modules);
   const prevCf = new Map((previous?.conflicts ?? []).map((c) => [c.id, c]));
   const conflicts = freshConflicts.map((c) => {
     const old = prevCf.get(c.id);
-    return old?.chosenId ? { ...c, chosenId: old.chosenId } : c;
+    if (old?.user_pinned || old?.chosenId) {
+      return { ...c, chosenId: old.chosenId, ...carry(old) };
+    }
+    return c;
   });
 
+  const summary =
+    pinned.includes("summary") && previous?.summary
+      ? previous.summary
+      : text.length > 280
+        ? `${text.slice(0, 280)}…`
+        : text;
+
+  const mermaidArchitecture = pinned.includes("mermaidArchitecture") && previous
+    ? previous.mermaidArchitecture
+    : buildMermaidArchitecture(title, modules);
+  const mermaidFlow = pinned.includes("mermaidFlow") && previous
+    ? previous.mermaidFlow
+    : buildMermaidFlow(modules);
+  const mermaidMindmap = pinned.includes("mermaidMindmap") && previous
+    ? previous.mermaidMindmap
+    : buildMermaidMindmap(title, modules);
+
+  const notes = pinned.includes("notes") && previous ? previous.notes : (previous?.notes ?? "");
+
+  let business_input_rounds = previous?.business_input_rounds ?? 0;
+  if (opts?.incrementBusinessRound === true) {
+    business_input_rounds += 1;
+  } else if (!previous && isEffectiveBusinessInput(text)) {
+    business_input_rounds = 1;
+  }
+
   const next = emptySchemeDraft({
+    ...(previous?.scheme_id ? { scheme_id: previous.scheme_id } : {}),
+    scheme_revision: previous ? previous.scheme_revision + 1 : 1,
     title,
-    summary: text.length > 280 ? `${text.slice(0, 280)}…` : text,
+    summary,
     modules,
-    mermaidArchitecture: buildMermaidArchitecture(title, modules),
-    mermaidFlow: buildMermaidFlow(modules),
-    mermaidMindmap: buildMermaidMindmap(title, modules),
+    mermaidArchitecture,
+    mermaidFlow,
+    mermaidMindmap,
     decisions,
     conflicts,
-    frozen: previous?.frozen === true,
-    notes: previous?.notes ?? "",
+    frozen: false,
+    notes,
     updatedAt: new Date().toISOString(),
+    pinned_fields: [...pinned],
+    business_input_rounds,
   });
-  if (next.frozen) {
-    return { ...previous!, frozen: true };
-  }
   const completeness = scoreCompleteness(next);
+  const withScore = { ...next, completeness };
   return {
-    ...next,
-    completeness,
-    demoReady: completeness >= 60 && conflicts.every((c) => c.chosenId !== null),
+    ...withScore,
+    demoReady: computeDemoReady(withScore),
   };
+}
+
+function withSchemeMutation(
+  draft: SchemeDraft,
+  patch: Partial<Omit<SchemeDraft, "scheme_id" | "scheme_revision">>,
+): SchemeDraft {
+  return {
+    ...draft,
+    ...patch,
+    scheme_revision: draft.scheme_revision + 1,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export function pinSchemeField(
+  draft: SchemeDraft,
+  field: SchemePinnedField,
+): SchemeDraft {
+  if (draft.frozen) return draft;
+  if (draft.pinned_fields.includes(field)) return draft;
+  return withSchemeMutation(draft, {
+    pinned_fields: [...draft.pinned_fields, field],
+  });
 }
 
 export function confirmSchemeDecision(
@@ -265,16 +594,13 @@ export function confirmSchemeDecision(
       confirmed: true,
       source: value && value !== d.recommended ? ("user" as const) : d.source,
       recommended: value ?? d.recommended,
+      user_pinned: true,
     };
   });
-  const next = { ...draft, decisions, updatedAt: new Date().toISOString() };
+  const next = withSchemeMutation(draft, { decisions });
   const completeness = scoreCompleteness(next);
-  return {
-    ...next,
-    completeness,
-    demoReady:
-      completeness >= 60 && next.conflicts.every((c) => c.chosenId !== null),
-  };
+  const withScore = { ...next, completeness };
+  return { ...withScore, demoReady: computeDemoReady(withScore) };
 }
 
 export function resolveSchemeConflict(
@@ -284,31 +610,40 @@ export function resolveSchemeConflict(
 ): SchemeDraft {
   if (draft.frozen) return draft;
   const conflicts = draft.conflicts.map((c) =>
-    c.id === conflictId ? { ...c, chosenId: optionId } : c,
+    c.id === conflictId
+      ? { ...c, chosenId: optionId, user_pinned: true }
+      : c,
   );
-  const next = { ...draft, conflicts, updatedAt: new Date().toISOString() };
+  const next = withSchemeMutation(draft, { conflicts });
   const completeness = scoreCompleteness(next);
-  return {
-    ...next,
-    completeness,
-    demoReady:
-      completeness >= 60 && conflicts.every((c) => c.chosenId !== null),
-  };
+  const withScore = { ...next, completeness };
+  return { ...withScore, demoReady: computeDemoReady(withScore) };
 }
 
 export function updateSchemeNotes(draft: SchemeDraft, notes: string): SchemeDraft {
   if (draft.frozen) return draft;
-  const next = { ...draft, notes, updatedAt: new Date().toISOString() };
+  const pinned = draft.pinned_fields.includes("notes")
+    ? draft.pinned_fields
+    : ([...draft.pinned_fields, "notes"] as SchemePinnedField[]);
+  const next = withSchemeMutation(draft, {
+    notes,
+    pinned_fields: pinned,
+  });
   const completeness = scoreCompleteness(next);
-  return {
-    ...next,
-    completeness,
-    demoReady:
-      completeness >= 60 && next.conflicts.every((c) => c.chosenId !== null),
-  };
+  const withScore = { ...next, completeness };
+  return { ...withScore, demoReady: computeDemoReady(withScore) };
 }
 
+/**
+ * 冻结方案。必须幂等：对已冻结的方案再冻结一次，必须原样返回。
+ *
+ * 原因（与 §5.2.1 事务绑定）：快照 digest 含方案全文，若每次冻结都刷新
+ * `updatedAt`，同一 `confirmation_id` 的重试会产生不同 digest，被
+ * `writeSchemeSnapshot` 判成“覆盖另一版方案”而冲突——网络抖动下的重试
+ * 就永远签不上。
+ */
 export function freezeScheme(draft: SchemeDraft): SchemeDraft {
+  if (draft.frozen) return draft;
   return { ...draft, frozen: true, updatedAt: new Date().toISOString() };
 }
 
