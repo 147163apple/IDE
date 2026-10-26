@@ -3366,14 +3366,27 @@ export class StagentDaemon {
           try {
             const body = (await this.readJsonBody(req)) as {
               reviewer?: string;
+              acknowledge_dirty?: boolean;
             };
             const contract = await this.orchestrator.approve(
               contractId,
               body.reviewer ?? "local-user",
+              {
+                acknowledgeDirty: body.acknowledge_dirty === true,
+              },
             );
             this.emitContractUpdate(contract);
             this.sendJson(res, 200, { contract });
           } catch (err) {
+            if (err instanceof DirtyWorktreeConfirmationRequiredError) {
+              this.sendJson(res, 409, {
+                error: "worktree_dirty_confirmation_required",
+                code: "E_WORKTREE_DIRTY",
+                message: err.message,
+                dirty_count: err.dirtyFiles.length,
+              });
+              return;
+            }
             this.sendActionError(res, err);
           }
           return;

@@ -53,6 +53,7 @@ import { planDependencyStrategy, runIsolatedInstall } from "../deps/strategy";
 import { mountDependencySymlink } from "../deps/resolver";
 import {
   createTaskWorktree,
+  DirtyWorktreeConfirmationRequiredError,
   execGit,
   getWorktreePath,
   removeTaskWorktree,
@@ -216,6 +217,7 @@ export class ContractOrchestrator {
   async approve(
     contractId: string,
     reviewer: string,
+    options?: { acknowledgeDirty?: boolean },
   ): Promise<SoftwareContract> {
     return withContractLock(
       contractLockPath(this.repoRoot, contractId),
@@ -262,12 +264,15 @@ export class ContractOrchestrator {
           approvedRevision: current.contract_revision,
         });
 
+        const acknowledgeDirty =
+          options?.acknowledgeDirty === true || this.acknowledgeDirty;
+
         try {
           await createTaskWorktree({
             repoRoot: this.repoRoot,
             contractId,
             baseBranch: current.authorization.git.base_branch,
-            acknowledgeDirty: this.acknowledgeDirty,
+            acknowledgeDirty,
           });
           // 依赖复用/隔离决策（ADR-002）
           await this.prepareDependencies(contractId);
@@ -280,6 +285,15 @@ export class ContractOrchestrator {
           this.issueExecForContract(executing, wt);
           return executing;
         } catch (err) {
+          // 脏主仓未确认：回退待批并抛给 API，由前端带 acknowledge_dirty 重试
+          if (err instanceof DirtyWorktreeConfirmationRequiredError) {
+            this.store.transition({
+              contractId,
+              lifecycleState: "PENDING_APPROVAL",
+              approvalStatus: "PENDING_REVIEW",
+            });
+            throw err;
+          }
           // 准备中断：回退等待重新审批，并留存原因
           await this.writeEvidence(current, {
             status: "BLOCKED",
