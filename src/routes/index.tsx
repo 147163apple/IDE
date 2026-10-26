@@ -1066,18 +1066,20 @@ function Console() {
   );
 
   const handleStartRealPlaytest = useCallback(async () => {
-    if (!conn || !selectedId) {
-      setRealPlaytestError("请先在左侧选一份合同，再启动真机预览。");
+    if (!conn) {
+      setRealPlaytestError("还没连上工作台，请先一键重开。");
       setStudioViewportOverride("playtest");
       return;
     }
+    // 无选中合同时仍可起试玩桩（空态文案承诺）；Daemon 接受任意 contract_id 写 stub。
+    const playtestContractId = selectedId ?? "playtest-local-stub";
     setRealPlaytestBusy(true);
     setRealPlaytestError(null);
     try {
       const preview = await startRealPlaytest(conn, {
-        contract_id: selectedId,
+        contract_id: playtestContractId,
         stub: true,
-        title: selected?.intent.title,
+        title: selected?.intent.title ?? "真机试玩",
       });
       setRealPlaytest({
         contract_id: preview.contract_id,
@@ -1107,10 +1109,14 @@ function Console() {
   }, [conn, selectedId, selected]);
 
   const handleStopRealPlaytest = useCallback(async () => {
-    if (!conn || !selectedId) return;
+    if (!conn) return;
+    const playtestContractId =
+      selectedId ?? realPlaytest?.contract_id ?? "playtest-local-stub";
     setRealPlaytestBusy(true);
     try {
-      const preview = await stopRealPlaytest(conn, { contract_id: selectedId });
+      const preview = await stopRealPlaytest(conn, {
+        contract_id: playtestContractId,
+      });
       setRealPlaytest({
         contract_id: preview.contract_id,
         url: preview.url,
@@ -1126,7 +1132,7 @@ function Console() {
     } finally {
       setRealPlaytestBusy(false);
     }
-  }, [conn, selectedId]);
+  }, [conn, selectedId, realPlaytest]);
 
   /** TASK-C.11b：确认 Demo 感官对齐 → 展示白话合同卡（不立刻写真码） */
   const handleConfirmPrototype = useCallback(async () => {

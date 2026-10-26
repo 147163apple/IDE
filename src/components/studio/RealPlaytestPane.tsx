@@ -89,7 +89,7 @@ export function RealPlaytestPane(props: RealPlaytestPaneProps) {
         ) : null}
       </div>
 
-      {status === "ERROR" && (
+      {(status === "ERROR" || Boolean(props.errorMessage?.trim())) && (
         <div
           data-testid="real-playtest-error"
           role="alert"
