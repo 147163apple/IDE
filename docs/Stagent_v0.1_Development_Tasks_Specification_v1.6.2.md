@@ -92,6 +92,7 @@
 > 55. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10q · Studio 全景/施工双视角壳）**：Tina 授权（t684u）——图谱相关方案写入设计说明；v0.1 先立双视角壳 + 改名消歧义；三张真全景图进 v0.2。新增 **`TASK-C.10q`** 并收口为 **`[COMPLETED]`**（合入 tip `4280de6`；四件套 **1342 passed / 6 skipped**）。交付：`StudioLensShell` + `PanoramaPane`（合同摘要 + v0.2 占位）；无图默认全景、有图/刚建图切施工；「业务功能导图」→「本轮施工·功能汇总」；全景禁止施工绿灯。前置：`TASK-C.10p` COMPLETED。**不改**鉴权；**不假绿**；**不改** start/verify/illumination；**不抢** D.1e。对照走查 §6.26、设计说明 §9、RFC 附录 C。
 > 59. **状态回写（2026-10-26 · 合入 TASK-C.12a–e COMPLETED · Spec Freeze Top5 Delta）**：Tina t819u 授权「全部一起」实现。五张 Delta 升级卡同批落地：`exec_token`/`resume_token`+`jti`（EO-07）、`session_epoch`+`state_seq`+EO-01（含 `CONTRACT_SIGNING`）、越界 SIGINT 3s→SIGKILL→吊销→清锁→PAUSED（EO-02/07）、Demo 三态+`can_sign`+records 轻量拷贝（EO-05/06）、`audit-manifest.json`（EO-03/04/05）。专用单测 `tests/unit/task-c12-top5-delta.test.ts`；相关回归（gateway/merger/orchestrator/presentation）绿。main tip `12b14b1`。**不改** D.1 鉴权通道；**不抢** D.1e；**不改**左栏文件树/右栏对话 UX（除状态/can_sign 必要字段）；Impact/Mode/AST/云仍 v0.2+。CLOSED≠体验通过——走查后再请 Tina 体验。
 > 60. **状态回写（2026-10-26 · 立卡 TASK-C.14a–c · 已有项目基线档案）**：Tina 授权（t835u「升格立卡」）。按讨论稿 `docs/reports/已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`（tip `3c8411b`）升格为三张 **Delta 薄卡**：**`TASK-C.14a`**（只读沙盒静态扫描器：只读挂载+物理断网+约 3s 超时熔断；禁动态执行；P0 骨架秒级）、**`TASK-C.14b`**（两段式渐进扫 + 基线档案落盘 `.stagent/records/baseline/` + 全景视口；尽量全；流式加深；确认≠授权；按钮「认可此基线作为后续参考」）、**`TASK-C.14c`**（Workspace Dirty Check 黄标管家话术 + 首张微合同默认排除未跟踪/未提交；图谱两行白话；P0 解锁后 Supervisor 防抢跑降级）。建议序 **C.14a→C.14b→C.14c**；**当前首要**→ **C.14a**。**本条仅文档立卡**；**CLOSED 设计意图 ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不**把整篇并进 Spec Freeze 五文档；**不抢** D.1e；Impact/Mode/AST/云仍 **v0.2+**；不改 D.1 鉴权。
+> 61. **状态回写（2026-10-26 · 合入验收 TASK-C.14a–c COMPLETED · 基线档案）**：Tina t836u 授权实现+走查；t847u 授权文档验收回写。三卡同批落地：`0417203`（feat 扫描/渐进落盘/Dirty+防抢跑）→ `e01188f`（Dirty porcelain 路径硬化）→ `dd14fa0`（重建控制台露出全景基线卡）。验收：打开已有项目全景可见「项目现状基线档案」+「认可此基线作为后续参考」；确认≠授权；观察≠质量结论。**已知不挡体验缝**：沙盒仍为逻辑级（非 OS 只读挂载）；深度进度轮询；脏区黄标需工作区确有未提交文件才可见。**不**扩 Spec Freeze 五正文；讨论稿仍分治；不抢 D.1e。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
 > 57. **状态回写（2026-10-26 · 过夜合入 TASK-C.11a–e COMPLETED）**：Tina t748u 授权过夜开发。五步体感链前端可感知落地（选择题 / prototypes Demo+确认 / 白话合同卡 / 越界 PAUSED 弹窗 / 质疑回灰）；`run-worker` 挂 Demo 确认门禁。验收见 `docs/reports/BRIEF-C11-Supervisor五步-起床验收.md`。**不升格**讨论稿；**不改** D.1 鉴权；**不抢** D.1e。
 > 56. **状态回写（2026-10-26 · 立卡 TASK-C.11a–e · Supervisor 五步体感链）**：Tina 授权（t747u 五张一起写进任务规范；t748u 过夜直接开发）。按定妆照五步新增 **`TASK-C.11a`**（右栏推荐选择题 ≤2 轮）、**`TASK-C.11b`**（隔离 Demo → `.stagent/prototypes/` + 感官确认）、**`TASK-C.11c`**（白话合同卡签署前零写入主干）、**`TASK-C.11d`**（施工图 Evidence 点亮 + 越界 PAUSED 扩权/回滚）、**`TASK-C.11e`**（真机对照验收 + 质疑触发 S.5 自查回灰）。硬标准对齐 `docs/reports/工程决策拍板-Top7-2026-10-25.md` 与《核心资产治理》《Supervisor运转机制》。建议序 **C.11a→C.11b→C.11c→C.11d→C.11e**；**当前首要**→ **C.11a**。**不升格**整份澄清/API 讨论稿；**不抢** D.1e；Impact 完整 AST 仍 v0.2+；架构规范仅 §11 注记 9 轻量锚定（呈现/门禁体感，不改变 loopback+#token / Demo 独立 Origin 原则）。
@@ -170,9 +171,9 @@
 | **TASK-C.12c** | 越界原子拦截（软停→杀→吊销→清锁） | 契约/安全 Delta | **[COMPLETED]**（tip `12b14b1`） | P4 Spec Freeze→施工 | • 前置 `C.12a`+`C.11d`<br>• SIGINT 软停 3s→超时 SIGKILL→吊销 exec_token→清 `.git/index.lock`→PAUSED 问人<br>• Top5#3 / EO-02·07；禁静默放行；不默认立刻 kill -9 |
 | **TASK-C.12d** | Demo 三态门禁 + can_sign + records 拷贝 | Supervisor/门禁 Delta | **[COMPLETED]**（tip `12b14b1`） | P4 Spec Freeze→施工 | • 前置 `C.11b`+`C.11c`+`C.12b`<br>• `demo_mode` 三态；`can_sign` 硬谓词；合入后轻量拷贝 `.stagent/records/`<br>• Top5#4 / EO-05·06；不推翻 prototypes |
 | **TASK-C.12e** | 无 Git 审计侧车 audit-manifest | 审计/交付 Delta | **[COMPLETED]**（tip `12b14b1`） | P4 Spec Freeze→施工 | • 前置 `C.12d`<br>• `.stagent/records/{contract_id}/audit-manifest.json`；脱敏后哈希；不依赖 Git Trailer<br>• Top5#5 / EO-03·04·05；本地 only（云同步 v0.2+） |
-| **TASK-C.14a** | 只读沙盒静态扫描器（基线 P0） | 已有项目/基线档案 | **[NEW_TASK]** | P4 基线档案 | • 前置 `C.12e`+`C.10q` COMPLETED<br>• 只读挂载+物理断网+约 3s 熔断；禁动态执行；P0 骨架秒级<br>• 讨论稿定案：打开即扫；CLOSED≠已实现 |
-| **TASK-C.14b** | 渐进扫 + baseline 落盘 + 全景视口 | 已有项目/基线档案 | **[NEW_TASK]** | P4 基线档案 | • 前置 `C.14a`<br>• 两段式渐进；`.stagent/records/baseline/`；确认≠授权；「认可此基线作为后续参考」<br>• 尽量全呈现；观察≠质量结论 |
-| **TASK-C.14c** | Dirty Check + 图谱白话 + 防抢跑 | 已有项目/基线档案 | **[NEW_TASK]** | P4 基线档案 | • 前置 `C.14b`<br>• 脏区黄标管家话术；首张微合同默认排除未跟踪/未提交<br>• 图谱两行白话；P0 解锁后 Supervisor 防抢跑降级 |
+| **TASK-C.14a** | 只读沙盒静态扫描器（基线 P0） | 已有项目/基线档案 | **[COMPLETED]**（tip `0417203`） | P4 基线档案 | • 前置 `C.12e`+`C.10q` COMPLETED<br>• 逻辑级只读+断网意图+约 3s 熔断；禁动态执行；P0 骨架秒级<br>• 打开即扫已落地；已知缝：非 OS 只读挂载 |
+| **TASK-C.14b** | 渐进扫 + baseline 落盘 + 全景视口 | 已有项目/基线档案 | **[COMPLETED]**（tips `0417203`/`dd14fa0`） | P4 基线档案 | • 前置 `C.14a`<br>• 两段式渐进；`.stagent/records/baseline/`；确认≠授权；「认可此基线作为后续参考」<br>• 全景可见基线卡；观察≠质量结论 |
+| **TASK-C.14c** | Dirty Check + 图谱白话 + 防抢跑 | 已有项目/基线档案 | **[COMPLETED]**（tips `0417203`/`e01188f`） | P4 基线档案 | • 前置 `C.14b`<br>• 脏区黄标管家话术；首张微合同默认排除未跟踪/未提交<br>• 图谱两行白话；P0 解锁后 Supervisor 防抢跑降级 |
 | **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `830fca1`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
@@ -2020,7 +2021,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 #### 【Task C.14a】只读沙盒静态扫描器（基线 P0 骨架）`[COMPLETED]`
 * **任务编号**：`TASK-C.14a`
 * **前置依赖**：`TASK-C.12e` (COMPLETED)、`TASK-C.10q` (COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；只读沙盒静态扫描器 + 负例单测；CLOSED 设计意图已落地为可测实现）
+* **任务状态**：**[COMPLETED]**（2026-10-26 合入 tip `0417203`；Tina t836u 实现+走查；只读沙盒静态扫描器 + 负例单测。**验收注**：逻辑级只读/断网意图已测；**非** OS 只读挂载——已知不挡体验缝，OK）
 * **对照痛点 / Spec 锚点**：讨论稿 `docs/reports/已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`（tip `3c8411b`）文首 Tina 定案 3 + 工程补丁 1 + 原则 4 / §7.3。打开已有项目须「打开即自动深扫、零弹窗」，但不得动态执行项目脚本或触网。
 * **v0.1 范围（施工合同 · Delta）**：
   1. 实现（或挂载）**基线静态扫描器**：在 **只读挂载 + 物理断网 + 约 3 秒超时熔断** 的轻量沙盒内跑；**禁止**动态执行用户项目脚本（含 Webpack/Vite 配置副作用、加载 `.env` 触发外网、CLI 插件 init）。
@@ -2042,8 +2043,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 #### 【Task C.14b】渐进扫 + 基线档案落盘 + 全景视口 `[COMPLETED]`
 * **任务编号**：`TASK-C.14b`
-* **前置依赖**：`TASK-C.14a` (NEW_TASK → 实现时须 COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；渐进扫 + `.stagent/records/baseline/` 落盘 + 全景视口 + 确认≠授权）
+* **前置依赖**：`TASK-C.14a` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-26 tips `0417203`/`dd14fa0`；Tina t836u；渐进扫 + `.stagent/records/baseline/` 落盘 + 全景视口 + 确认≠授权。**验收注**：全景可见「项目现状基线档案」与「认可此基线作为后续参考」；深度进度为轮询——已知缝 OK）
 * **对照痛点 / Spec 锚点**：讨论稿定案 1–2、工程补丁 2、阶段 A–E、升格备忘 3；产品名 **项目现状基线档案**；落盘 **`.stagent/records/baseline/`**（可带时间戳/commit）；**禁止** `contract_000` 伪合同命名。
 * **v0.1 范围**：
   1. **两段式渐进扫描**：P0 骨架亮起后解锁右栏对话；P1/P2（依赖/语义等）后台流式加深，节点逐个亮起；深度未完**不阻塞**用户提需求。
@@ -2061,8 +2062,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 #### 【Task C.14c】Workspace Dirty Check + 图谱白话 + Supervisor 防抢跑 `[COMPLETED]`
 * **任务编号**：`TASK-C.14c`
-* **前置依赖**：`TASK-C.14b` (NEW_TASK → 实现时须 COMPLETED)
-* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；Dirty Check 管家黄标 + 首张微合同排除 + 图谱两行白话 + Supervisor 防抢跑）
+* **前置依赖**：`TASK-C.14b` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（2026-10-26 tips `0417203`/`e01188f`；Tina t836u；Dirty Check 管家黄标 + 首张微合同排除 + 图谱两行白话 + Supervisor 防抢跑。**验收注**：脏区黄标需工作区确有未提交/未跟踪文件才可见——已知缝 OK）
 * **对照痛点 / Spec 锚点**：讨论稿 §2.3、工程补丁 3、升格备忘 1–2；对齐 S.4 / `E_OUT_OF_SCOPE_UNTRACKED` 精神；文案「管家保护」而非系统报错。
 * **v0.1 范围**：
   1. 基线扫描强制 **Workspace Dirty Check**：记录扫描时是否存在 `uncommitted changes` / `untracked files`。
@@ -2405,7 +2406,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：已有项目基线档案 **`TASK-C.14a`–`c` 已立卡 `[NEW_TASK]`**（权威输入：讨论稿 tip `3c8411b`；Tina t835u 升格立卡）。建议序 **C.14a→C.14b→C.14c**；**当前首要**→ **C.14a**。**NEW_TASK ≠ 已实现**；待 Tina 点名开发前不写产品码。`TASK-C.12a–e` 已 COMPLETED（tip `12b14b1`）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**；Impact/Mode/AST/云 = v0.2+；**不**扩 Spec Freeze 五文档。
+> - **当前首要编码任务**：已有项目基线档案 **`TASK-C.14a`–`c` → `[COMPLETED]`**（tips `0417203` / `e01188f` / `dd14fa0`；权威输入讨论稿 tip `3c8411b`；Tina t836u 实现+走查，t847u 文档验收回写）。全景可见基线卡；确认≠授权。已知缝（逻辑级沙盒、轮询深度进度、脏区需脏工作区）不挡体验。`TASK-C.12a–e` 已 COMPLETED（tip `12b14b1`）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**；Impact/Mode/AST/云 = v0.2+；**不**扩 Spec Freeze 五正文。下一项待 Tina 点名。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
@@ -2488,6 +2489,7 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-69（立卡，2026-10-26）**：新增 `TASK-C.12a`–`TASK-C.12e` 五张 `[NEW_TASK]`（Spec Freeze → API Top5 Delta 升级卡）。权威输入：`docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`（tip `e4779ad`）+ 澄清 §6 + Checklist §3 + EO-01～07。同步：版本头第 58 条、§1.1 矩阵五行、§2.1 ASCII/JSON（`C.11e+C.11c→C.12a→…→C.12e`；`C.11d+C.12a+C.12b→C.12c`；`C.11b/c+C.12b/c→C.12d`）、§3.4 详细卡、Sprint「当前首要」→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；不写产品码；不抢 D.1e；Impact/Mode/AST/云 = v0.2+。
 - **P-70（合入回写，2026-10-26）**：`TASK-C.12a`–`TASK-C.12e` → **`[COMPLETED]`**（main tip `12b14b1`；Tina t819u 全部一起实现）。同步：版本头第 59 条、§1.1 矩阵、§3.4 详细卡、Sprint「当前首要」→ Top5 Delta 收口。交付：双层 Token、epoch/seq+DeliveryState、越界原子拦截、Demo 三态+can_sign+records、audit-manifest。专用单测+相关回归绿。不改 D.1；不抢 D.1e；走查后再体验。
 - **P-71（立卡，2026-10-26）**：新增 `TASK-C.14a`–`TASK-C.14c` 三张 `[NEW_TASK]`（已有项目 · 项目现状基线档案）。权威输入：`docs/reports/已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`（tip `3c8411b`；Tina t835u「升格立卡」）。同步：版本头第 60 条、§1.1 矩阵三行、§2.1 ASCII/JSON（`C.12e+C.10q→C.14a→C.14b→C.14c`）、§3.4 详细卡、Sprint「当前首要」→ **C.14a**。**本条仅文档立卡**；**CLOSED 设计意图 ≠ 已实现**；不写产品码；**不**扩 Spec Freeze 五文档；不抢 D.1e；Impact/Mode/AST/云 = v0.2+。
+- **P-72（合入验收回写，2026-10-26）**：`TASK-C.14a`–`TASK-C.14c` → **`[COMPLETED]`**（tips `0417203`/`e01188f`/`dd14fa0`；Tina t836u 实现+走查，t847u 文档回写）。同步：版本头第 61 条、§1.1 矩阵三行、§3.4 详细卡验收注、Sprint「当前首要」→ C.14 收口。交付要点：打开即扫、渐进落盘 `.stagent/records/baseline/`、全景基线卡、确认≠授权、Dirty 黄标管家话术、防抢跑。已知缝登记：逻辑级沙盒非 OS 挂载。**不**扩 Spec Freeze 五正文；讨论稿仍分治。
 - **P-68（过夜合入，2026-10-26）**：`TASK-C.11a`–`TASK-C.11e` → **`[COMPLETED]`**。实现：`src/lib/journey/clarification.ts`、`daemon/supervisor/demo/prototypes.ts`、Supervisor 三卡组件、`index.tsx` 五步接线、`ScopePausedDialog`、质疑 `grayOutTaskGraphNodes`、`run-worker` Demo 门禁。单测/UI 测见 `tests/unit/clarification-rounds|dispute-gray|prototypes-demo` 与 `tests/ui/clarification-choice-card`。BRIEF：`docs/reports/BRIEF-C11-Supervisor五步-起床验收.md`。
 - **P-67（立卡，2026-10-26）**：新增 `TASK-C.11a`–`TASK-C.11e` 五张 `[NEW_TASK]`（Supervisor 定妆照五步体感链）。同步：版本头第 56 条、§1.1 矩阵五行、§2.1 ASCII/JSON（`C.10q+C.10k→C.11a→…→C.11e`；`C.10o→C.11d`；`C.10m→C.11e`）、§3.4 详细卡、Sprint「当前首要」→ **C.11a**。硬标准：`docs/reports/工程决策拍板-Top7-2026-10-25.md`。**本条先文档立卡**；实现按 Tina t748u 过夜授权随后续提交。**不升格**讨论稿全文；**不改**鉴权原则；**不抢** D.1e；Impact AST 仍 v0.2+。
 **一致性核验结果**：本版生成后以脚本校验 JSON DAG 无环、所有边端点均为已登记任务、每张任务卡的前置依赖均在 DAG 中存在直达边或可验证的传递路径（直达边缺失者如 `S.1→S.5` 经 `S.2` 传递，属显式豁免）、Sprint 0/4 不重复排入 TASK-0.2c、E.1/E.2 完成状态一致；TASK-D.3 的有效映射表采用架构定义的 15 态，且 `(APPROVED, AUDITED)` 四分支带显式短路优先级，旧词仅出现在明确禁止引入的说明中。该检查是文档结构校验，不代表本次重新运行代码测试、Schema 编译或端到端验证。

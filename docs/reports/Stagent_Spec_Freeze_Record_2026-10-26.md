@@ -3,7 +3,7 @@
 **日期**: 2026-10-26（Asia/Hong_Kong）  
 **定位**: 短锚点 / 索引 — **不**合并五份正文；正文继续分治。  
 **权威声明**: 自消歧锚点 tip **`fb6167d`** 起，经 **`836be2b`**（API Top5）、**`cbc0216`**（DocGov/Workflow 分轨）至**本封版 tip**，**以本记录 + 下列 CLOSED 规范为唯一事实源**；此前讨论草稿、过时「待决议 / Open Decision」、与本记录冲突的旧词（单一 `DEMO_READY`、笼统交付 `VERIFIED`、资产 `FROZEN` 冒充主交付、弹窗静默放行等）**一律作废**。  
-**施工权威仍是**: 仓库根 `docs/`《架构规范》《任务规范》+ 升格后的任务卡；讨论稿正文仍分治；**Top5 Delta 已升格立卡**为 `TASK-C.12a`–`TASK-C.12e`（见《任务规范》；**NEW_TASK ≠ 已实现**）。
+**施工权威仍是**: 仓库根 `docs/`《架构规范》《任务规范》+ 升格后的任务卡；讨论稿正文仍分治；**Top5 Delta** `TASK-C.12a`–`e` 与**基线档案** `TASK-C.14a`–`c` 均见《任务规范》（已 COMPLETED；**CLOSED ≠ 免体验**）。
 
 ---
 
@@ -112,7 +112,7 @@
 └────────────────────────────────────────────────────────────┘
 ```
 
-讨论稿侧 Spec Freeze **不等于**已实现。Top5 Delta **已立卡** `TASK-C.12a`–`e`（仍为 NEW_TASK，待点名开发）。
+讨论稿侧 Spec Freeze **不等于**已实现。Top5 Delta `TASK-C.12a`–`e` 与基线 `TASK-C.14a`–`c` **已立卡并 COMPLETED**（仍须走查/体验；**不**把讨论稿整份并入 Freeze 五正文）。
 
 ---
 
@@ -122,16 +122,24 @@ Tina 显式「升格立卡」后，Top5 Delta **已写入**《任务规范》为
 
 | 卡 | 一句话 | 状态 |
 | :--- | :--- | :--- |
-| **`TASK-C.12a`** | 双层 Token（exec + resume/`jti`；PAUSED 吊销） | `[NEW_TASK]` |
-| **`TASK-C.12b`** | `session_epoch`+`state_seq` + EO-01（含 `CONTRACT_SIGNING`） | `[NEW_TASK]` |
-| **`TASK-C.12c`** | 越界原子拦截 SIGINT 3s→SIGKILL→吊销→清锁 | `[NEW_TASK]` |
-| **`TASK-C.12d`** | Demo 三态 + `can_sign` + records 拷贝 | `[NEW_TASK]` |
-| **`TASK-C.12e`** | `audit-manifest.json` 无 Git 侧车 | `[NEW_TASK]` |
+| **`TASK-C.12a`** | 双层 Token（exec + resume/`jti`；PAUSED 吊销） | `[COMPLETED]`（tip `12b14b1`） |
+| **`TASK-C.12b`** | `session_epoch`+`state_seq` + EO-01（含 `CONTRACT_SIGNING`） | `[COMPLETED]`（tip `12b14b1`） |
+| **`TASK-C.12c`** | 越界原子拦截 SIGINT 3s→SIGKILL→吊销→清锁 | `[COMPLETED]`（tip `12b14b1`） |
+| **`TASK-C.12d`** | Demo 三态 + `can_sign` + records 拷贝 | `[COMPLETED]`（tip `12b14b1`） |
+| **`TASK-C.12e`** | `audit-manifest.json` 无 Git 侧车 | `[COMPLETED]`（tip `12b14b1`） |
 
-- **建议开发序**：C.12a→C.12b→C.12c→C.12d→C.12e；**当前首要** = C.12a。  
-- **仍成立**：CLOSED ≠ 已实现；点名开发前不写产品码；冲突裁决：本封版记录 → CLOSED 五份正文 → 更早草稿（作废）。  
+- **开发序已收口**：C.12a→…→C.12e 已 COMPLETED（tip `12b14b1`）。  
+- **仍成立**：CLOSED ≠ 免体验验证；冲突裁决：本封版记录 → CLOSED 五份正文 → 更早草稿（作废）。  
 - 五份讨论稿正文**不整份**并入架构规范；施工只认任务卡 + 本锚点引用。
 
 ---
 
-*生成说明：压缩 Tina 对「为何需要 Spec Freeze」四因；事实对齐 tip `fb6167d` / `836be2b` / `cbc0216`；2026-10-26 升格立卡 C.12a–e。Docs only。*
+## 7. 已有项目基线档案（短锚 · 不并入五正文）
+
+- 权威讨论稿：[`已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`](./已有项目接管-基线档案体验设计讨论稿-2026-10-26.md)；产品名 **项目现状基线档案**；确认≠授权。  
+- 任务卡 **`TASK-C.14a`–`c`** 已 COMPLETED（tips `0417203` / `e01188f` / `dd14fa0`）。  
+- **不**把该讨论稿并入 Spec Freeze 五正文；本条仅为索引入口。
+
+---
+
+*生成说明：压缩 Tina 对「为何需要 Spec Freeze」四因；事实对齐 tip `fb6167d` / `836be2b` / `cbc0216`；升格立卡 C.12a–e；2026-10-26 补 C.14 短锚 + 状态回写。Docs only。*
