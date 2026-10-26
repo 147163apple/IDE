@@ -13,12 +13,12 @@
 **本文是 Stagent Supervisor 的单一事实源（Single Source of Truth）。**
 
 - 凡「右栏怎么聊、中栏怎么显、何时出 Demo、如何确认方案、施工门禁与异常怎么处置」——**只认本文**。
-- 下列旧文若与本文冲突，**以本文为准**；旧文可保留作档案，文首须指向本文：
-  - `docs/reports/Supervisor右栏对话行为-设计-2026-10-26.md`
-  - `docs/reports/Stagent_Supervisor_End_to_End_Workflow_v1.0.md`
-  - `docs/reports/Stagent_Clarification_and_Authorization_Specification_v1.0.md`
-  - `docs/reports/Stagent_Interface_Contract_Checklist_v1.0.md`
-  - `docs/reports/Supervisor运转机制-2026-10-25.md`（机制定稿；与 C.18 体验冲突处以本文第 1～3 章为准，第 4～5 章硬防线与之对齐）
+- 下列旧文若与本文冲突，**以本文为准**。Tina t908u「归档」后正文在 `docs/archive/supervisor-pre-ssot/`；`docs/reports/` 同名路径仅为 stub（`TASK-C.20`）：
+  - `docs/archive/supervisor-pre-ssot/Supervisor右栏对话行为-设计-2026-10-26.md`
+  - `docs/archive/supervisor-pre-ssot/Stagent_Supervisor_End_to_End_Workflow_v1.0.md`
+  - `docs/archive/supervisor-pre-ssot/Stagent_Clarification_and_Authorization_Specification_v1.0.md`
+  - `docs/archive/supervisor-pre-ssot/Stagent_Interface_Contract_Checklist_v1.0.md`
+  - `docs/archive/supervisor-pre-ssot/Supervisor运转机制-2026-10-25.md`（机制定稿；与 C.18 体验冲突处以本文第 1～3 章为准，第 4～5 章硬防线与之对齐）
 - **造 Stagent 本体的施工权威**仍是：`docs/Stagent_System_Architecture_Specification_v1.6.1.md` + `docs/Stagent_v0.1_Development_Tasks_Specification_v1.6.2.md`。本文不替代这两份宪法/任务卡，只统合 **Supervisor 产品与监理灵魂**。
 - **CLOSED ≠ 已全实现**：第 4 章「已验证硬防线」标明 v0.1 已验项；其余为目标契约时须注明。
 - **历史废弃（体验层）**（勿再当现行 UX）：

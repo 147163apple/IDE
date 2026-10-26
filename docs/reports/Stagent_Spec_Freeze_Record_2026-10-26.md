@@ -1,6 +1,7 @@
 # Stagent 规范资产封版记录（Spec Freeze Record）
 
-> **Supervisor SSOT 升级（2026-10-26）**：体验与监理合流权威见 [`../specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（`TASK-C.19`）。本 Freeze 记录仍是封版索引；**与 SSOT 冲突的体验旧词（五视口日常入口、≤2 轮问卷门控等）以 SSOT 为准**。 五正文可保留作档案字段来源。
+> **Supervisor SSOT 升级（2026-10-26）**：体验与监理合流权威见 [`../specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（`TASK-C.19`）。本 Freeze 记录仍是**全局多主题封版索引**（保留在 `docs/reports/`，**未**整份归档）。  
+> **合流前五正文已归档**（Tina t908u · `TASK-C.20`）：[`../archive/supervisor-pre-ssot/`](../archive/supervisor-pre-ssot/)；本目录同名文件仅为 **stub**。**与 SSOT 冲突的体验旧词（五视口日常入口、≤2 轮问卷门控等）以 SSOT 为准**。
 
 **日期**: 2026-10-26（Asia/Hong_Kong）  
 **定位**: 短锚点 / 索引 — **不**合并五份正文；正文继续分治。  
@@ -29,11 +30,11 @@
 
 | # | 文件 | 收口要点 | 关键 tip |
 | :--- | :--- | :--- | :--- |
-| 1 | [`Supervisor右栏对话行为-设计-2026-10-26.md`](./Supervisor右栏对话行为-设计-2026-10-26.md) | **§0** 语义折叠；**§8～§13** 产品 CLOSED；**§14** DEC-01～06 + 四补钉 + **EO-01～10** CLOSED | `fa7f007`…`d610d0a` 等；交叉注记续至 `cbc0216` |
-| 2 | [`Stagent_Clarification_and_Authorization_Specification_v1.0.md`](./Stagent_Clarification_and_Authorization_Specification_v1.0.md) | Top7 消歧；**§5** 过时待决核销；**§6 API Top5** 定案 | `fb6167d` → `836be2b` |
-| 3 | [`Stagent_Interface_Contract_Checklist_v1.0.md`](./Stagent_Interface_Contract_Checklist_v1.0.md) | **§3** Top5 As-is→To-be 对账表重写；附录 Token Schema 草稿 | `836be2b` |
+| 1 | [`Supervisor右栏…`](./Supervisor右栏对话行为-设计-2026-10-26.md)（stub）/ [归档](../archive/supervisor-pre-ssot/Supervisor右栏对话行为-设计-2026-10-26.md) | **§0** 语义折叠；**§8～§13** 产品 CLOSED；**§14** DEC-01～06 + 四补钉 + **EO-01～10** CLOSED | `fa7f007`…`d610d0a` 等；交叉注记续至 `cbc0216` |
+| 2 | [`Clarification…`](./Stagent_Clarification_and_Authorization_Specification_v1.0.md)（stub）/ [归档](../archive/supervisor-pre-ssot/Stagent_Clarification_and_Authorization_Specification_v1.0.md) | Top7 消歧；**§5** 过时待决核销；**§6 API Top5** 定案 | `fb6167d` → `836be2b` |
+| 3 | [`Interface Checklist`](./Stagent_Interface_Contract_Checklist_v1.0.md)（stub）/ [归档](../archive/supervisor-pre-ssot/Stagent_Interface_Contract_Checklist_v1.0.md) | **§3** Top5 As-is→To-be 对账表重写；附录 Token Schema 草稿 | `836be2b` |
 | 4 | [`Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md`](./Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md) | **DocumentAssetStatus** 与 EO-01 **分轨**；弃用旧交付词 | `cbc0216` |
-| 5 | [`Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md) | 五阶段 ↔ EO-01；越界/沙盒交叉 EO-02/07 / Top5 | `cbc0216` |
+| 5 | [`E2E Workflow`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md)（stub）/ [归档](../archive/supervisor-pre-ssot/Stagent_Supervisor_End_to_End_Workflow_v1.0.md) | 五阶段 ↔ EO-01；越界/沙盒交叉 EO-02/07 / Top5 | `cbc0216` |
 
 索引入口：本文件；阅读顺序仍见 [`README.md`](./README.md)。**不要**把五份正文揉成一篇。
 
