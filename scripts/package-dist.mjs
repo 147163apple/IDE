@@ -78,7 +78,48 @@ function emptyDir(dir) {
  */
 function isHydratableConsoleShell(buf) {
   const text = Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf);
-  return text.includes("$_TSR") && /\/assets\/index-[^"'>\s]+\.js/.test(text);
+  return text.includes("$_TSR") && /\/assets\/index-[^"'\s>]+\.js/.test(text);
+}
+
+/**
+ * SPA shell 只脱水 `__root__`，但预渲染仍会把已匹配子路由的 CSS / modulepreload
+ * 写进 <head>。客户端首帧 HeadContent 只按脱水 manifest（仅 root）吐标签，
+ * 多出来的子路由 `/assets/*` 会触发 React #418（args[]=HTML）。
+ * 发版装配时剥掉这些资源，使壳与 hydrate 首帧一致。
+ */
+function normalizeSpaShellHead(html) {
+  const tsrScript = html.match(
+    /<script[^>]*>[\s\S]*?\$_TSR\.router=[\s\S]*?<\/script>/,
+  );
+  const allowed = new Set();
+  if (tsrScript) {
+    for (const m of tsrScript[0].matchAll(/"(\/assets\/[^"]+)"/g)) {
+      allowed.add(m[1]);
+    }
+  }
+  let stripped = 0;
+  const next = html.replace(/<link\b[^>]*>/gi, (tag) => {
+    const rel = (tag.match(/\brel="([^"]+)"/i) || [])[1];
+    const href = (tag.match(/\bhref="([^"]+)"/i) || [])[1];
+    if (!href || !href.startsWith("/assets/")) return tag;
+    if (rel !== "stylesheet" && rel !== "modulepreload") return tag;
+    if (allowed.has(href)) return tag;
+    // root `head().links` 的 styles.css?url 不在脱水 manifest 里，但客户端会吐出
+    if (rel === "stylesheet" && /\/assets\/styles-/.test(href)) return tag;
+    stripped += 1;
+    return "";
+  });
+  if (stripped > 0) {
+    console.log(
+      `[package-dist] SPA shell head 已剥离 ${stripped} 个子路由资源（防 React #418）`,
+    );
+  }
+  return next;
+}
+
+function writeNormalizedShell(filePath, buf) {
+  const text = Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf);
+  fs.writeFileSync(filePath, normalizeSpaShellHead(text));
 }
 
 function installConsoleIndexHtml(publicDir) {
@@ -88,7 +129,8 @@ function installConsoleIndexHtml(publicDir) {
   if (fs.existsSync(shellPath)) {
     const shell = fs.readFileSync(shellPath);
     if (isHydratableConsoleShell(shell)) {
-      fs.writeFileSync(indexPath, shell);
+      writeNormalizedShell(shellPath, shell);
+      writeNormalizedShell(indexPath, shell);
       console.log(
         "[package-dist] 已将 SPA 预渲染 _shell.html 提升为 dist/public/index.html",
       );
@@ -102,6 +144,7 @@ function installConsoleIndexHtml(publicDir) {
   if (fs.existsSync(indexPath)) {
     const existing = fs.readFileSync(indexPath);
     if (isHydratableConsoleShell(existing)) {
+      writeNormalizedShell(indexPath, existing);
       console.log(
         "[package-dist] 保留已有可 hydrate 的 dist/public/index.html",
       );
