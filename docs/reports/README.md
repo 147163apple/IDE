@@ -20,6 +20,7 @@
    - [`Stagent_Clarification_and_Authorization_Specification_v1.0.md`](./Stagent_Clarification_and_Authorization_Specification_v1.0.md) — Top7 + 右栏 DEC·EO + **API Top5 CLOSED**；§5 待决议已核销；Top5→**C.12a–e** 已立卡（正文仍讨论稿）
    - [`Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md`](./Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md) — **DocumentAssetStatus** 与 EO-01 交付主态**分轨**（§3.1）；**仍讨论稿未升格**
    - [`Stagent_Interface_Contract_Checklist_v1.0.md`](./Stagent_Interface_Contract_Checklist_v1.0.md) — **API Top5 CLOSED**（§3）；Top5→**C.12a–e** 已立卡（正文仍讨论稿）
+   - [`已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`](./已有项目接管-基线档案体验设计讨论稿-2026-10-26.md) — 项目现状基线档案（Tina 三题定案入文首：命名/尽量全/打开即扫；**仍讨论稿**；确认≠授权；双图谱分离；未升格、未立卡）
 8. 骨架附件（以定稿为准）：[`Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md) — 五阶段 ↔ EO-01 映射（§1.1）；越界/沙盒交叉 EO-02/07
 
 ## 仍缺（指导写码前）
