@@ -334,6 +334,8 @@ function Console() {
    * （与 openRequest 的 nonce 同一套路，避免把 Tab 状态提到页面上）。
    */
   const [studioNonce, setStudioNonce] = useState(0);
+  /** C.16：操作台左侧栏打开「项目全景」深页 */
+  const [supervisorNonce, setSupervisorNonce] = useState(0);
   const [settingsNonce, setSettingsNonce] = useState(0);
   const [settingsDeepFocus, setSettingsDeepFocus] = useState<
     "model-key" | null
@@ -2043,7 +2045,7 @@ function Console() {
 
       {!selected ? (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-          到左侧「项目审阅」点开需求（合同）查看详情；若本仓库只有一份合入合同，刷新后会自动选中。也可在雷达中圈选文件后新建合同
+          到「合同操作台」左侧点开需求（合同）查看详情；若本仓库只有一份合入合同，刷新后会自动选中。也可在雷达中圈选文件后新建合同
         </div>
       ) : (
         <div className="space-y-4 p-4">
@@ -2437,7 +2439,7 @@ function Console() {
           </div>
         }
         supervisorContent={
-          // 左下角 Supervisor 图标 → 中央可关闭 Tab；数据全部来自合同/保护清单
+          // C.16：项目全景深页（操作台左侧栏次入口）；数据全部来自合同/保护清单
           <SupervisorTab
             repoName={repoName}
             repoPath={repoRoot ?? "（连接 Daemon 后显示仓库路径）"}
@@ -2498,66 +2500,6 @@ function Console() {
                 )}
               </div>
             }
-            specsSection={
-              <FileTreeSpecsSection
-                assets={specAssets}
-                open={specsOpen}
-                onToggle={() => setSpecsOpen((v) => !v)}
-                onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
-                generation={specsGeneration}
-              />
-            }
-            requirementList={
-              /*
-                C.10f 漏接线修复：原 leftExtra「需求（合同）」列表迁入项目审阅。
-                资源管理器只留纯文件树；点需求仍打开合同操作台。
-              */
-              <div data-testid="requirement-list" className="min-h-[80px]">
-                <div className="px-1 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  需求（合同 {contracts.length}）
-                </div>
-                {contracts.length === 0 && (
-                  <div className="px-1 py-2 text-xs leading-relaxed text-muted-foreground">
-                    暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
-                  </div>
-                )}
-                {contracts.map((contract) => (
-                  <button
-                    key={contract.contract_id}
-                    type="button"
-                    data-testid="requirement-list-item"
-                    onClick={() => {
-                      setSelectedId(contract.contract_id);
-                      setEvidence(null);
-                      setWorkerResult(null);
-                      setDiff(null);
-                      setDiffFiles(null);
-                      setAdmission(null);
-                      setDraft(null);
-                      setDisputeReport(null);
-                      setDisputeError(null);
-                      setStudioViewportOverride(null);
-                      setConfirmPrototypeError(null);
-                      setRequirementsHint(null);
-                      setStudioNonce((n) => n + 1);
-                    }}
-                    className={`block w-full border-b border-border/50 px-2 py-2 text-left hover:bg-sidebar-accent ${
-                      selectedId === contract.contract_id
-                        ? "bg-sidebar-accent"
-                        : ""
-                    }`}
-                  >
-                    <div className="truncate text-xs">
-                      {contract.intent.title}
-                    </div>
-                    <div className="mt-1 text-[10px] text-muted-foreground">
-                      {contract.lifecycle_state} ·{" "}
-                      {contract.contract_id.slice(-8)}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            }
             protection={{
               mode: protection?.mode ?? "VIBE",
               entries: protection?.entries.length ?? 0,
@@ -2581,6 +2523,7 @@ function Console() {
           />
         }
         openStudioRequest={studioNonce}
+        openSupervisorRequest={supervisorNonce}
         onOpenStudioGraph={() => {
           setStudioViewportOverride("graph");
           setStudioNonce((n) => n + 1);
@@ -2862,6 +2805,80 @@ function Console() {
             }
             activeViewport={studioViewportOverride ?? undefined}
             onViewportChange={(id) => setStudioViewportOverride(id)}
+            contractRail={
+              // C.16：需求列表 + 规范与资产在合同操作台左侧栏（单门）
+              <div className="flex min-h-0 flex-1 flex-col gap-2 p-2 text-xs">
+
+                <div className="text-[11px] font-medium text-foreground">
+                  本项目需求
+                </div>
+                <div data-testid="requirement-list" className="min-h-[80px]">
+                  <div className="px-1 py-1 text-[10px] uppercase tracking-widest text-muted-foreground">
+                    需求（合同 {contracts.length}）
+                  </div>
+                  {contracts.length === 0 && (
+                    <div className="px-1 py-2 text-xs leading-relaxed text-muted-foreground">
+                      暂无需求。点右上角「新建需求」，或在右侧对话里说清目标。
+                    </div>
+                  )}
+                  {contracts.map((contract) => (
+                    <button
+                      key={contract.contract_id}
+                      type="button"
+                      data-testid="requirement-list-item"
+                      onClick={() => {
+                        setSelectedId(contract.contract_id);
+                        setEvidence(null);
+                        setWorkerResult(null);
+                        setDiff(null);
+                        setDiffFiles(null);
+                        setAdmission(null);
+                        setDraft(null);
+                        setDisputeReport(null);
+                        setDisputeError(null);
+                        setStudioViewportOverride(null);
+                        setConfirmPrototypeError(null);
+                        setRequirementsHint(null);
+                        setStudioNonce((n) => n + 1);
+                      }}
+                      className={`block w-full border-b border-border/50 px-2 py-2 text-left hover:bg-sidebar-accent ${
+                        selectedId === contract.contract_id
+                          ? "bg-sidebar-accent"
+                          : ""
+                      }`}
+                    >
+                      <div className="truncate text-xs">
+                        {contract.intent.title}
+                      </div>
+                      <div className="mt-1 text-[10px] text-muted-foreground">
+                        {contract.lifecycle_state} ·{" "}
+                        {contract.contract_id.slice(-8)}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="border-t border-border pt-2">
+                  <div className="mb-1 text-[11px] font-medium text-foreground">
+                    规范与资产
+                  </div>
+                  <FileTreeSpecsSection
+                    assets={specAssets}
+                    open={specsOpen}
+                    onToggle={() => setSpecsOpen((v) => !v)}
+                    onOpen={(path) => setOpenRequest({ path, nonce: Date.now() })}
+                    generation={specsGeneration}
+                  />
+                </div>
+                <button
+                  type="button"
+                  data-testid="studio-open-panorama"
+                  onClick={() => setSupervisorNonce((n) => n + 1)}
+                  className="mt-auto rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                >
+                  项目全景与准入
+                </button>
+              </div>
+            }
             demo={
               <DemoPreviewPane
                 previewUrl={demoPreview?.url ?? null}

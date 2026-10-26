@@ -138,11 +138,10 @@ export function SupervisorTab({
       className="mx-auto max-w-5xl space-y-3 p-4 text-sm"
     >
       <header className="space-y-1">
-        <h2 className="text-base font-semibold">项目审阅</h2>
+        <h2 className="text-base font-semibold">项目全景</h2>
         <p className="text-xs opacity-70">
-          高级工程师视角：先把「这块代码长什么样、要改什么、会影响哪儿、怎么算做完」讲清楚，
-          再决定是否开工。本页只呈现合同、保护清单与依赖拓扑里已有的字段，
-          不做健康度或成熟度推断。
+          C.16：日常从「合同操作台」左侧选需求干活；本页是架构 / 保护 / 准入的深页，
+          不再占 ActivityBar 第二扇门。只呈现合同、保护清单与依赖拓扑里已有的字段。
         </p>
       </header>
 
@@ -173,7 +172,7 @@ export function SupervisorTab({
           testId="supervisor-requirement-list"
         >
           <p className="opacity-70">
-            点一项打开合同操作台跟进；列表不再挤在左侧文件树里。
+            点一项打开合同操作台跟进。C.16 起日常列表在操作台左侧栏；此处仅作深页回显。
           </p>
           <div className="pt-1">{requirementList}</div>
         </Section>
@@ -186,8 +185,7 @@ export function SupervisorTab({
           testId="supervisor-specs"
         >
           <p className="opacity-70">
-            需求文档、执行合同与 Demo
-            原型由项目审阅维护；点开可在中间编辑或预览。
+            需求文档、执行合同与 Demo 原型跟合同能力走；日常在操作台左侧「规范与资产」。
           </p>
           <div className="pt-1">{specsSection}</div>
         </Section>
@@ -414,7 +412,7 @@ export function SupervisorTab({
           onClick={onOpenConsole}
           className="mt-1 rounded border px-2.5 py-1 text-xs hover:bg-accent"
         >
-          打开合同操作台（执行 / Diff / 证据 / 合并）
+          回到合同操作台
         </button>
       </Section>
     </div>

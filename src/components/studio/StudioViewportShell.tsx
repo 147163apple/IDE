@@ -8,11 +8,12 @@ import {
 } from "./viewport-routing";
 
 /**
- * Studio 视口外壳（TASK-C.2 + S.6b 真机试玩）。
+ * Studio 视口外壳（TASK-C.2 + S.6b 真机试玩 + C.16 单门列表栏）。
  *
  * - 顶栏手动切换视口；
  * - 消费 Daemon 的 `presentation_state`：状态一变就回到该态默认视口；
- * - **全部面板始终挂载**，非激活仅 `hidden`——表单填写与 Graph 点亮不会因切换丢失。
+ * - **全部面板始终挂载**，非激活仅 `hidden`——表单填写与 Graph 点亮不会因切换丢失；
+ * - C.16：可选左侧「选合同」栏（需求列表 + 规范与资产），不再另开 ActivityBar 门。
  */
 export interface StudioViewportShellProps {
   presentationState?: PresentationState | null | undefined;
@@ -21,6 +22,8 @@ export interface StudioViewportShellProps {
   /** 受控：外部指定当前视口（测试或外部门控时用） */
   activeViewport?: StudioViewportId | undefined;
   onViewportChange?: ((viewport: StudioViewportId) => void) | undefined;
+  /** C.16：合同操作台左侧「选合同 / 规范与资产」 */
+  contractRail?: ReactNode | undefined;
   demo: ReactNode;
   graph: ReactNode;
   dispute: ReactNode;
@@ -57,7 +60,7 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
     playtest: props.playtest,
   };
 
-  return (
+  const main = (
     <div
       data-testid="studio-viewport-shell"
       data-active-viewport={active}
@@ -128,6 +131,25 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
           );
         })}
       </div>
+    </div>
+  );
+
+  if (!props.contractRail) {
+    return main;
+  }
+
+  return (
+    <div
+      data-testid="studio-with-rail"
+      className="flex h-full min-h-0 flex-1"
+    >
+      <aside
+        data-testid="studio-contract-rail"
+        className="flex w-56 shrink-0 flex-col overflow-auto border-r border-border bg-muted/20"
+      >
+        {props.contractRail}
+      </aside>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">{main}</div>
     </div>
   );
 }

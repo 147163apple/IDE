@@ -1,25 +1,19 @@
-import {
-  Files,
-  Network,
-  Settings,
-  Sparkles,
-  TerminalSquare,
-} from "lucide-react";
+import { Files, Settings, Sparkles, TerminalSquare } from "lucide-react";
 import { WORKBENCH_LABEL } from "../../lib/workbench-labels";
 
 /**
  * Activity Bar（Cursor / VS Code 式左窄条）。
  *
- * TASK-C.10c：title / aria-label 只用白话，不甩英文暗号。
- * 图谱入口打开合同操作台内「任务图谱」视口（由布局转发），不再独立系统 Tab 主路径。
+ * TASK-C.10c：title / aria-label 只用白话。
+ * TASK-C.16：日常只挂**一个**工作台入口「合同操作台」（列表+操作台），
+ * 不再并列「项目审阅」与「任务图谱」两套门；图谱是操作台内视口。
  */
 export interface ActivityBarProps {
   explorerOpen: boolean;
   onToggleExplorer: () => void;
-  graphOpen: boolean;
-  onOpenGraph: () => void;
-  supervisorOpen: boolean;
-  onOpenSupervisor: () => void;
+  /** C.16：单门——打开/聚焦合同操作台 */
+  workbenchOpen: boolean;
+  onOpenWorkbench: () => void;
   settingsOpen: boolean;
   onOpenSettings: () => void;
   terminalOpen: boolean;
@@ -62,10 +56,8 @@ function BarButton({
 export function ActivityBar({
   explorerOpen,
   onToggleExplorer,
-  graphOpen,
-  onOpenGraph,
-  supervisorOpen,
-  onOpenSupervisor,
+  workbenchOpen,
+  onOpenWorkbench,
   settingsOpen,
   onOpenSettings,
   terminalOpen,
@@ -86,22 +78,14 @@ export function ActivityBar({
         <Files className="h-5 w-5" />
       </BarButton>
       <BarButton
-        label={`${WORKBENCH_LABEL.graph}（在${WORKBENCH_LABEL.studio}里看）`}
-        testId="activity-graph"
-        active={graphOpen}
-        onClick={onOpenGraph}
+        label={WORKBENCH_LABEL.workbench}
+        testId="activity-workbench"
+        active={workbenchOpen}
+        onClick={onOpenWorkbench}
       >
-        <Network className="h-5 w-5" />
+        <Sparkles className="h-5 w-5" />
       </BarButton>
       <div className="mt-auto flex flex-col items-center gap-1">
-        <BarButton
-          label={WORKBENCH_LABEL.supervisor}
-          testId="activity-supervisor"
-          active={supervisorOpen}
-          onClick={onOpenSupervisor}
-        >
-          <Sparkles className="h-5 w-5" />
-        </BarButton>
         <BarButton
           label={WORKBENCH_LABEL.settings}
           testId="activity-settings"

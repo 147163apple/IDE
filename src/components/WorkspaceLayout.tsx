@@ -95,7 +95,7 @@ export interface WorkspaceLayoutProps {
   /** C.10c：合同操作台当前是否停在图谱视口（点亮 ActivityBar 图谱图标） */
   studioGraphActive?: boolean | undefined;
   /**
-   * @deprecated C.10f：规范与资产已迁入「项目审阅」；布局左栏不再渲染此插槽。
+   * @deprecated C.10f：规范与资产已迁入合同操作台左侧栏（C.16）；布局左栏不再渲染此插槽。
    * 保留 prop 仅兼容旧调用方；请改传到 SupervisorTab.specsSection。
    */
   specsSection?: ReactNode;
@@ -118,6 +118,11 @@ export interface WorkspaceLayoutProps {
    * 页面无法直接 setActiveTab，所以用信号替代共享状态。
    */
   openStudioRequest?: number;
+  /**
+   * C.16：操作台左侧栏「项目全景」——打开原 Supervisor 深页（架构/准入），
+   * 不再挂 ActivityBar 日常图标。nonce 变化即触发。
+   */
+  openSupervisorRequest?: number;
   /**
    * 外部请求切到设置 Tab（TASK-C.8a：右栏「去配置模型钥匙」）；
    * nonce 变化即触发，与 openStudioRequest 同模式。
@@ -167,7 +172,8 @@ export interface WorkspaceLayoutProps {
  * 4. D4：无中心 Hub、无顶部 HUD、无成熟度气泡（本文件零相关实现）；
  * 5. C.9a：同一时刻只留一个主指挥信号（commandSurface），欢迎/打开面板/模式徽标降噪；
  * 6. C.10e：打开/切换项目在欢迎页（Cursor 式），不在 IDE 左栏；顶栏可「切换项目」回欢迎页。
- * 7. C.10f：资源管理器只展示纯文件树；规范与资产在「项目审阅」。
+ * 7. C.10f：资源管理器只展示纯文件树；规范与资产不进文件树。
+ * 10. C.16：ActivityBar 单门「合同操作台」；项目全景为操作台内次入口。
  * 8. C.10h：文件树右键删除（确认 + P.1 门禁；尽量废纸篓）。
  * 9. C.10f 热修：去掉资源管理器顶栏冗余「文件」标题，只留路径根 + 树。
  */
@@ -260,14 +266,19 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
     );
     setActiveTab(SUPERVISOR_TAB_ID);
   };
+
+  const supervisorReq = props.openSupervisorRequest;
+  useEffect(() => {
+    if (!supervisorReq) return;
+    focusSupervisor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supervisorReq]);
   /**
-   * C.10c：左栏图谱 → 打开/聚焦合同操作台，并通知主页面切到图谱视口。
-   * 不再新建独立「任务图谱」系统 Tab（收双入口）。
+   * C.10c/C.16：图谱入口已并入合同操作台单门；ActivityBar 不再单独挂图谱图标。
+   * `onOpenStudioGraph` / `studioGraphActive` 保留给程序化切视口（测试/深链），日常 UI 不走。
    */
-  const openGraph = () => {
-    openStudio();
-    props.onOpenStudioGraph?.();
-  };
+  void props.onOpenStudioGraph;
+  void props.studioGraphActive;
   /** 左下角齿轮：打开设置 Tab（同样不做 toggle，避免误触关掉正在填的表单） */
   const openSettings = () => {
     setForceProjectWelcome(false);
@@ -470,10 +481,8 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
         <ActivityBar
           explorerOpen={leftOpen}
           onToggleExplorer={() => setLeftOpen((v) => !v)}
-          supervisorOpen={isSupervisor}
-          onOpenSupervisor={focusSupervisor}
-          graphOpen={isStudio && !!props.studioGraphActive}
-          onOpenGraph={openGraph}
+          workbenchOpen={isStudio}
+          onOpenWorkbench={openStudio}
           settingsOpen={isSettings}
           onOpenSettings={openSettings}
           terminalOpen={terminalOpen}
@@ -537,7 +546,7 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
                     }
                     onReveal={props.onRevealPath}
                   />
-                  {/* C.10f：leftExtra 不再渲染——合同/需求列表已迁项目审阅 */}
+                  {/* C.10f：leftExtra 不再渲染——合同/需求列表已迁合同操作台左侧栏 */}
                 </div>
               </div>
             </aside>

@@ -227,7 +227,8 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     submitIntent("把界面的按钮换成圆角");
     await screen.findByTestId("draft-ready");
 
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
 
     const rationale = await screen.findByTestId("supervisor-rationale");
     const items = screen.getAllByTestId("supervisor-rationale-item");
@@ -255,7 +256,8 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     await openForm();
     submitIntent("把界面的按钮换成圆角");
     await screen.findByTestId("draft-ready");
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
 
     const scope = await screen.findByTestId("supervisor-scope");
     for (const p of draftResponse.draft.plan.writable_paths) {

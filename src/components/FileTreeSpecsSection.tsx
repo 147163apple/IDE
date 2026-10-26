@@ -7,13 +7,13 @@ import {
 import { CollapsibleSection } from "./layout/CollapsibleSection";
 
 /**
- * 【规范与资产】专区（TASK-C.7 · 呈现位 C.10f 迁入项目审阅）。
+ * 【规范与资产】专区（TASK-C.7 · C.10f 迁出文件树；C.16 挂合同操作台左侧栏）。
  *
  * 为什么单独做一块而不是混进文件树：需求、合同、Demo 原型是"本轮任务的
  * 依据"，和源码文件不是同一类东西。混排会让用户以为 `.stagent/contracts/*.json`
  * 也是可以直接改的源码。
  *
- * C.10f：挂在「项目审阅」里（Supervisor 产物归宿），不再塞资源管理器。
+ * C.16：挂在合同操作台左侧栏；不进资源管理器文件树。
  * 数据全部由主页面注入；本组件不臆造路径。
  */
 export type SpecAssetKind = "requirement" | "contract" | "demo";

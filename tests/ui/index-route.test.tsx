@@ -98,9 +98,9 @@ vi.mock("@/hooks/use-daemon-stream", () => ({
 const { Route } = await import("../../src/routes/index");
 const Console = Route.options.component as React.ComponentType;
 
-/** C.10f：需求列表在项目审阅，不再在左栏；测试先开审阅再点需求。 */
+/** C.16：需求列表在合同操作台左侧栏；测试先开单门再点需求。 */
 async function openRequirement(title: string) {
-  fireEvent.click(screen.getByTestId("activity-supervisor"));
+  fireEvent.click(screen.getByTestId("activity-workbench"));
   const item = await screen.findByRole("button", { name: new RegExp(title) });
   fireEvent.click(item);
 }
@@ -164,14 +164,15 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
     );
   });
 
-  it("架构雷达移出左栏：Supervisor 的架构总览分段承载它", async () => {
+  it("架构雷达移出左栏：经操作台「项目全景」打开", async () => {
     render(<Console />);
-    // 左栏纯文件树；架构雷达在项目审阅
+    // 左栏纯文件树；架构雷达在项目全景深页
     expect(screen.queryByText("架构雷达", { exact: false })).toBeNull();
     expect(screen.getByTestId("left-column").textContent).not.toMatch(
       /需求（合同/,
     );
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
     expect(screen.getByTestId("supervisor-architecture")).toBeInTheDocument();
     expect(screen.getByTestId("load-arch-graph")).toBeInTheDocument();
   });

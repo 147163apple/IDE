@@ -50,7 +50,7 @@ describe("Cursor 式 IDE 骨架：面板折叠与拖拽", () => {
     const bar = screen.getByTestId("activity-bar");
     expect(bar).toBeInTheDocument();
     expect(screen.getByTestId("activity-explorer")).toBeInTheDocument();
-    expect(screen.getByTestId("activity-supervisor")).toBeInTheDocument();
+    expect(screen.getByTestId("activity-workbench")).toBeInTheDocument();
     expect(screen.getByTestId("activity-terminal")).toBeInTheDocument();
     expect(screen.queryByTestId("activity-search")).toBeNull();
     expect(screen.queryByTestId("activity-scm")).toBeNull();
@@ -113,55 +113,68 @@ describe("Cursor 式 IDE 骨架：面板折叠与拖拽", () => {
   });
 });
 
-describe("Supervisor：左下角入口 + 中央可关闭 Tab", () => {
-  it("点图标在中央打开 Supervisor 标签，并渲染注入的页面内容", () => {
+describe("C.16：ActivityBar 单门合同操作台", () => {
+  it("点工作台图标打开合同操作台并渲染注入内容", () => {
     render(
       <WorkspaceLayout
         {...base}
-        supervisorContent={<div data-testid="supervisor-content">审阅页</div>}
+        studioContent={<div data-testid="studio-content">合同操作台</div>}
       />,
     );
-    expect(screen.queryByTestId("supervisor-content")).toBeNull();
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
-    const tab = screen.getByRole("tab", { name: "项目审阅" });
+    expect(screen.queryByTestId("studio-content")).toBeNull();
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    const tab = screen.getByRole("tab", { name: "合同操作台" });
     expect(tab).toHaveAttribute("data-system", "true");
     expect(tab).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByTestId("supervisor-pane")).toBeInTheDocument();
-    expect(screen.getByTestId("supervisor-content")).toBeInTheDocument();
+    expect(screen.getByTestId("studio-pane")).toBeInTheDocument();
+    expect(screen.getByTestId("studio-content")).toBeInTheDocument();
   });
 
-  it("Tab 可关闭，关掉后再点图标能重新打开（不是一次性）", () => {
+  it("Tab 可关闭，关掉后再点图标能重新打开", () => {
     render(
       <WorkspaceLayout
         {...base}
-        supervisorContent={<div data-testid="supervisor-content">审阅页</div>}
+        studioContent={<div data-testid="studio-content">合同操作台</div>}
       />,
     );
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
-    fireEvent.click(screen.getByTestId("close-tab-system:supervisor"));
-    expect(screen.queryByRole("tab", { name: "项目审阅" })).toBeNull();
-    expect(screen.queryByTestId("supervisor-content")).toBeNull();
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
-    expect(screen.getByRole("tab", { name: "项目审阅" })).toBeInTheDocument();
-    expect(screen.getByTestId("supervisor-content")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("close-tab-system:supervisor-studio"));
+    expect(screen.queryByRole("tab", { name: "合同操作台" })).toBeNull();
+    expect(screen.queryByTestId("studio-content")).toBeNull();
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    expect(screen.getByRole("tab", { name: "合同操作台" })).toBeInTheDocument();
+    expect(screen.getByTestId("studio-content")).toBeInTheDocument();
   });
 
-  it("Supervisor 与 Studio 是两个标签，互不冒名", () => {
-    render(
+  it("项目全景仅经 openSupervisorRequest 打开，不占 ActivityBar 日常图标", () => {
+    const { rerender } = render(
       <WorkspaceLayout
         {...base}
         defaultOpenStudio
         studioContent={<div data-testid="studio-content">合同操作台</div>}
-        supervisorContent={<div data-testid="supervisor-content">审阅页</div>}
+        supervisorContent={<div data-testid="supervisor-content">全景页</div>}
       />,
     );
     expect(screen.getByTestId("studio-content")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
+    expect(screen.queryByTestId("activity-supervisor")).toBeNull();
+    expect(screen.queryByTestId("activity-graph")).toBeNull();
+    rerender(
+      <WorkspaceLayout
+        {...base}
+        defaultOpenStudio
+        openSupervisorRequest={1}
+        studioContent={<div data-testid="studio-content">合同操作台</div>}
+        supervisorContent={<div data-testid="supervisor-content">全景页</div>}
+      />,
+    );
     expect(screen.getByTestId("supervisor-content")).toBeInTheDocument();
-    expect(screen.queryByTestId("studio-content")).toBeNull();
+    expect(screen.getByRole("tab", { name: "项目全景" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
-  it("页内「打开合同操作台」能把中央切回 Studio 标签", () => {
+  it("页内 openStudioRequest 能把中央切到合同操作台", () => {
     const { rerender } = render(
       <WorkspaceLayout
         {...base}
@@ -196,11 +209,10 @@ describe("设置入口：Activity Bar 齿轮", () => {
     const labels = Array.from(
       bar.querySelectorAll("[data-testid^='activity-']"),
     ).map((el) => el.getAttribute("data-testid"));
-    // Supervisor 与设置相邻，且在终端的上面；任务图谱紧随资源管理器
+    // C.16：资源管理器 + 单门合同操作台；设置与验证输出在底部
     expect(labels).toEqual([
       "activity-explorer",
-      "activity-graph",
-      "activity-supervisor",
+      "activity-workbench",
       "activity-settings",
       "activity-terminal",
     ]);
@@ -242,7 +254,7 @@ describe("验证输出：底栏抽屉", () => {
   });
 });
 
-describe("TASK-C.10c：白话命名与图谱单入口", () => {
+describe("TASK-C.10c / C.16：白话命名与单门", () => {
   it("ActivityBar / Tab / 底栏用白话名，不含 Supervisor Studio / SmartTerminal", () => {
     render(
       <WorkspaceLayout
@@ -254,10 +266,12 @@ describe("TASK-C.10c：白话命名与图谱单入口", () => {
     );
     expect(screen.getByRole("tab", { name: "合同操作台" })).toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Supervisor Studio" })).toBeNull();
-    expect(screen.getByTestId("activity-supervisor")).toHaveAttribute(
+    expect(screen.getByTestId("activity-workbench")).toHaveAttribute(
       "aria-label",
-      "项目审阅",
+      "合同操作台",
     );
+    expect(screen.queryByTestId("activity-supervisor")).toBeNull();
+    expect(screen.queryByTestId("activity-graph")).toBeNull();
     expect(screen.getByTestId("activity-terminal")).toHaveAttribute(
       "aria-label",
       "验证输出",
@@ -265,19 +279,15 @@ describe("TASK-C.10c：白话命名与图谱单入口", () => {
     expect(screen.getByTestId("terminal-drawer")).toHaveTextContent("验证输出");
   });
 
-  it("左栏图谱入口打开合同操作台并回调 onOpenStudioGraph，不新建独立任务图谱 Tab", () => {
-    const onOpenStudioGraph = vi.fn();
+  it("单门打开合同操作台，不新建独立任务图谱 Tab", () => {
     render(
       <WorkspaceLayout
         {...base}
         studioContent={<div data-testid="studio-content">台</div>}
         graphContent={<div data-testid="graph-legacy">旧图谱页</div>}
-        onOpenStudioGraph={onOpenStudioGraph}
-        studioGraphActive
       />,
     );
-    fireEvent.click(screen.getByTestId("activity-graph"));
-    expect(onOpenStudioGraph).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("activity-workbench"));
     expect(screen.getByRole("tab", { name: "合同操作台" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -285,7 +295,7 @@ describe("TASK-C.10c：白话命名与图谱单入口", () => {
     expect(screen.queryByRole("tab", { name: "任务图谱" })).toBeNull();
     expect(screen.queryByTestId("graph-legacy")).toBeNull();
     expect(screen.getByTestId("studio-content")).toBeInTheDocument();
-    expect(screen.getByTestId("activity-graph")).toHaveAttribute(
+    expect(screen.getByTestId("activity-workbench")).toHaveAttribute(
       "aria-pressed",
       "true",
     );

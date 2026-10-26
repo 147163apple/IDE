@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { WorkspaceLayout } from "../../src/components/WorkspaceLayout";
-import { SupervisorTab } from "../../src/components/supervisor/SupervisorTab";
+import { StudioViewportShell } from "../../src/components/studio/StudioViewportShell";
 import { FileTreeSpecsSection } from "../../src/components/FileTreeSpecsSection";
 import type { CommandSurface } from "../../src/lib/command-surface";
 
@@ -39,8 +39,19 @@ const specs = (
 );
 
 function renderWorkbench(
-  over: { commandSurface?: CommandSurface; supervisor?: boolean } = {},
+  over: { commandSurface?: CommandSurface; withRail?: boolean } = {},
 ) {
+  const rail = (
+    <div className="p-2">
+      <div data-testid="requirement-list">
+        <div>需求（合同 1）</div>
+        <button type="button" data-testid="requirement-list-item">
+          示例需求
+        </button>
+      </div>
+      <div className="mt-2">{specs}</div>
+    </div>
+  );
   render(
     <WorkspaceLayout
       repoName="1020"
@@ -50,26 +61,15 @@ function renderWorkbench(
       files={files}
       onNewRequirement={() => {}}
       commandSurface={over.commandSurface ?? idleSurface}
-      supervisorContent={
-        over.supervisor ? (
-          <SupervisorTab
-            repoName="1020"
-            repoPath="/Users/tina/Desktop/1020"
-            baseBranch="main"
-            contractCount={1}
-            contract={null}
-            protection={{ mode: "VIBE", entries: 0, checkpoint: null }}
-            admission={null}
-            onOpenConsole={() => {}}
-            specsSection={specs}
-            requirementList={
-              <div data-testid="requirement-list">
-                <div>需求（合同 1）</div>
-                <button type="button" data-testid="requirement-list-item">
-                  示例需求
-                </button>
-              </div>
-            }
+      studioContent={
+        over.withRail ? (
+          <StudioViewportShell
+            contractRail={rail}
+            demo={<div>demo</div>}
+            graph={<div>graph</div>}
+            dispute={<div>dispute</div>}
+            contract={<div>contract</div>}
+            playtest={<div>playtest</div>}
           />
         ) : undefined
       }
@@ -77,7 +77,7 @@ function renderWorkbench(
   );
 }
 
-describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅", () => {
+describe("TASK-C.10e / C.10f / C.16 欢迎页开项目 + 纯文件树 + 资产进操作台", () => {
   it("欢迎页承载打开/切换项目（page 变体面板展开）；左栏无开项目入口", () => {
     renderWorkbench();
     expect(screen.getByTestId("project-welcome-page")).toBeInTheDocument();
@@ -120,11 +120,10 @@ describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅
     expect(screen.getByTestId("open-project-panel")).toBeInTheDocument();
   });
 
-  it("规范与资产出现在项目审阅，不在左栏", () => {
-    renderWorkbench({ supervisor: true });
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
-    expect(screen.getByTestId("supervisor-tab")).toBeInTheDocument();
-    expect(screen.getByTestId("supervisor-specs")).toBeInTheDocument();
+  it("规范与资产出现在合同操作台左侧栏，不在文件树左栏", () => {
+    renderWorkbench({ withRail: true });
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    expect(screen.getByTestId("studio-contract-rail")).toBeInTheDocument();
     expect(screen.getByTestId("file-tree-specs")).toBeInTheDocument();
     expect(
       screen
@@ -133,12 +132,10 @@ describe("TASK-C.10e / C.10f 欢迎页开项目 + 纯文件树 + 资产进审阅
     ).toBeNull();
   });
 
-  it("需求（合同）列表在项目审阅，不在左栏", () => {
-    renderWorkbench({ supervisor: true });
-    fireEvent.click(screen.getByTestId("activity-supervisor"));
-    expect(
-      screen.getByTestId("supervisor-requirement-list"),
-    ).toBeInTheDocument();
+  it("需求（合同）列表在合同操作台左侧栏，不在文件树左栏", () => {
+    renderWorkbench({ withRail: true });
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    expect(screen.getByTestId("studio-contract-rail")).toBeInTheDocument();
     expect(screen.getByTestId("requirement-list")).toBeInTheDocument();
     expect(screen.getByTestId("requirement-list-item")).toHaveTextContent(
       "示例需求",
