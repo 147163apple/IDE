@@ -3687,6 +3687,26 @@ export class StagentDaemon {
   }
 
 
+
+  /** TASK-C.14f：推送基线进度（与 GET /api/baseline 同形） */
+  private broadcastBaselineProgress(
+    archive: BaselineArchive | null,
+    phase: "stub" | "p0" | "deep" | "done" | "failed" | "accepted",
+  ): void {
+    const scanning =
+      phase === "stub" ||
+      phase === "p0" ||
+      phase === "deep" ||
+      this.baselineScanInFlight !== null;
+    this.broadcast("BASELINE_PROGRESS", {
+      phase,
+      scanning: scanning && phase !== "done" && phase !== "failed" && phase !== "accepted",
+      accept_label: "认可此基线作为后续参考",
+      grants_construction: false as const,
+      archive,
+    });
+  }
+
   /**
    * TASK-C.14：确保基线渐进扫在跑（打开即扫；已有进行中则复用）。
    */
@@ -3732,10 +3752,24 @@ export class StagentDaemon {
         notes: ["打开即自动扫；确认≠授权"],
       };
       writeBaselineArchive(this.repoRoot, stub);
+      this.broadcastBaselineProgress(stub, "stub");
     }
     const run = runProgressiveBaselineScan({
       repoRoot: this.repoRoot,
       toolVersion: this.version,
+      callbacks: {
+        onP0: (archive) => {
+          this.broadcastBaselineProgress(archive, "p0");
+        },
+        onDeep: (archive) => {
+          this.broadcastBaselineProgress(archive, "deep");
+        },
+        onDone: (archive) => {
+          const phase =
+            archive.phase === "failed" ? "failed" : "done";
+          this.broadcastBaselineProgress(archive, phase);
+        },
+      },
     }).finally(() => {
       if (this.baselineScanInFlight === run) {
         this.baselineScanInFlight = null;
@@ -3800,6 +3834,7 @@ export class StagentDaemon {
           this.repoRoot,
           typeof body.scan_id === "string" ? body.scan_id : undefined,
         );
+        this.broadcastBaselineProgress(archive, "accepted");
         this.sendJson(res, 200, {
           archive,
           accepted: true,

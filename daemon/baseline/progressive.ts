@@ -167,6 +167,8 @@ export async function runProgressiveBaselineScan(
     progress_copy: SCAN_PROGRESS_COPY.deep,
   };
   writeBaselineArchive(options.repoRoot, archive);
+  // C.14f：深度开始即推一帧，避免只在结束才有 deep
+  options.callbacks?.onDeep?.(archive);
 
   const deepRaw = runDeepStaticScan({
     repoRoot: options.repoRoot,

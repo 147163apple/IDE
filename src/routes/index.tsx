@@ -178,6 +178,7 @@ import type {
   EvidenceReadyPayload,
   StateChangedPayload,
   TaskGraphUpdatedPayload,
+  BaselineProgressPayload,
 } from "@/lib/ipc/frames";
 import type { PresentationState } from "@/lib/state/presentation-state";
 import { PRESENTATION_STATES } from "@/lib/state/presentation-state";
@@ -1378,6 +1379,15 @@ function Console() {
       setTaskGraphError(null);
       setTaskGraphLoading(false);
     },
+    onBaselineProgress: (p: BaselineProgressPayload) => {
+      // TASK-C.14f：WS 覆盖基线；保留 GET 首屏与手动重扫
+      setBaselinePayload({
+        archive: (p.archive as BaselineArchivePayload["archive"]) ?? null,
+        scanning: p.scanning,
+        accept_label: p.accept_label ?? "认可此基线作为后续参考",
+        grants_construction: false,
+      });
+    },
     onStateChanged: (p: StateChangedPayload) => {
       const state = p.presentation_state;
       if (!(PRESENTATION_STATES as readonly string[]).includes(state)) {
@@ -1570,13 +1580,10 @@ function Console() {
     }
   }, [connected, conn]);
 
+  // TASK-C.14f：首屏 GET 一次；后续由 BASELINE_PROGRESS WS 覆盖（不再 2s 轮询）
   useEffect(() => {
     if (!connected) return;
     void loadBaseline();
-    const id = window.setInterval(() => {
-      void loadBaseline({ quiet: true });
-    }, 2000);
-    return () => window.clearInterval(id);
   }, [connected, loadBaseline]);
 
   const handleAcceptBaseline = useCallback(async () => {

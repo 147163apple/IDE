@@ -15,6 +15,7 @@ import type {
   TerminalStreamPayload,
   WorkerLogPayload,
   TaskGraphUpdatedPayload,
+  BaselineProgressPayload,
 } from "@/lib/ipc/frames";
 import type { ChatEvent } from "@/lib/chat-events";
 
@@ -80,6 +81,8 @@ export interface UseDaemonStreamOptions {
   onRealPlaytestStatus?: (payload: RealPlaytestStatusPayload) => void;
   /** TASK-S.5 / C.2：质疑报告摘要就绪（完整报告仍走 HTTP 响应） */
   onDisputeReportReady?: (payload: DisputeReportReadyPayload) => void;
+  /** TASK-C.14f：基线渐进扫进度（替代 2s 轮询） */
+  onBaselineProgress?: (payload: BaselineProgressPayload) => void;
 }
 
 export interface DaemonStreamState {
@@ -249,6 +252,13 @@ export function useDaemonStream(
           const payload = asPayload<DisputeReportReadyPayload>(frame);
           if (payload?.report_id) {
             handlersRef.current.onDisputeReportReady?.(payload);
+          }
+          return;
+        }
+        case "BASELINE_PROGRESS": {
+          const payload = asPayload<BaselineProgressPayload>(frame);
+          if (payload) {
+            handlersRef.current.onBaselineProgress?.(payload);
           }
           return;
         }

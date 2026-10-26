@@ -31,6 +31,7 @@
  * v1.5 变更（TASK-S.4 / TASK-S.5 / 架构 §6.1）：
  * - 新增 `DEMO_PREVIEW_STATUS`：Demo 预览服务生命周期广播；
  * - 新增 `DISPUTE_REPORT_READY`：质疑自查报告摘要广播。
+ * - 新增 `BASELINE_PROGRESS`（TASK-C.14f）：基线渐进扫阶段推送，替换前端 2s 轮询
  */
 
 import type { PresentationState } from "../state/presentation-state";
@@ -58,6 +59,8 @@ export type IpcFrameType =
   | "STATE_CHANGED"
   // ---- v1.6.1 §3.3 Task Graph 全量快照广播（TASK-C.7） ----
   | "TASK_GRAPH_UPDATED"
+  // ---- TASK-C.14f 基线渐进扫进度广播 ----
+  | "BASELINE_PROGRESS"
   // ---- v1.6.1 §6.1 Demo 预览生命周期广播（TASK-S.4） ----
   | "DEMO_PREVIEW_STATUS"
   // ---- TASK-S.6b 真机预览生命周期广播 ----
@@ -238,6 +241,17 @@ export interface RealPlaytestStatusPayload {
   message?: string;
 }
 
+
+/** TASK-C.14f：基线渐进扫进度（与 GET /api/baseline 同形，供 WS 覆盖） */
+export interface BaselineProgressPayload {
+  phase: "stub" | "p0" | "deep" | "done" | "failed" | "accepted";
+  scanning: boolean;
+  accept_label: string;
+  grants_construction: false;
+  /** 与 BaselineArchivePayload.archive 同形；前端直接覆盖 */
+  archive: Record<string, unknown> | null;
+}
+
 export interface ErrorPayload {
   code: string;
   message: string;
@@ -297,6 +311,7 @@ export const IPC_FRAME_TYPES: readonly IpcFrameType[] = [
   "TERMINAL_STREAM",
   "STATE_CHANGED",
   "TASK_GRAPH_UPDATED",
+  "BASELINE_PROGRESS",
   "DEMO_PREVIEW_STATUS",
   "REAL_PLAYTEST_STATUS",
   "DISPUTE_REPORT_READY",
@@ -426,6 +441,15 @@ export const FRAME_CATALOG: readonly FrameCatalogEntry[] = [
     maxPayloadBytes: MAX_FRAME_BYTES,
     description:
       "Task Graph 全量快照广播：七态节点、变更指纹与进度百分比（TASK-C.7 §3.3）",
+  },
+  {
+    type: "BASELINE_PROGRESS",
+    direction: "server->client",
+    requiresAuth: true,
+    spec: "v1.6.2",
+    maxPayloadBytes: MAX_FRAME_BYTES,
+    description:
+      "基线渐进扫进度：P0/深度/完成阶段推送（TASK-C.14f；替代前端 2s 轮询）",
   },
   {
     type: "SUPERVISOR_SUGGESTION",
