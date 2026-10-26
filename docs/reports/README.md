@@ -1,11 +1,13 @@
 # docs/reports · 阅读顺序与索引
 
 > 更新日期：2026-10-26（Asia/Hong_Kong）  
+> **Spec Freeze 锚点**：[`Stagent_Spec_Freeze_Record_2026-10-26.md`](./Stagent_Spec_Freeze_Record_2026-10-26.md) — 规范资产封版记录（CLOSED 五份+右栏索引；CLOSED≠已实现；未升格立卡）  
 > 本目录是设计说明、对账与讨论稿的落点；**造 Stagent 的施工权威**仍是仓库根 `docs/` 下的《架构规范》《任务规范》。  
 > **讨论稿 ≠ 施工依据**；写代码只认任务卡 + 合同说明 §7.5 钉桩。
 
 ## 推荐阅读顺序（决策 / Supervisor 相关）
 
+0. [`Stagent_Spec_Freeze_Record_2026-10-26.md`](./Stagent_Spec_Freeze_Record_2026-10-26.md) — **Spec Freeze 封版记录**（唯一事实源锚点；CLOSED≠已实现）
 1. [`合同设计说明-2026-10-25.md`](./合同设计说明-2026-10-25.md) — 护照 vs 宪法、导言三锤、§7.3–§7.5  
 2. [`Supervisor运转机制-2026-10-25.md`](./Supervisor运转机制-2026-10-25.md) — 定稿：四机制 + 五阶段 + 收紧  
 3. [`核心资产治理-追溯与变更判定-2026-10-25.md`](./核心资产治理-追溯与变更判定-2026-10-25.md) — 六类资产生命周期、追溯硬门禁、轻量变更判定  
@@ -22,7 +24,7 @@
 
 ## 仍缺（指导写码前）
 
-Top7 已拍板；C.11a–e 过夜已合（见 BRIEF-C11）。Impact Analysis = v0.2+；讨论稿仍未整份升格。
+Top7 已拍板；C.11a–e 过夜已合（见 BRIEF-C11）。**五份规范+右栏 Spec Freeze**（见封版记录）；Impact/Mode/AST = v0.2+；讨论稿仍未整份升格、未立卡。
 
 ## 目录精简（2026-10-25）
 
