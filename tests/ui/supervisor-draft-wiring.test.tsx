@@ -275,20 +275,38 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     submitIntent("把界面的按钮换成圆角");
     await screen.findByTestId("draft-ready");
 
+    const expectedPaths = draftResponse.draft.plan.writable_paths.join(", ");
+
     // 新建需求时方案工作台就是当前 Tab
     expect(screen.getByRole("tab", { name: "方案工作台" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
     // C.18：中间是方案审阅单页 + 新建表单；旧 SupervisorStudioPane 字段不再日常挂载
-    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("studio-viewport-panel-scheme"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("studio-viewport-tabs")).toBeNull();
     expect(screen.getByTestId("draft-ready")).toBeInTheDocument();
-    expect(screen.getByTestId("intent-paths")).toHaveValue(
-      draftResponse.draft.plan.writable_paths.join(", "),
+    // 预填断言紧跟草案就绪：这里只校验「草案就绪这一刻」的预填，
+    // 后续切 Tab 造成的重挂载由文件末尾的回归断言单独覆盖。
+    await waitFor(() =>
+      expect(screen.getByTestId("intent-paths")).toHaveValue(expectedPaths),
     );
-    // 白话理由仍可在「项目全景」看到（次入口），不在五视口合同审阅里
+
+    // 白话理由仍可在「项目全景」看到（次入口），不在五视口合同审阅里。
+    // 注意：切到全景会把方案工作台里的表单卸载，所以上面必须先断言完再切。
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
+    expect(await screen.findByTestId("supervisor-scope")).toBeInTheDocument();
     expect(screen.queryByTestId("studio-unresolved-summary")).toBeNull();
+
+    // 回归：切回方案工作台后表单重新挂载，预填仍是同一份草案（不是默认 src/**），
+    // 把「重挂载 + 预填」这条时序固定下来，避免下次又靠调度运气。
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    await waitFor(() =>
+      expect(screen.getByTestId("intent-paths")).toHaveValue(expectedPaths),
+    );
   });
 
   it("未提意图时不出草案：按钮禁用，界面不会假装有理由", async () => {

@@ -3328,28 +3328,56 @@ function ContractForm({
   onCreate: (contract: SoftwareContract) => void;
   onRequestDraft: (intent: string) => void;
 }) {
+  /**
+   * 预填必须在**渲染期**完成，不能只靠 effect。
+   *
+   * 原因（离线诊断的结论）：草案由异步请求返回，`draft` 一到就会先提交一帧
+   * 「有草案、但 value 还是默认 `src/**`」的 DOM，effect 要到之后的被动刷新
+   * 才把 value 改过来。全量跑时调度被拖慢，观测点正好落在这一帧上，
+   * 就会读到「预填没生效」。同理，草案已就绪时切 Tab 会让表单重挂载，
+   * 首帧也不该先闪默认值。
+   *
+   * 两处一起兜住：
+   * 1. 挂载时若已有草案，直接用 seed 作为初始 state；
+   * 2. 渲染期比较 `draft` 引用，发现新草案就在同一帧套用 seed（React 官方的
+   *    "adjusting state when a prop changes" 写法，不会多提交一帧）。
+   */
+  const mountSeed = draft ? seedDraftForm(draft) : null;
   const [intent, setIntent] = useState("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [paths, setPaths] = useState(initialPaths.join(", ") || "src/**");
-  const [command, setCommand] = useState("npm test");
-  const [acceptance, setAcceptance] = useState<string[]>([]);
+  const [title, setTitle] = useState(() => mountSeed?.title ?? "");
+  const [description, setDescription] = useState(
+    () => mountSeed?.description ?? "",
+  );
+  const [paths, setPaths] = useState(
+    () => mountSeed?.paths || initialPaths.join(", ") || "src/**",
+  );
+  const [command, setCommand] = useState(
+    () => mountSeed?.command ?? "npm test",
+  );
+  const [acceptance, setAcceptance] = useState<string[]>(
+    () => mountSeed?.acceptance ?? [],
+  );
   const [formError, setFormError] = useState<string | null>(null);
+
+  /** 已经套用过预填的那份草案（按引用比较）；之后用户改字段不会被它覆盖 */
+  const [seededDraft, setSeededDraft] = useState<SupervisorDraftResult | null>(
+    draft,
+  );
+  if (draft !== seededDraft) {
+    setSeededDraft(draft);
+    if (draft) {
+      const seed = seedDraftForm(draft);
+      setTitle(seed.title);
+      setDescription(seed.description);
+      setPaths(seed.paths || initialPaths.join(", ") || "src/**");
+      setCommand(seed.command);
+      setAcceptance(seed.acceptance);
+    }
+  }
 
   useEffect(() => {
     if (initialPaths.length > 0) setPaths(initialPaths.join(", "));
   }, [initialPaths]);
-
-  // 草案返回 → 预填全部字段；之后用户仍可自由修改，改完再提交
-  useEffect(() => {
-    if (!draft) return;
-    const seed = seedDraftForm(draft);
-    setTitle(seed.title);
-    setDescription(seed.description);
-    setPaths(seed.paths || initialPaths.join(", ") || "src/**");
-    setCommand(seed.command);
-    setAcceptance(seed.acceptance);
-  }, [draft, initialPaths]);
 
   const submit = () => {
     setFormError(null);
