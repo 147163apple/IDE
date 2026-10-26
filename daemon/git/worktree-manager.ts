@@ -140,7 +140,7 @@ export function assertSafeGitCwd(
 
 /**
  * Execute Git command in target working directory.
- * raw=true 时保留 stdout 原始内容（含末尾换行/二进制文本），供 Diff 原文读取使用。
+ * 默认仅 trimEnd（保留行首空格，porcelain 依赖它）；raw=true 时连尾部换行也不剥。
  *
  * 声明为 `async` 是为了让守卫的同步抛错自动变成 rejected promise，
  * 调用方用 `await expect(...).rejects` 就能断言到。
@@ -175,9 +175,11 @@ export async function execGit(
     });
 
     child.on("close", (code) => {
+      // porcelain 行首空格是 XY 状态码的一部分（如 ` M styles.css`）。
+      // 绝不能 stdout.trim()，否则首行未暂存改动会丢前导空格 → 漏计或切成 tyles.css。
       resolve({
-        stdout: options.raw ? stdout : stdout.trim(),
-        stderr: options.raw ? stderr : stderr.trim(),
+        stdout: options.raw ? stdout : stdout.trimEnd(),
+        stderr: options.raw ? stderr : stderr.trimEnd(),
         exitCode: code ?? 0,
       });
     });
@@ -253,9 +255,17 @@ export async function inspectMainWorktree(
   }
   const files = stdout
     .split("\n")
-    .map((l) => l.trim())
+    .map((l) => l.trimEnd())
     .filter(Boolean)
-    .map((l) => l.replace(/^[A-Z?!]{1,2}\s+/, ""));
+    .map((l) => {
+      // porcelain v1: XY<space>path — 保留行首空格，只剥 3 字符前缀
+      if (l.length < 4) return "";
+      let p = l.slice(3);
+      const arrow = p.indexOf(" -> ");
+      if (arrow >= 0) p = p.slice(arrow + 4);
+      return p.replace(/^"|"$/g, "").trimEnd();
+    })
+    .filter(Boolean);
 
   if (files.length === 0) return { clean: true, files: [] };
   return {

@@ -148,10 +148,12 @@ export async function assertMainTreeClean(repoRoot: string): Promise<void> {
   }
   const dirty = status.stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.trimEnd())
     .filter(Boolean)
     .map((line) => {
       // porcelain 行格式："XY <path>"（重命名为 "XY <orig> -> <new>"）
+      // 保留行首空格，避免 ` M styles.css` 被 trim 后 slice(3) 成 tyles.css
+      if (line.length < 4) return "";
       let p = line.slice(3);
       const arrow = p.indexOf(" -> ");
       if (arrow >= 0) p = p.slice(arrow + 4);

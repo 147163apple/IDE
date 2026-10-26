@@ -1558,9 +1558,11 @@ function clampEvidenceSize(bundle: EvidenceBundle): EvidenceBundle {
 function parsePorcelainPaths(stdout: string): string[] {
   return stdout
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.trimEnd())
     .filter(Boolean)
     .map((line) => {
+      // 保留行首空格：` M styles.css` 的 slice(3) 才是 styles.css，而非 tyles.css
+      if (line.length < 4) return "";
       let p = line.slice(3);
       const arrow = p.indexOf(" -> ");
       if (arrow >= 0) p = p.slice(arrow + 4);

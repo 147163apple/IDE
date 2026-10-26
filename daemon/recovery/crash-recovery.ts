@@ -115,7 +115,7 @@ async function captureWorktreeSnapshot(
     captured_at: capturedAt,
     worktree_path: worktreePath,
     head_sha: head.stdout.trim(),
-    git_status: status.stdout.trim().split("\n").filter(Boolean),
+    git_status: status.stdout.trimEnd().split("\n").filter(Boolean),
     patch_file: path.basename(patchPath),
     usage: costState ?? null,
     verification_guard: loopState ?? null,
