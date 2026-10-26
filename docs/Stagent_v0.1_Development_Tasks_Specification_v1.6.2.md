@@ -96,6 +96,7 @@
 > 62. **状态回写（2026-10-26 · 立卡 TASK-C.14d / C.14e · 基线安全闭环加固）**：Tina 授权（t853u 升格立卡）。按「安全闭环优先」点名两张 **Delta 薄卡**（不齐开四项）：**`TASK-C.14d`**（脏区→Scope 真链路硬门禁：`dirty_exclusions` → 首张微合同 `scope.forbidden_paths` + 白话列出；Worker touch 脏区 → `E_OUT_OF_SCOPE_UNTRACKED` + C.12c 软停 3s→SIGKILL；E2E：未提交 `.env.local` + 未跟踪脚本永不被改）；**`TASK-C.14e`**（扫描器 OS 级只读挂载 + 断网沙盒证明：RO bind mount/sandbox RO；network namespace 禁出站；反向证伪 write→EROFS、outbound fetch/socket 失败）。建议序 **C.14d→C.14e**；**当前首要**→ **C.14d**。**暂缓 backlog（本轮不立）**：深度进度改 WS（P1 体验）；右栏 EO 余面 Delta（P2，随微合同端到端按需带出）。权威：讨论稿 §2.3/§7 + C.14c/C.14a 已知缝 + Tina 计划。**本条仅文档立卡**；**不写** daemon/src 产品码直至 Tina 点名开发；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。
 > 63. **状态回写（2026-10-26 · 合入验收 TASK-C.14d / C.14e COMPLETED · 基线安全闭环）**：Tina t854u「开工」。**C.14d**：`dirty_exclusions` 物理清单→首张微合同 `scope.forbidden_paths`+白话「绝不触碰」；Gateway/Worker touch 脏区→`E_OUT_OF_SCOPE_UNTRACKED`+C.12c SIGINT→SIGKILL；E2E `.env.local`+未跟踪脚本不变。**C.14e**：`os-sandbox.ts`；Darwin `sandbox-exec`（写拒 **EPERM**=平台等价 EROFS；断网 **ENOTFOUND**）；档案附 `os_sandbox` 证明；未证明不得升级硬承诺。单测 `baseline-c14d/e` + C.14a–c 回归绿。**不**扩 Spec Freeze 五正文；WS/EO 余面仍 backlog。
 > 66. **状态回写（2026-10-26 · TASK-C.15b 活路径接线）**：Tina t866u「接线」。ReworkCounter 接入 `orchestrator.approve` seed、`execute` 断言失败计返工（含 LoopGuard 同轮 BLOCKED 仍计数）、超限 `ESCALATED_HUMAN`+吊销+`PENDING_RESUME`；HTTP `GET/POST /api/contracts/:id/rework(/failure|/assertions|/split)`；execute 响应附 `rework`+`delivery_state`。单测 `task-c15b-rework-live-path` + 库测/orchestrator/contract-api 回归绿。**不**扩 Spec Freeze；不改 D.1。
+> 67. **状态回写（2026-10-26 · 立卡 TASK-H.1–H.4 · v0.1 硬化微卡）**：Tina t877u「打 Tag 立卡」。在主路径签收 Tag `v0.1-mainline-signoff`（annotated @ `4f90483` 含纪要；代码锚点 `0b839f3`）之后，进入 **v0.1 Hardening & Resilience**，**不**触碰 v0.2 封印。新增四张独立微卡：**`TASK-H.1`**（Worker JSON/Patch 解析校验 + 轻量本地重试）；**`TASK-H.2`**（`MERGED`/`DELIVERED` 终态收口消歧）；**`TASK-H.3`**（基线扫描文件数/深度硬上限 + 超时熔断）；**`TASK-H.4`**（空目录友好 `git init` 引导）。建议序 **H.1→H.2→H.3→H.4**；**当前首要**→ **H.1**。**本条仅文档立卡**；**不写**产品码直至 Tina 点名实现；每卡自带 1~2 条确定性断言；禁止借机扩写新功能；Impact/Mode/AST/云/W.5b/c/D.1e/真脑图 = 继续封印。权威：`docs/reports/v0.1-主路径里程碑纪要-2026-10-26.md`。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -186,6 +187,10 @@
 | **TASK-C.15b** | EO-08 断言身份与返工计数 | 右栏 EO 余面 | **[COMPLETED]** | P4 EO Delta | • 前置 `C.15a`<br>• UUIDv5 `assertion_id`；Daemon 计数；超限 ESCALATED；返工期禁追加<br>• §14.11 EO-08 |
 | **TASK-C.15c** | EO-05 两阶段归档/GC 细项 | 右栏 EO 余面 | **[COMPLETED]** | P4 EO Delta | • 前置 `C.12d`+`C.12e`+`C.15a`<br>• 签署白名单 GC；MERGED→DELIVERED 事务；失败停 MERGED<br>• §14.11 EO-05 / DEC-01 |
 | **TASK-C.15d** | P0 AC-ISOL + EO-09 seal | 右栏 EO 余面 | **[COMPLETED]** | P4 EO Delta | • 前置 `C.15c`<br>• `.stagent/` gitignore + drafts 路由；worktree seal manifest<br>• §13 P0 / EO-09；P1–P3 仍 backlog |
+| **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[NEW_TASK]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
+| **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[NEW_TASK]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
+| **TASK-H.3** | 基线扫描硬上限与超时熔断 | v0.1 硬化 | **[NEW_TASK]** | Hardening | • 前置 `C.14a` COMPLETED<br>• 文件数/深度硬上限 + 超时中断；防 Daemon 假死<br>• 沿用 OS 只读证明；禁 AST/Impact |
+| **TASK-H.4** | 空目录友好 git init 引导 | v0.1 硬化 | **[NEW_TASK]** | Hardening | • 前置 `D.1b`/`D.1d` COMPLETED<br>• 空仓自动或单键 `git init`；白话引导<br>• 纪要空目录缝；不抢 D.1e |
 | **TASK-C.10o** | 任务图谱开工/核销入口（start/verify UI） | 工作台 UX | **[COMPLETED]**（tip `830fca1`；**1331 passed / 6 skipped**） | P4 体验打磨 | • 前置 `C.10n` / `C.7` COMPLETED<br>• 有图：「开工下一节点」「核销点亮」接 Daemon start/verify<br>• PENDING→RUNNING→点亮；失败黄条；点亮只认物理证据<br>• **不含**假绿/改鉴权；不抢 D.1e |
 | **TASK-P.1** | 全局保护清单与 Vibe 模式安全网 | 安全与体验 | **[COMPLETED]**（提交 08e95da 已合入 main；17 用例绿） | P3.5 保护清单 | `.stagent/protection.json`、首导入推荐卡片、Auto-Checkpoint、【撤销本轮改动】、静默合同、User-First Discard 冲突仲裁。 |
 | **TASK-D.2** | 控制面 API 补齐、六大合并门禁与 Git Trailer 审计 | 通信核销 | **[COMPLETED]**（2026-10-21 步骤 D 收口；仅含当时交付范围） | P5 核销合并 | • 控制面 approve/execute/resume/abort/merge 与既有 Gate 0–4 已落地<br>• 4 条标准 Git Trailer 与 User-First Discard 已交付；增量范围由 D.2b 承接 |
@@ -262,6 +267,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
               前置 C.9a+C.9d    前置 C.9d+C.8a              前置 C.10a+C.10b  前置 C.10c      前置 C.10d      前置 C.10e      前置 C.10f
               [COMPLETED]       [COMPLETED]                 [COMPLETED]     [COMPLETED]    [COMPLETED]    [COMPLETED]    [COMPLETED]
               建议序：C.10p 已合 · **图谱 Worktree 自愈收口**
+
+  【v0.1 硬化旁支 · Hardening · 不碰 v0.2 封印】
+  TASK-W.5a ──► TASK-H.1 (Worker JSON/Patch 解析重试) [NEW]
+  TASK-C.15a + TASK-C.15c ──► TASK-H.2 (MERGED/DELIVERED 终态收口) [NEW]
+  TASK-C.14a ──► TASK-H.3 (扫描硬上限/超时) [NEW]
+  TASK-D.1b/D.1d ──► TASK-H.4 (空目录 git init 引导) [NEW]
+  建议序：H.1 → H.2 → H.3 → H.4 · **当前首要 H.1**
 
   【增量门禁旁支，不阻塞主链】TASK-0.2c + TASK-W.2 ──► TASK-W.2b (Scope 检测)
                                    └─ 与 TASK-D.2 汇合 ──► TASK-D.2b (合并门禁) ──► TASK-S.5
@@ -390,7 +402,13 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   { "from": "TASK-C.12d", "to": "TASK-C.15c" },
   { "from": "TASK-C.12e", "to": "TASK-C.15c" },
   { "from": "TASK-C.15a", "to": "TASK-C.15c" },
-  { "from": "TASK-C.15c", "to": "TASK-C.15d" }
+  { "from": "TASK-C.15c", "to": "TASK-C.15d" },
+  { "from": "TASK-W.5a", "to": "TASK-H.1" },
+  { "from": "TASK-C.15a", "to": "TASK-H.2" },
+  { "from": "TASK-C.15c", "to": "TASK-H.2" },
+  { "from": "TASK-C.14a", "to": "TASK-H.3" },
+  { "from": "TASK-D.1b", "to": "TASK-H.4" },
+  { "from": "TASK-D.1d", "to": "TASK-H.4" }
 ]
 ```
 
@@ -2241,6 +2259,72 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 * **FAIL**：把 gitignore 当沙盒 ACL 宣传；或 seal 失败仍释放锁且无登记。
 
 
+
+### 3.4b v0.1 硬化与稳定性收敛（Hardening · Tina t877u 立卡；不碰 v0.2 封印）
+
+> **阶段纪律**：每张卡 = 单个毛刺消除；自带 1~2 条确定性测试断言；**禁止**借机扩写新功能、引入容器、Impact AST、Mode 0–4、云端、W.5b/c、D.1e、真脑图。权威：`docs/reports/v0.1-主路径里程碑纪要-2026-10-26.md`。签收 Tag：`v0.1-mainline-signoff` @ `4f90483`（代码锚 `0b839f3`）。
+
+#### 【Task H.1】Worker JSON/Patch 解析校验与轻量重试 `[NEW_TASK]`
+* **任务编号**：`TASK-H.1`
+* **前置依赖**：`TASK-W.5a` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（2026-10-26 Tina t877u「打 Tag 立卡」；本条仅文档）
+* **对照痛点 / Spec 锚点**：主路径纪要 §4#2 — `run-worker` 偶发 Patch/JSON 解析失败导致施工 flake。
+* **v0.1 范围（微卡 · 单毛刺）**：
+  1. 对 Worker 模型输出做**格式校验拦截**（非法 JSON / 缺必填 patch 字段 → 明确错误，不挂起）。
+  2. 校验失败时允许 **≤1 次**轻量本地重试（同轮）；仍失败则平稳报错退回可观测状态（非无声失败）。
+* **明确不包含**：换模型供应商；W.5b/c 容器；改 Scope/鉴权；扩写新能力。
+* **涉及核心文件（实现时锚定，可微调）**：`daemon/worker/**` 解析路径；单测 `tests/unit/task-h1-worker-parse-retry.test.ts`
+* **Pass/Fail 验收判定**（1~2 条确定性断言）：
+  1. 注入非法 JSON → 返回可识别错误码/消息且进程不挂起；可选触发正好 1 次重试钩子。
+  2. 合法最小 patch → 一次解析成功、零重试。
+* **FAIL**：挂起/无声失败；或重试无限；或借机引入新 Adapter。
+
+#### 【Task H.2】MERGED/DELIVERED 终态收口消歧 `[NEW_TASK]`
+* **任务编号**：`TASK-H.2`
+* **前置依赖**：`TASK-C.15a` (COMPLETED)、`TASK-C.15c` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（Tina t877u；仅文档）
+* **对照痛点 / Spec 锚点**：纪要 §4#1 — 规范文案 `DELIVERED` vs 现网运行时终态 `MERGED` 两层皮。
+* **v0.1 范围（二选一，卡内必须拍板并测通）**：
+  1. **方案 A（升格）**：`MERGED` 后 Daemon 完成本地审计 + 轻量 records 归档校验，**原子**推进 `DELIVERED`；失败停 `MERGED`（对齐 C.15c 精神）。
+  2. **方案 B（精简注记）**：正式在文档与前端统一注记 **`MERGED` 即为交付终态**；废弃对外单独 `DELIVERED` 承诺（或仅作别名投影）。
+* **明确不包含**：云端 records 同步；改 D.1；重做合并门禁。
+* **涉及核心文件**：`DeliveryState` / 归档路径 / 前端终态文案；单测 `tests/unit/task-h2-terminal-state-closure.test.ts`
+* **Pass/Fail**（1~2）：
+  1. 选定方案后：成功归档路径的对外终态与代码枚举**一致可测**（A：出现 `DELIVERED`；B：UI/API 文案认定 `MERGED`=终态且无悬空 DELIVERED 承诺）。
+  2. 归档中段失败不得标交付完成（A：非 DELIVERED；B：不得伪造成功文案）。
+* **FAIL**：规范与代码继续两层皮；或失败仍标交付完成。
+
+#### 【Task H.3】基线扫描硬上限与超时熔断 `[NEW_TASK]`
+* **任务编号**：`TASK-H.3`
+* **前置依赖**：`TASK-C.14a` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（Tina t877u；仅文档）
+* **对照痛点 / Spec 锚点**：纪要目标 2 — 超大仓库扫描导致 Daemon 假死/内存暴涨风险；C.14a 已有约 3s 熔断意图，缺文件数/深度硬上限固化。
+* **v0.1 范围**：
+  1. 扫描增加**文件数量硬上限**与**目录深度硬上限**（常量可配置但有默认值）；超限提前结束并白话说明「已截断」。
+  2. 超时中断保持可观测；**不**解除 OS 只读挂载证明。
+* **明确不包含**：完整 Impact AST；动态执行扫描；改鉴权。
+* **涉及核心文件**：基线扫描器；单测 `tests/unit/task-h3-scan-hard-cap.test.ts`
+* **Pass/Fail**（1~2）：
+  1. fixture 超文件数上限 → 扫描停止且返回截断标志/文案；Daemon 不假死。
+  2. 超时路径可测中断（或 mock 时钟）且只读证明不被绕过。
+* **FAIL**：无上限扫爆内存；或借机上 AST。
+
+#### 【Task H.4】空目录友好 git init 引导 `[NEW_TASK]`
+* **任务编号**：`TASK-H.4`
+* **前置依赖**：`TASK-D.1b` (COMPLETED)、`TASK-D.1d` (COMPLETED)
+* **任务状态**：**[NEW_TASK]**（Tina t877u；仅文档）
+* **对照痛点 / Spec 锚点**：纪要已知缝 — 空目录打开不会自动 `git init`，后续合同/合并链路卡顿。
+* **v0.1 范围**：
+  1. 打开空（或无 `.git`）目录时提供**友好自动或单键** `git init` 引导（白话确认，非静默破坏已有仓）。
+  2. init 成功后主路径可继续基线/合同；失败给出可理解错误。
+* **明确不包含**：D.1e 系统选文件夹；改写已有 Git 历史；云克隆。
+* **涉及核心文件**：`stagent open` / 打开项目面板；单测 `tests/unit/task-h4-empty-dir-git-init.test.ts`
+* **Pass/Fail**（1~2）：
+  1. 无 `.git` 的空目录经引导后出现合法 `.git` 且打开流程可继续。
+  2. 已有 `.git` 目录不得被再次 init 破坏（幂等/跳过可测）。
+* **FAIL**：静默 `git init` 毁掉已有仓；或抢做 D.1e。
+
+
 #### 【Task C.3】Monaco 核心编辑器集成与受控 Worktree 读写
 * **任务编号**：`TASK-C.3`
 * **前置依赖**：`TASK-C.1`, `TASK-A.2` (COMPLETED)（v1.3.3：移除已删除的 `C.2→C.3` 串行边）
@@ -2566,7 +2650,7 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 
 > **Sprint 0 / 2 / 3 / 4 实施基线核验**：
 > - **当前工程物理起点**：本地代码仓库 `main`@`f14c8cb`（去掉资源管理器「文件」标题热修）；测试基线 **1292 passed / 6 skipped**；已交付至 C.9a–d、**C.10a–h**。
-> - **当前首要编码任务**：`TASK-C.14f` + `TASK-C.15a`–`d` → **`[COMPLETED]`**（Tina t855u 立卡实现走查）（Tina t854u「开工」；tip `fa69cb5`）。C.14a–e 基线安全链收口。**本轮已完成**：C.14f（WS）；C.15a–d（EO 余面）。P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog。已知缝：Darwin 写拒为 EPERM 非 EROFS；Linux RO bind 需权限否则 logical_fallback；扫描主进程仍可 in-process（证明子进程已沙盒）。`TASK-C.12a–e` COMPLETED（tip `12b14b1`）。`TASK-D.1e` 仍 **`[DEFERRED → v0.2+]`（P5.8）**；Impact/Mode/AST/云 = v0.2+；**不**扩 Spec Freeze 五正文。
+> - **当前首要编码任务**：`TASK-H.1`–`TASK-H.4` → **`[NEW_TASK]`**（Tina t877u「打 Tag 立卡」；Tag `v0.1-mainline-signoff` @ `4f90483`，代码锚 `0b839f3`）。阶段定位 **v0.1 Hardening & Resilience**。建议序 **H.1→H.2→H.3→H.4**；**当前首要**→ **H.1**（Worker 解析重试）。C.14f + C.15a–d 已 **COMPLETED**。P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog。`TASK-D.1e` / W.5b/c / Impact/Mode/AST/云/真脑图 = **继续封印 v0.2+**；**不**扩 Spec Freeze 五正文；本轮**仅文档立卡**不写产品码。
 > - **Sprint 2 已达成**：`TASK-P.1`、`TASK-C.5`、`TASK-W.3`、`TASK-W.4` 四张卡均已落地并通过各自专用用例；保护路径在任意模式被门卫拦截、撤销一键恢复、4 类绕过负例失败关闭均已成立。
 > - **Sprint 3 已达成**：`TASK-D.2` 主体已落地，无交集合同自动批准，交互收敛为 1 次合并按钮。
 > - **Sprint 4 进展**：`TASK-D.3`（merge `9a19f4d`）、`TASK-C.2`（merge `51039aa`）与 `TASK-S.1`（merge `a9066dd`）已合入；底座与四视口主链收口完成。**体验最后一公里** `TASK-S.6` 已合入（merge `6415fbd`）；**S.6b REAL_PLAYTEST 真预览挂载已收口**（merge `024d2b8`）。
@@ -2675,3 +2759,4 @@ node scripts/verify-env.mjs && npx tsc --noEmit && npm run lint && npm test
 - **P-42（立卡，2026-10-24）**：`TASK-C.10c` 由 DEFERRED 升为 **`[NEW_TASK]`**（界面暗号/命名清扫：白话标签 + 图谱单入口）。同步：版本头第 33 条、§1.1 矩阵、§2.1 ASCII/JSON（`C.10a+C.10b→C.10c`）、§3.4 详细卡、Sprint「当前首要」→ **C.10c**；走查报告 §6.5 状态回写。**不改**产品代码（本条仅文档）；架构规范仅 §11 注记 9 轻量续写；**不重做**指挥纪律；**不改**鉴权；**不抢** D.1e。
 
 - **P-75（完成，2026-10-26）**：`TASK-C.14f` + `TASK-C.15a`–`TASK-C.15d` 五张 `[COMPLETED]`（项 2 WS + 项 4 EO 余面）。Tina t855u「继续项 2 与项 4 的立卡实现」。权威：基线讨论稿 §5/§7；右栏 §14.11 EO-01/05/08/09 + §13 P0；避开 C.12 Top5 已覆盖面。同步：版本头第 64 条、§1.1 矩阵五行、§2.1 JSON 边、§3.4 详细卡、Sprint「当前首要」→ **C.14f**。**本条仅文档立卡**；实现见同授权开工；**不**扩 Spec Freeze 五正文；不抢 D.1e。
+- **P-76（立卡，2026-10-26）**：新增 `TASK-H.1`–`TASK-H.4` 四张 `[NEW_TASK]`（v0.1 Hardening 微卡）。Tina t877u「打 Tag 立卡」。同步：版本头第 67 条、§1.1 矩阵四行、§2.1 ASCII/JSON（`W.5a→H.1`；`C.15a+C.15c→H.2`；`C.14a→H.3`；`D.1b/D.1d→H.4`）、§3.4b 详细卡、Sprint「当前首要」→ **H.1**。签收 Tag `v0.1-mainline-signoff` @ `4f90483`（纪要；代码锚 `0b839f3`）。**本条仅文档立卡**；不写产品码；**不**触碰 v0.2 封印（Impact/Mode/AST/云/W.5b/c/D.1e/真脑图）。
