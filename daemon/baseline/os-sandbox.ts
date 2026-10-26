@@ -44,6 +44,55 @@ function which(bin: string): string | null {
   return p || null;
 }
 
+/** sandbox-exec 应用失败时的 stderr 特征（嵌套沙箱 / 权限受限） */
+const SANDBOX_LAUNCH_FAILURE =
+  /sandbox_apply|sandbox-exec:|Operation not permitted/i;
+
+let sandboxApplicableCache: boolean | null = null;
+
+/**
+ * 沙箱能否**真正应用**——区别于「二进制是否存在」。
+ *
+ * 必须用我们实际使用的配置去探，不能用宽松配置：实测 macOS 26.6 上
+ * `(version 1)(allow default)` 能跑，但只要配置里出现任何 `deny` 子句
+ * （`(deny default)` 或 `(allow default)(deny network*)` 一样），
+ * 内核就拒绝应用：`sandbox-exec: sandbox_apply: Operation not permitted`，
+ * 退出码 71。用宽松配置探会得到「可用」的假结论。
+ */
+export function isOsSandboxApplicable(): boolean {
+  if (sandboxApplicableCache !== null) return sandboxApplicableCache;
+  if (detectPreferredOsSandboxMode() !== "sandbox-exec") {
+    sandboxApplicableCache = false;
+    return false;
+  }
+  const r = runUnderDarwinSandbox(os.tmpdir(), ["/usr/bin/true"], {
+    timeoutMs: 5_000,
+  });
+  sandboxApplicableCache = r.exitCode === 0;
+  return sandboxApplicableCache;
+}
+
+/** stderr 是否指向「沙箱没能应用」，用于在证明里写明原因 */
+export function isSandboxLaunchFailure(stderr: string): boolean {
+  return SANDBOX_LAUNCH_FAILURE.test(stderr ?? "");
+}
+
+/**
+ * 从探测子进程的 stdout 判定「是否真的被拒绝」。
+ *
+ * 判据只有一条：**必须有输出**。沙箱应用失败时 stdout 为空，若沿用
+ * 「不等于 CONNECTED 就算拒绝」的写法，就会在读不到任何证据的情况下
+ * 凭空生成一条断网证明——归档里的 `os_sandbox` 也就跟着失真。
+ */
+export function probeDeniedFromOutput(
+  stdout: string,
+  successToken: string,
+): boolean {
+  const out = (stdout ?? "").trim();
+  if (out.length === 0) return false;
+  return out !== successToken;
+}
+
 /** 生成 Darwin Seatbelt：默拒绝；允许读；仅允许 /tmp 写入；禁网；禁写 repoRoot */
 export function buildDarwinSeatbeltProfile(repoRoot: string): string {
   const root = path.resolve(repoRoot);
@@ -155,7 +204,7 @@ try {
       script,
     ]);
     const code = (r.stdout || "").trim() || null;
-    const denied = code !== "WROTE" && code !== null;
+    const denied = probeDeniedFromOutput(r.stdout, "WROTE");
     const stillMissing = !fs.existsSync(probeAbs);
     return {
       denied: denied && stillMissing,
@@ -245,7 +294,7 @@ setTimeout(() => { process.stdout.write("TIMEOUT"); process.exit(3); }, 2500);
       timeoutMs: 8_000,
     });
     const code = (r.stdout || "").trim() || null;
-    const denied = code !== "CONNECTED";
+    const denied = probeDeniedFromOutput(r.stdout, "CONNECTED");
     return {
       denied,
       code: denied ? code : null,
@@ -261,7 +310,7 @@ setTimeout(() => { process.stdout.write("TIMEOUT"); process.exit(3); }, 2500);
       { encoding: "utf8", timeout: 8_000 },
     );
     const code = (r.stdout || "").trim() || null;
-    const denied = code !== "CONNECTED";
+    const denied = probeDeniedFromOutput(r.stdout, "CONNECTED");
     return {
       denied,
       code: denied ? code : null,
@@ -303,6 +352,17 @@ export function proveOsSandbox(repoRoot: string): BaselineOsSandboxProof {
     notes.push(net.detail);
   } else {
     mode = write.mode === net.mode ? write.mode : preferred;
+  }
+
+  // 沙箱没应用成功时，把「为什么没证明」写清楚，避免归档只剩一条假证据
+  if (
+    isSandboxLaunchFailure(write.detail) ||
+    isSandboxLaunchFailure(net.detail) ||
+    !isOsSandboxApplicable()
+  ) {
+    notes.push(
+      "OS 沙箱无法应用（内核拒收含 deny 子句的 seatbelt 配置），本轮不构成只读/断网证明。",
+    );
   }
 
   if (write.denied && write.code && !DARWIN_WRITE_OK.has(write.code) && write.code !== "EROFS") {

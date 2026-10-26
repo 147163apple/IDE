@@ -72,7 +72,9 @@ describe("TASK-C.17 debug-log JSONL", () => {
       appendDaemonLog(repo, { kind: "http", route: "GET /pad", detail: { big } });
     }
     expect(fs.existsSync(`${file}.1`)).toBe(true);
-  });
+    // 这条要写满轮转阈值（每次 64KB + stat），并发下实测会顶到 30s 默认超时；
+    // 超时是「等待预算」，给它 120s，避免把慢机器误判成轮转坏了。
+  }, 120_000);
 
   it("journey 落盘可按合同读回（刷新还原）", () => {
     const repo = newRepo();

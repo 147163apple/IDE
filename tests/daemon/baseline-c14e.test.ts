@@ -1,6 +1,12 @@
 /**
  * TASK-C.14e：OS 级只读 + 断网沙盒反向证伪。
  * Darwin：写拒 EPERM（平台等价 EROFS）；断网 ENOTFOUND 等。
+ *
+ * 关于跳过：`sandbox-exec` 二进制存在 ≠ 能用。实测 macOS 26.6 上，只要
+ * seatbelt 配置里出现 `deny` 子句，内核就拒绝应用（`sandbox_apply:
+ * Operation not permitted`，退出码 71），子进程压根没跑起来，任何「已被
+ * 拒绝」的结论都不成立。这类环境跳过「真跑一次」的用例，改用两条纯函数
+ * 用例守住判定口径，另加一条「无法应用时不得声称已证明」的诚实性用例。
  */
 import { describe, expect, it, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
@@ -15,6 +21,9 @@ import {
   detectPreferredOsSandboxMode,
   buildDarwinSeatbeltProfile,
   runProgressiveBaselineScan,
+  isOsSandboxApplicable,
+  isSandboxLaunchFailure,
+  probeDeniedFromOutput,
 } from "../../daemon/baseline/index";
 
 function mkRepo(): string {
@@ -33,6 +42,11 @@ function mkRepo(): string {
 
 describe("TASK-C.14e OS sandbox", () => {
   let root = "";
+
+  /** 沙箱能否真正应用；不能时「真跑一次」的用例跳过，而不是报假红 */
+  const SANDBOX_APPLICABLE = isOsSandboxApplicable();
+  const CAN_PROVE =
+    process.platform === "darwin" ? SANDBOX_APPLICABLE : true;
 
   beforeEach(() => {
     root = mkRepo();
@@ -63,7 +77,7 @@ describe("TASK-C.14e OS sandbox", () => {
     expect(profile).toContain('(subpath "/private/tmp")');
   });
 
-  it("test_scan_fails_on_write: sandbox write to repo is denied (EPERM/EROFS)", () => {
+  it.skipIf(!CAN_PROVE)("test_scan_fails_on_write: sandbox write to repo is denied (EPERM/EROFS)", () => {
     if (process.platform !== "darwin") {
       const r = proveScanWriteDenied(root);
       expect(r).toHaveProperty("denied");
@@ -82,7 +96,7 @@ describe("TASK-C.14e OS sandbox", () => {
     expect(fs.existsSync(probe)).toBe(false);
   });
 
-  it("test_scan_fails_on_outbound_network: sandbox outbound fails", () => {
+  it.skipIf(!CAN_PROVE)("test_scan_fails_on_outbound_network: sandbox outbound fails", () => {
     if (process.platform !== "darwin") {
       const r = proveScanNetworkDenied(root);
       expect(r).toHaveProperty("denied");
@@ -95,7 +109,7 @@ describe("TASK-C.14e OS sandbox", () => {
     expect(r.code).toBeTruthy();
   });
 
-  it("proveOsSandbox aggregates write+network on Darwin", () => {
+  it.skipIf(!CAN_PROVE)("proveOsSandbox aggregates write+network on Darwin", () => {
     if (process.platform !== "darwin") return;
     const proof = proveOsSandbox(root);
     expect(proof.platform).toBe("darwin");
@@ -106,7 +120,7 @@ describe("TASK-C.14e OS sandbox", () => {
     expect(proof.notes.some((n) => n.includes("EPERM"))).toBe(true);
   });
 
-  it("progressive scan attaches os_sandbox proof to archive", async () => {
+  it.skipIf(!CAN_PROVE)("progressive scan attaches os_sandbox proof to archive", async () => {
     const archive = await runProgressiveBaselineScan({
       repoRoot: root,
       toolVersion: "0.1.0-c14e-test",
@@ -121,5 +135,42 @@ describe("TASK-C.14e OS sandbox", () => {
       expect(archive.os_sandbox!.mode).toBe("sandbox-exec");
       expect(archive.notes.some((n) => n.includes("OS 沙盒已证明"))).toBe(true);
     }
+  });
+
+  // ── 判定口径（纯函数，任何平台都跑）──────────────────────────────
+  // 这组用例守的是一个真实缺陷：网络探针原先用 `code !== "CONNECTED"` 判定，
+  // 沙箱应用失败时 stdout 为空、code 为 null，于是被算成「断网已证明」。
+
+  it("沙箱应用失败（无输出）不得判定为「已拒绝」", () => {
+    expect(probeDeniedFromOutput("", "CONNECTED")).toBe(false);
+    expect(probeDeniedFromOutput("", "WROTE")).toBe(false);
+    expect(probeDeniedFromOutput("   \n", "CONNECTED")).toBe(false);
+    expect(
+      isSandboxLaunchFailure(
+        "sandbox-exec: sandbox_apply: Operation not permitted",
+      ),
+    ).toBe(true);
+    expect(isSandboxLaunchFailure("")).toBe(false);
+  });
+
+  it("沙箱内真实报错仍算拒绝，连上了则不算", () => {
+    expect(probeDeniedFromOutput("ENOTFOUND", "CONNECTED")).toBe(true);
+    expect(probeDeniedFromOutput("TIMEOUT", "CONNECTED")).toBe(true);
+    expect(probeDeniedFromOutput("EPERM", "WROTE")).toBe(true);
+    expect(probeDeniedFromOutput("CONNECTED", "CONNECTED")).toBe(false);
+    expect(probeDeniedFromOutput("WROTE", "WROTE")).toBe(false);
+  });
+
+  it("沙箱无法应用时：结论为「未证明」，且归档注明原因", () => {
+    if (CAN_PROVE && SANDBOX_APPLICABLE) {
+      // 沙箱可用的机器上，这条诚实性断言没有触发条件
+      return;
+    }
+    const proof = proveOsSandbox(root);
+    expect(proof.write_denied).toBe(false);
+    expect(proof.network_denied).toBe(false);
+    expect(proof.mode).toBe("logical_fallback");
+    expect(osSandboxFullyProven(proof)).toBe(false);
+    expect(proof.notes.join("\n")).toContain("OS 沙箱无法应用");
   });
 });

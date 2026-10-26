@@ -10,6 +10,7 @@ import type {
 } from "../../daemon/chat/types";
 import type { ChatEvent } from "../../src/lib/chat-events";
 import { createDaemon, type StagentDaemon } from "../../daemon/server";
+import { measureSchedulingStallMs } from "../helpers/load";
 
 /** 可控假适配器：按 tick 吐字，记录收到的 nativeSessionId / history */
 class FakeAdapter implements ChatAdapter {
@@ -71,6 +72,9 @@ describe("TASK-C.6 会话管理器", () => {
   it("流式输出：user → tool_call → tool_result → delta… → turn_end，首字 ≤1s", async () => {
     const m = make(new FakeAdapter(5, 1));
     const s = m.createSession("fake");
+    // 先量本机调度抖动：8 fork 并发下 0ms 定时器实测要等上秒级，
+    // 用固定 1s 判「首字延迟」等于在赌调度公平性，而不是在测产品。
+    const stall = await measureSchedulingStallMs();
     const t0 = Date.now();
     m.send(s.id, "你好");
     await m.idle(s.id);
@@ -81,7 +85,12 @@ describe("TASK-C.6 会话管理器", () => {
     expect(kinds.filter((k) => k === "delta")).toHaveLength(5);
     expect(kinds.at(-1)).toBe("turn_end");
     const firstDelta = events.find((e) => e.kind === "delta");
-    expect(new Date(firstDelta!.at).getTime() - t0).toBeLessThan(1000);
+    // SLA 仍以 1s 为基线，余量随实测抖动放大（机器健康时余量≈0）
+    const budgetMs = 1_000 + stall * 3;
+    expect(
+      new Date(firstDelta!.at).getTime() - t0,
+      `首字延迟超出预算 ${Math.round(budgetMs)}ms（本机调度抖动 ${Math.round(stall)}ms）`,
+    ).toBeLessThan(budgetMs);
   });
 
   it("打断：立即发 interrupted，之后 0 条输出，适配器 2s 内停止", async () => {
