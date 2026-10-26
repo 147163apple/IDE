@@ -734,7 +734,7 @@ Tina 提出的三类互补文档，用来锁死决策、抑制长上下文漂移
 ## 14. 异常状态转移基线、三层状态联动与产品决策（**倾向采纳 + 产品 CLOSED + 工程 EO CLOSED**）
 
 > **状态：倾向采纳（异常基线）+ 产品决策 CLOSED + 工程边界 EO-01～10 CLOSED**（2026-10-26 Asia/Hong_Kong）  
-> 来源：Tina 指出澄清→Demo→签署→施工→验收主路径清晰后的 7 类异常断点；随后给出「分层状态 + 异常转移矩阵 + 四项默认回退 + 质疑规则」基线；再整理为三层 Mermaid、DEC 决策表与交叉自检修订。Tina 将 DEC-01～06 与四补钉的**产品选择**正式 **CLOSED**（§14.8 / §14.9）；同日将 **EO-01～10** 工程契约正式 **CLOSED**（§14.11）。分层状态名与 EO 枚举为**讨论稿定案规格**，不声称现网已实现。**本文仍为讨论稿**，CLOSED **不表示**能力已实现或已通过验证；未升格、未立卡，不算施工合同；不改规范正文 / 产品代码。  
+> 来源：Tina 指出澄清→Demo→签署→施工→验收主路径清晰后的 7 类异常断点；随后给出「分层状态 + 异常转移矩阵 + 四项默认回退 + 质疑规则」基线；再整理为三层 Mermaid、DEC 决策表与交叉自检修订。Tina 将 DEC-01～06 与四补钉的**产品选择**正式 **CLOSED**（§14.8 / §14.9）；同日将 **EO-01～10** 工程契约正式 **CLOSED**（§14.11）。分层状态名与 EO 枚举为**讨论稿定案规格**，不声称现网已实现。**本文仍为讨论稿**，CLOSED **不表示**能力已实现或已通过验证；未升格、未立卡，不算施工合同；**不改产品代码**。讨论稿侧 DocGov/Workflow/澄清/Checklist 状态名对齐属规范词汇收口，不等于升格立卡。  
 > **硬约束补丁（必须一并生效）**：施工挂起 `PAUSED` 后若用户选「扩权」，**必须**走新合同重签 / 新凭证，**禁止**从图上的 `PAUSED → EXECUTING` 暗示静默扩权。  
 > **区分口径**：**产品已拍板（CLOSED）** = DEC-01～06 与四补钉；**工程契约已拍板（CLOSED）** = EO-01～10（§14.11）；**CLOSED ≠ 已实现**。§14.12 仍为立卡时须写入验收测试的边界补丁。
 
@@ -1315,7 +1315,7 @@ function can_sign(contract: Contract, demo: DemoArtifact, event: DemoConfirmatio
 
 ### 14.13 交叉注记：API Top5 Delta CLOSED（2026-10-26）
 
-> **规范定案交叉引用（不改写 DEC / EO）**。Tina 将接口侧 **API Top5**（Token 双层令牌、重连 `session_epoch`+`state_seq`、越界原子拦截、Demo 三态 `can_sign`、无 Git `audit-manifest`）收口为 **CLOSED**；现网骨架不推翻，缺口映射为 Delta 升级卡。正文见《Stagent_Clarification_and_Authorization_Specification_v1.0》**§6** 与《Stagent_Interface_Contract_Checklist_v1.0》**§3**。本注记**不**重开 EO-01～10 选择题；**CLOSED ≠ 已实现**。
+> **规范定案交叉引用（不改写 DEC / EO）**。Tina 将接口侧 **API Top5**（Token 双层令牌、重连 `session_epoch`+`state_seq`、越界原子拦截、Demo 三态 `can_sign`、无 Git `audit-manifest`）收口为 **CLOSED**；现网骨架不推翻，缺口映射为 Delta 升级卡。正文见《Stagent_Clarification_and_Authorization_Specification_v1.0》**§6** 与《Stagent_Interface_Contract_Checklist_v1.0》**§3**。本注记**不**重开 EO-01～10 选择题；**CLOSED ≠ 已实现**。 **DocGov / Workflow 状态名与 EO-01/02 对齐**已于同日写入《文档治理》§3.1/§11 与《端到端工作流》§1.1/§4（讨论稿收口；未升格）。
 
 
 ---
