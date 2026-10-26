@@ -1537,13 +1537,36 @@ function Console() {
   }, [connected, loadTaskGraph, selectedId]);
 
 
-  const loadBaseline = useCallback(async () => {
+  const loadBaseline = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!connected || !conn) return;
+    // 首屏/无档案时立刻亮基线卡（scanning），避免只剩旧「还没有可展示的项目摘要」空态
+    if (!opts?.quiet) {
+      setBaselinePayload((prev) =>
+        prev?.archive
+          ? prev
+          : {
+              archive: null,
+              scanning: true,
+              accept_label: "认可此基线作为后续参考",
+              grants_construction: false,
+            },
+      );
+    }
     try {
       const payload = await fetchBaselineArchive(conn);
       setBaselinePayload(payload);
     } catch {
-      // 基线失败不挡主界面
+      // 基线失败不挡主界面；保留 scanning 占位或上一份
+      setBaselinePayload((prev) =>
+        prev?.archive
+          ? { ...prev, scanning: false }
+          : {
+              archive: null,
+              scanning: false,
+              accept_label: "认可此基线作为后续参考",
+              grants_construction: false,
+            },
+      );
     }
   }, [connected, conn]);
 
@@ -1551,7 +1574,7 @@ function Console() {
     if (!connected) return;
     void loadBaseline();
     const id = window.setInterval(() => {
-      void loadBaseline();
+      void loadBaseline({ quiet: true });
     }, 2000);
     return () => window.clearInterval(id);
   }, [connected, loadBaseline]);

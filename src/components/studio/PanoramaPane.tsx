@@ -125,7 +125,7 @@ export function PanoramaPane(props: PanoramaPaneProps) {
             </ul>
           ) : null}
         </section>
-      ) : !archive ? (
+      ) : !archive && !scanning ? (
         <div
           data-testid="panorama-empty"
           className="mb-4 rounded-md border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground"

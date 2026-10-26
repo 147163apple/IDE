@@ -117,4 +117,23 @@ describe("PanoramaPane baseline (TASK-C.14b/c)", () => {
       "安全探查",
     );
   });
+
+  it("scanning 占位且不露出合同空态", () => {
+    render(
+      <PanoramaPane
+        baseline={{
+          archive: null,
+          scanning: true,
+          accept_label: "认可此基线作为后续参考",
+          grants_construction: false,
+        }}
+      />,
+    );
+    expect(screen.getByTestId("panorama-baseline")).toBeTruthy();
+    expect(screen.getByTestId("panorama-baseline-progress").textContent).toMatch(
+      /安全探查|整理现状/,
+    );
+    expect(screen.queryByTestId("panorama-empty")).toBeNull();
+    expect(screen.getByTestId("panorama-v02-placeholders")).toBeTruthy();
+  });
 });
