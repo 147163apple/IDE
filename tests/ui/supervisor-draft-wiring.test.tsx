@@ -86,9 +86,18 @@ vi.mock("@/lib/daemon-api", async (orig) => {
       updated_at: null,
       contracts: {},
     })),
-    fetchArchGraph: vi.fn(async () => {
-      throw new Error("no graph in test");
-    }),
+    fetchArchGraph: vi.fn(async () => ({
+      durationMs: 1,
+      stats: { nodes: 2, edges: 1, cycles: 0 },
+      cycles: [],
+      graph: {
+        nodes: [
+          { filePath: "src/routes/**", exports: [] },
+          { filePath: "src/components/**", exports: [] },
+        ],
+        edges: [{ from: "src/routes/**", to: "src/components/**" }],
+      },
+    })),
     fetchRepoTree: vi.fn(async () => ({ root: "/tmp", files: ["src/a.ts"] })),
     fetchSettings: vi.fn(async () => ({
       configured: false,
@@ -101,6 +110,27 @@ vi.mock("@/lib/daemon-api", async (orig) => {
 vi.mock("@monaco-editor/react", () => ({
   default: (p: { value: string }) => (
     <textarea data-testid="monaco" value={p.value} readOnly />
+  ),
+}));
+
+/**
+ * 依赖图用 cytoscape 在画布上交互，jsdom 里既渲染不出节点也点不到。
+ * 这里只替换图形本身：圈选结果仍走真实的 `onSelectionChange` → 路由的
+ * `selectedPaths` → `ScopeSelector`，被测的是「圈选如何影响表单预填」，
+ * 不是画布怎么画。
+ */
+vi.mock("@/components/radar/RadarGraph", () => ({
+  RadarGraph: (p: {
+    nodes: Array<{ filePath: string }>;
+    onSelectionChange: (paths: string[]) => void;
+  }) => (
+    <button
+      type="button"
+      data-testid="radar-select-first"
+      onClick={() => p.onSelectionChange([p.nodes[0]?.filePath ?? "src/**"])}
+    >
+      选中第一个节点
+    </button>
   ),
 }));
 
@@ -307,6 +337,53 @@ describe("新建需求 → 草案端点 → Supervisor Tab / Studio 装载", () 
     await waitFor(() =>
       expect(screen.getByTestId("intent-paths")).toHaveValue(expectedPaths),
     );
+  });
+
+  /**
+   * 优先级回归：**草案恒赢**。
+   *
+   * 圈选只是「给 Supervisor 的上下文」，草案的 `plan.writable_paths` 才是它
+   * 真正允许写的范围（圈选 + 规则推断，绿野仓库还会并入脚手架种子）。
+   * 这里先圈选一个具体目录、再出草案、再切 Tab 重挂载——字段必须还是草案范围。
+   * 曾经因为 `[initialPaths]` 的 effect 在挂载时也跑，重挂载会把预填覆盖回
+   * 圈选路径，而当时所有用例都在「无圈选」前提下跑，谁都没发现。
+   */
+  it("有圈选时，切 Tab 重挂载后涉及范围仍是草案范围，不被圈选覆盖", async () => {
+    render(<Console />);
+    await waitFor(() =>
+      expect(screen.getByTestId("repo-name")).toHaveTextContent("1020"),
+    );
+
+    // 圈选一个文件并设为可写范围：这一步会以圈选结果开启新建需求
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
+    fireEvent.click(await screen.findByTestId("load-arch-graph"));
+    fireEvent.click(await screen.findByTestId("radar-select-first"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "设为可写范围" }),
+    );
+
+    const selection = "src/routes/**";
+    // 还没有草案时，范围就是圈选结果（这是圈选的唯一用途）
+    expect(await screen.findByTestId("intent-paths")).toHaveValue(selection);
+
+    submitIntent("把界面的按钮换成圆角");
+    await screen.findByTestId("draft-ready");
+
+    const expectedPaths = draftResponse.draft.plan.writable_paths.join(", ");
+    expect(expectedPaths).not.toBe(selection);
+    await waitFor(() =>
+      expect(screen.getByTestId("intent-paths")).toHaveValue(expectedPaths),
+    );
+
+    // 切走（卸载表单）再切回（重挂载）：草案在场，圈选不得回写
+    fireEvent.click(screen.getByTestId("studio-open-panorama"));
+    expect(await screen.findByTestId("supervisor-scope")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("activity-workbench"));
+
+    const remounted = await screen.findByTestId("intent-paths");
+    expect(remounted).toHaveValue(expectedPaths);
+    expect(remounted).not.toHaveValue(selection);
   });
 
   it("未提意图时不出草案：按钮禁用，界面不会假装有理由", async () => {

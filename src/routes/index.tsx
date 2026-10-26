@@ -3375,9 +3375,20 @@ function ContractForm({
     }
   }
 
+  /**
+   * 圈选只在「还没有草案」时决定范围。
+   *
+   * 草案的 `plan.writable_paths` 是「圈选 + 规则推断」的结果（绿野仓库还会并入
+   * 脚手架种子），它表达的是 Supervisor 真正允许写的范围；表单是审批面，
+   * 这里若让圈选回写，字段就会从草案范围缩回圈选列表。
+   *
+   * 这个 effect 在挂载时也会跑，所以必须显式挡掉草案在场的情况——否则切个
+   * Tab 让表单重挂载，预填就会被圈选覆盖，和「首帧闪 src/**」是同一类问题。
+   */
   useEffect(() => {
+    if (draft) return;
     if (initialPaths.length > 0) setPaths(initialPaths.join(", "));
-  }, [initialPaths]);
+  }, [draft, initialPaths]);
 
   const submit = () => {
     setFormError(null);
