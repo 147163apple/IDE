@@ -54,6 +54,7 @@ import {
   submitJourneyMessage,
   startRealPlaytest,
   stopRealPlaytest,
+  getRealPlaytestStatus,
   startTaskGraphNode,
   verifyTaskGraphNode,
   createTaskGraph,
@@ -132,6 +133,11 @@ import {
   shouldGrayAfterDispute,
 } from "@/lib/graph/dispute-gray";
 import { RealPlaytestPane } from "@/components/studio/RealPlaytestPane";
+import {
+  isDeliveredLifecycle,
+  MERGED_PRODUCT_PREVIEW_URLS,
+  pickDefaultContractId,
+} from "@/lib/contract-selection";
 import { TaskGraphPane } from "@/components/studio/TaskGraphPane";
 import {
   DisputeConsolePane,
@@ -454,7 +460,9 @@ function Console() {
       setDaemonPort(health.port);
       setRepoRoot(health.repoRoot);
       setCurrentBranch(health.currentBranch || "main");
-      setContracts(await listContracts(conn));
+      const listed = await listContracts(conn);
+      setContracts(listed);
+      setSelectedId((prev) => pickDefaultContractId(listed, prev));
       // P.1：保护清单/本轮授权/快照状态（轮询兜底；卡片靠它出现）
       try {
         const p = await fetchProtection(conn);
@@ -873,10 +881,16 @@ function Console() {
           setRealPlaytestBusy(true);
           setRealPlaytestError(null);
           try {
+            const delivered = isDeliveredLifecycle(selected?.lifecycle_state);
             const preview = await startRealPlaytest(conn, {
               contract_id: selectedId,
-              stub: true,
               title: selected?.intent.title,
+              ...(delivered
+                ? {
+                    attach_url: MERGED_PRODUCT_PREVIEW_URLS[0],
+                    stub: false,
+                  }
+                : { stub: true }),
             });
             setRealPlaytest({
               contract_id: preview.contract_id,
@@ -1076,10 +1090,17 @@ function Console() {
     setRealPlaytestBusy(true);
     setRealPlaytestError(null);
     try {
+      const delivered = isDeliveredLifecycle(selected?.lifecycle_state);
       const preview = await startRealPlaytest(conn, {
         contract_id: playtestContractId,
-        stub: true,
         title: selected?.intent.title ?? "真机试玩",
+        ...(delivered
+          ? {
+              // 合入后挂业务成品（本机 Vite 常见端口），不再只起白话桩
+              attach_url: MERGED_PRODUCT_PREVIEW_URLS[0],
+              stub: false,
+            }
+          : { stub: true }),
       });
       setRealPlaytest({
         contract_id: preview.contract_id,
@@ -1579,6 +1600,69 @@ function Console() {
     void loadTaskGraph(selectedId ?? undefined);
   }, [connected, loadTaskGraph, selectedId]);
 
+  /**
+   * 刷新后恢复真机试玩：Daemon 可能仍在跑（status API），但内存态丢了会空屏。
+   * 已合入合同优先挂业务成品 URL，避免只显示签署前的白话桩。
+   */
+  useEffect(() => {
+    if (!connected || !conn || !selectedId || !selected) return;
+    let cancelled = false;
+    void (async () => {
+      const delivered = isDeliveredLifecycle(selected.lifecycle_state);
+      if (delivered) {
+        try {
+          const preview = await startRealPlaytest(conn, {
+            contract_id: selectedId,
+            attach_url: MERGED_PRODUCT_PREVIEW_URLS[0],
+            stub: false,
+            title: selected.intent.title,
+          });
+          if (cancelled) return;
+          setRealPlaytest({
+            contract_id: preview.contract_id,
+            url: preview.url,
+            port: preview.port,
+            status: preview.status,
+            owned: preview.owned,
+            updated_at: preview.updated_at,
+            ...(preview.message ? { message: preview.message } : {}),
+          });
+          setRealPlaytestError(null);
+          return;
+        } catch (err) {
+          if (!cancelled) {
+            setRealPlaytestError(
+              err instanceof Error
+                ? err.message
+                : "合入成品预览挂载失败；可点启动或直接打开本机 Vite 地址",
+            );
+          }
+        }
+      }
+      try {
+        const status = await getRealPlaytestStatus(conn, selectedId);
+        if (cancelled) return;
+        if (status.status === "RUNNING" && status.url) {
+          setRealPlaytest({
+            contract_id: status.contract_id,
+            url: status.url,
+            port: status.port,
+            status: status.status,
+            owned: status.owned,
+            updated_at: status.updated_at,
+            ...(status.message ? { message: status.message } : {}),
+          });
+          setRealPlaytestError(null);
+        }
+      } catch {
+        // status 缺失不阻断；用户仍可手动启动
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [connected, conn, selectedId, selected?.lifecycle_state, selected?.intent.title]);
+
 
   const loadBaseline = useCallback(async (opts?: { quiet?: boolean }) => {
     if (!connected || !conn) return;
@@ -1959,7 +2043,7 @@ function Console() {
 
       {!selected ? (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">
-          选择左侧合同查看详情，或在雷达中圈选文件后新建合同
+          到左侧「项目审阅」点开需求（合同）查看详情；若本仓库只有一份合入合同，刷新后会自动选中。也可在雷达中圈选文件后新建合同
         </div>
       ) : (
         <div className="space-y-4 p-4">
@@ -2538,6 +2622,11 @@ function Console() {
             graph={taskGraph}
             loading={taskGraphLoading}
             error={confirmPrototypeError ?? taskGraphError}
+            deliveryNote={
+              isDeliveredLifecycle(selected?.lifecycle_state)
+                ? "本合同已合入。下方施工图是合入前的核销快照（可能仍显示失败）；成品请看「真机试玩」，或打开仓库 / 本机 Vite（如 http://127.0.0.1:5180/）。归档在 .stagent/records/。"
+                : null
+            }
             onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
             onConfirmPrototype={() => {
               void handleConfirmPrototype();
@@ -2795,6 +2884,11 @@ function Console() {
                 graph={taskGraph}
                 loading={taskGraphLoading}
                 error={confirmPrototypeError ?? taskGraphError}
+                deliveryNote={
+                  isDeliveredLifecycle(selected?.lifecycle_state)
+                    ? "本合同已合入。下方施工图是合入前的核销快照（可能仍显示失败）；成品请看「真机试玩」，或打开仓库 / 本机 Vite（如 http://127.0.0.1:5180/）。归档在 .stagent/records/。"
+                    : null
+                }
                 onRefresh={() => void loadTaskGraph(selectedId ?? undefined)}
                 onConfirmPrototype={() => {
                   void handleConfirmPrototype();
@@ -2890,6 +2984,11 @@ function Console() {
             }
             playtest={
               <RealPlaytestPane
+                productHint={
+                  isDeliveredLifecycle(selected?.lifecycle_state)
+                    ? MERGED_PRODUCT_PREVIEW_URLS[0]
+                    : null
+                }
                 previewUrl={
                   realPlaytest &&
                   (!selectedId || realPlaytest.contract_id === selectedId)

@@ -32,6 +32,8 @@ export interface TaskGraphPaneProps {
   canRunWorker?: boolean | undefined;
   runWorkerBusy?: boolean | undefined;
   runWorkerLabel?: string | undefined;
+  /** 合入后提示：施工快照可能仍失败，成品看真机试玩/仓库 */
+  deliveryNote?: string | null | undefined;
 }
 
 export function TaskGraphPane(props: TaskGraphPaneProps) {
@@ -72,7 +74,16 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
           />
         }
         construction={
-          <TaskGraphPanel
+          <>
+            {props.deliveryNote?.trim() ? (
+              <div
+                data-testid="task-graph-delivery-note"
+                className="border-b border-emerald-600/30 bg-emerald-500/10 px-3 py-2 text-[11px] leading-relaxed text-emerald-900"
+              >
+                {props.deliveryNote.trim()}
+              </div>
+            ) : null}
+            <TaskGraphPanel
             graph={props.graph}
             {...(props.loading === undefined ? {} : { loading: props.loading })}
             {...(props.error === undefined ? {} : { error: props.error })}
@@ -107,6 +118,7 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
               ? {}
               : { runWorkerLabel: props.runWorkerLabel })}
           />
+          </>
         }
       />
     </div>

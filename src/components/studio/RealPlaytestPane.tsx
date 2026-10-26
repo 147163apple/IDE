@@ -16,6 +16,8 @@ export interface RealPlaytestPaneProps {
   busy?: boolean | undefined;
   onStart?: (() => void) | undefined;
   onStop?: (() => void) | undefined;
+  /** 合入后可直达的业务成品 URL（如本机 Vite） */
+  productHint?: string | null | undefined;
 }
 
 export function RealPlaytestPane(props: RealPlaytestPaneProps) {
@@ -114,6 +116,21 @@ export function RealPlaytestPane(props: RealPlaytestPaneProps) {
           <p>
             施工验收阶段这里会挂上真实页面。没有业务工程时，也可先启动一页试玩桩，确认中栏与外链都通。
           </p>
+          {props.productHint?.trim() ? (
+            <p className="max-w-md text-[11px] leading-relaxed">
+              本合同已合入时，点启动会挂到业务成品。也可直接打开{" "}
+              <a
+                data-testid="real-playtest-product-hint"
+                href={props.productHint.trim()}
+                target="_blank"
+                rel="noreferrer"
+                className="underline text-foreground"
+              >
+                {props.productHint.trim()}
+              </a>
+              。
+            </p>
+          ) : null}
           <button
             type="button"
             data-testid="real-playtest-start-empty"
