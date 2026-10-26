@@ -80,6 +80,7 @@ import {
   clearGatewayViolation,
   loadCurrentGatewayViolation,
 } from "./guard/gateway-violation-store";
+import { projectDeliveryState } from "../src/lib/state/delivery-state";
 import { ContractOrchestrator } from "./pipeline/orchestrator";
 import { TaskGraphEngine } from "./graph/graph-engine";
 import { collectWorktreeEvidence } from "./graph/evidence-collector";
@@ -3303,6 +3304,132 @@ export class StagentDaemon {
         return;
       }
 
+      // TASK-C.15b / EO-08：返工计数只读 + Daemon 权威写
+      const reworkMatch = pathname.match(
+        /^\/api\/contracts\/([^/]+)\/rework(?:\/(failure|assertions|split))?$/,
+      );
+      if (reworkMatch) {
+        let contractId: string;
+        try {
+          contractId = decodeURIComponent(reworkMatch[1] as string);
+        } catch {
+          this.sendJson(res, 400, { error: "Invalid URL encoding" });
+          return;
+        }
+        const sub = reworkMatch[2];
+        const contract = store.get(contractId);
+        if (!contract) {
+          this.sendJson(res, 404, { error: "Contract not found" });
+          return;
+        }
+        if (method === "GET" && !sub) {
+          const rework = this.orchestrator.getReworkSnapshot(contractId);
+          const delivery_state = projectDeliveryState({
+            lifecycle_state: contract.lifecycle_state,
+            rework_required: rework?.phase === "rework",
+            escalated: rework?.phase === "escalated",
+          });
+          this.sendJson(res, 200, { rework, delivery_state });
+          return;
+        }
+        if (method === "POST" && sub === "failure") {
+          try {
+            const body = (await this.readJsonBody(req)) as {
+              assertion_id?: string;
+            };
+            if (!body.assertion_id) {
+              this.sendJson(res, 400, { error: "assertion_id is required" });
+              return;
+            }
+            const rework = this.orchestrator.recordAssertionFailure(
+              contractId,
+              body.assertion_id,
+            );
+            const after = store.get(contractId) ?? contract;
+            this.emitContractUpdate(after);
+            this.sendJson(res, 200, {
+              rework,
+              delivery_state: projectDeliveryState({
+                lifecycle_state: after.lifecycle_state,
+                rework_required: rework.phase === "rework",
+                escalated: rework.phase === "escalated",
+              }),
+              contract: after,
+            });
+          } catch (err) {
+            const code = (err as Error & { code?: string }).code;
+            if (code === "E_ASSERTION_ID_UNKNOWN") {
+              this.sendJson(res, 400, {
+                error: (err as Error).message,
+                code,
+              });
+              return;
+            }
+            this.sendActionError(res, err);
+          }
+          return;
+        }
+        if (method === "POST" && sub === "assertions") {
+          try {
+            const body = (await this.readJsonBody(req)) as { text?: string };
+            if (!body.text) {
+              this.sendJson(res, 400, { error: "text is required" });
+              return;
+            }
+            const assertion_id = this.orchestrator.tryAddAssertion(
+              contractId,
+              body.text,
+            );
+            this.sendJson(res, 200, {
+              assertion_id,
+              rework: this.orchestrator.getReworkSnapshot(contractId),
+            });
+          } catch (err) {
+            const code = (err as Error & { code?: string }).code;
+            if (code === "E_ASSERTION_ADD_FORBIDDEN") {
+              this.sendJson(res, 409, {
+                error: (err as Error).message,
+                code,
+              });
+              return;
+            }
+            this.sendActionError(res, err);
+          }
+          return;
+        }
+        if (method === "POST" && sub === "split") {
+          try {
+            const body = (await this.readJsonBody(req)) as { text?: string };
+            if (!body.text) {
+              this.sendJson(res, 400, { error: "text is required" });
+              return;
+            }
+            const result = this.orchestrator.splitAssertion(
+              contractId,
+              body.text,
+            );
+            if (result.kind === "out_of_scope") {
+              this.sendJson(res, 409, {
+                error: result.reason,
+                code: result.code,
+                kind: result.kind,
+              });
+              return;
+            }
+            const after = store.get(contractId) ?? contract;
+            if (result.snapshot.phase === "escalated") {
+              this.emitContractUpdate(after);
+            }
+            this.sendJson(res, 200, { result, contract: after });
+          } catch (err) {
+            this.sendActionError(res, err);
+          }
+          return;
+        }
+        this.sendJson(res, 405, { error: "Method not allowed" });
+        return;
+      }
+
       const match = pathname.match(
         /^\/api\/contracts\/([^/]+)(?:\/(admit|approve|execute|run-worker|open-editor|diff-files|diff|merge-decision|merge|evidence|resume|abort)(?:\/([^/]+))?)?$/,
       );
@@ -3660,6 +3787,10 @@ export class StagentDaemon {
             this.sendJson(res, 200, {
               contract: outcome.contract,
               evidence: outcome.evidence,
+              ...(outcome.rework ? { rework: outcome.rework } : {}),
+              ...(outcome.delivery_state
+                ? { delivery_state: outcome.delivery_state }
+                : {}),
             });
           } catch (err) {
             this.sendActionError(res, err);

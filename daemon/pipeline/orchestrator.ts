@@ -21,7 +21,19 @@ import {
 import { runBoundaryStop } from "../guard/boundary-stop";
 import { loadBaselineDirtyExclusions } from "../baseline/scope-defaults";
 import { readDemoConfirm } from "../supervisor/demo/prototypes";
-import { canSign } from "../../src/lib/state/delivery-state";
+import { canSign, projectDeliveryState, type DeliveryState } from "../../src/lib/state/delivery-state";
+import {
+  loadReworkCounter,
+  saveReworkCounter,
+  seedReworkCounterFromAcceptance,
+  recordVerificationRoundFailure,
+  splitAssertionRequest,
+  type SplitFlowResult,
+} from "../guard/rework-store";
+import {
+  ReworkCounter,
+  type ReworkCounterSnapshot,
+} from "../guard/assertion-identity";
 import { CostMonitor } from "../guard/cost-monitor";
 import { LoopGuard } from "../guard/loop-guard";
 import { isTestPath } from "../guard/test-integrity";
@@ -96,6 +108,10 @@ export interface ExecutionOutcome {
   contract: SoftwareContract;
   evidence: EvidenceBundle;
   worktree: WorktreeInfo;
+  /** TASK-C.15b：本轮验证后的返工计数快照（若有） */
+  rework?: ReworkCounterSnapshot;
+  /** TASK-C.15b：投影交付态（REWORK_REQUIRED / ESCALATED_HUMAN …） */
+  delivery_state?: DeliveryState;
 }
 
 /**
@@ -209,6 +225,95 @@ export class ContractOrchestrator {
     return this.store;
   }
 
+  /** TASK-C.15b：只读返工快照（Worker/LLM 只读） */
+  getReworkSnapshot(contractId: string): ReworkCounterSnapshot | null {
+    const c = loadReworkCounter(this.repoRoot, contractId);
+    return c ? c.snapshot() : null;
+  }
+
+  /**
+   * TASK-C.15b：Daemon 权威记一次断言失败。
+   * 超限 → phase escalated；调用方应吊销 token / 暂停。
+   */
+  recordAssertionFailure(
+    contractId: string,
+    assertionId: string,
+  ): ReworkCounterSnapshot {
+    let counter = loadReworkCounter(this.repoRoot, contractId);
+    if (!counter) {
+      const contract = this.store.get(contractId);
+      if (!contract) throw new Error(`Contract not found: ${contractId}`);
+      counter = new ReworkCounter(contractId);
+      if (counter.currentPhase === "normal") {
+        counter.registerAssertions(contract.intent.acceptance_criteria);
+      }
+    }
+    const snap = counter.recordFailure(assertionId);
+    saveReworkCounter(this.repoRoot, counter);
+    if (counter.isEscalated) {
+      this.revokeExecTokenFor(contractId);
+      const cur = this.store.get(contractId);
+      if (
+        cur &&
+        (cur.lifecycle_state === "EXECUTING" ||
+          cur.lifecycle_state === "VERIFYING")
+      ) {
+        this.store.transition({
+          contractId,
+          lifecycleState: "PENDING_RESUME",
+        });
+      }
+    }
+    return snap;
+  }
+
+  /** TASK-C.15b：尝试追加断言；返工期必拒 */
+  tryAddAssertion(contractId: string, text: string): string {
+    let counter = loadReworkCounter(this.repoRoot, contractId);
+    if (!counter) {
+      counter = new ReworkCounter(contractId);
+    }
+    const id = counter.tryAddAssertion(text);
+    saveReworkCounter(this.repoRoot, counter);
+    return id;
+  }
+
+  /** TASK-C.15b：拆流钩子（老断言返工 vs 新需求 Out-of-Scope） */
+  splitAssertion(
+    contractId: string,
+    assertionText: string,
+  ): SplitFlowResult {
+    const result = splitAssertionRequest(
+      this.repoRoot,
+      contractId,
+      assertionText,
+    );
+    if (result.kind === "rework_existing" && result.snapshot.phase === "escalated") {
+      this.revokeExecTokenFor(contractId);
+      const cur = this.store.get(contractId);
+      if (
+        cur &&
+        (cur.lifecycle_state === "EXECUTING" ||
+          cur.lifecycle_state === "VERIFYING")
+      ) {
+        this.store.transition({
+          contractId,
+          lifecycleState: "PENDING_RESUME",
+        });
+      }
+    }
+    return result;
+  }
+
+  /** 签署后冻结验收断言 */
+  private seedReworkOnApprove(contract: SoftwareContract): ReworkCounterSnapshot {
+    return seedReworkCounterFromAcceptance(
+      this.repoRoot,
+      contract.contract_id,
+      contract.intent.acceptance_criteria,
+    );
+  }
+
   /**
    * 用户审批：PENDING_APPROVAL/PENDING_REVIEW → APPROVED → PREPARING → EXECUTING。
    * 全程持有合同排他锁：并发的第二次审批会在锁内读到已推进的状态，
@@ -283,6 +388,8 @@ export class ContractOrchestrator {
           // TASK-C.12a：签署开工后签发 exec_token
           const wt = getWorktreePath(this.repoRoot, contractId);
           this.issueExecForContract(executing, wt);
+          // TASK-C.15b：签署开工时冻结 assertion_id 集合
+          this.seedReworkOnApprove(executing);
           return executing;
         } catch (err) {
           // 脏主仓未确认：回退待批并抛给 API，由前端带 acknowledge_dirty 重试
@@ -812,9 +919,30 @@ export class ContractOrchestrator {
       worktreePath,
     );
 
+    // TASK-C.15b：断言未过（非端口/威胁/拦截）→ 返工计数；超限升 ESCALATED。
+    // 注意：第 N 次失败可能同时触达 LoopGuard → status=BLOCKED；仍须计返工，
+    // 否则默认 max_verification_retries=3 时永远到不了 count>MAX(2) 的升格。
+    let reworkSnap: ReworkCounterSnapshot | undefined;
+    let escalated = false;
+    let reworkRequired = false;
+    const assertionFailed =
+      !allPassed && !portConflict && !threatBlocked && !interceptorBlocked;
+    if (assertionFailed) {
+      reworkSnap = recordVerificationRoundFailure(
+        this.repoRoot,
+        contractId,
+        current.intent.acceptance_criteria,
+      );
+      reworkRequired = true;
+      escalated = reworkSnap.phase === "escalated";
+    } else if (status === "PASSED") {
+      const existing = loadReworkCounter(this.repoRoot, contractId);
+      if (existing) reworkSnap = existing.snapshot();
+    }
+
     const nextState = allPassed
       ? "AUDITED"
-      : tripped
+      : tripped || escalated
         ? "PENDING_RESUME"
         : "EXECUTING";
 
@@ -828,7 +956,20 @@ export class ContractOrchestrator {
     });
     const worktree = await this.readWorktreeInfo(contractId, worktreePath);
 
-    return { contract, evidence, worktree };
+    const delivery_state = projectDeliveryState({
+      lifecycle_state: contract.lifecycle_state,
+      verifying: false,
+      rework_required: reworkRequired && !escalated,
+      escalated,
+    });
+
+    return {
+      contract,
+      evidence,
+      worktree,
+      ...(reworkSnap ? { rework: reworkSnap } : {}),
+      delivery_state,
+    };
   }
 
   /**

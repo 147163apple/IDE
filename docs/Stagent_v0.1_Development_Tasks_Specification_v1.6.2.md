@@ -95,6 +95,7 @@
 > 61. **状态回写（2026-10-26 · 合入验收 TASK-C.14a–c COMPLETED · 基线档案）**：Tina t836u 授权实现+走查；t847u 授权文档验收回写。三卡同批落地：`0417203`（feat 扫描/渐进落盘/Dirty+防抢跑）→ `e01188f`（Dirty porcelain 路径硬化）→ `dd14fa0`（重建控制台露出全景基线卡）。验收：打开已有项目全景可见「项目现状基线档案」+「认可此基线作为后续参考」；确认≠授权；观察≠质量结论。**已知不挡体验缝**：沙盒仍为逻辑级（非 OS 只读挂载）；深度进度轮询；脏区黄标需工作区确有未提交文件才可见。**不**扩 Spec Freeze 五正文；讨论稿仍分治；不抢 D.1e。
 > 62. **状态回写（2026-10-26 · 立卡 TASK-C.14d / C.14e · 基线安全闭环加固）**：Tina 授权（t853u 升格立卡）。按「安全闭环优先」点名两张 **Delta 薄卡**（不齐开四项）：**`TASK-C.14d`**（脏区→Scope 真链路硬门禁：`dirty_exclusions` → 首张微合同 `scope.forbidden_paths` + 白话列出；Worker touch 脏区 → `E_OUT_OF_SCOPE_UNTRACKED` + C.12c 软停 3s→SIGKILL；E2E：未提交 `.env.local` + 未跟踪脚本永不被改）；**`TASK-C.14e`**（扫描器 OS 级只读挂载 + 断网沙盒证明：RO bind mount/sandbox RO；network namespace 禁出站；反向证伪 write→EROFS、outbound fetch/socket 失败）。建议序 **C.14d→C.14e**；**当前首要**→ **C.14d**。**暂缓 backlog（本轮不立）**：深度进度改 WS（P1 体验）；右栏 EO 余面 Delta（P2，随微合同端到端按需带出）。权威：讨论稿 §2.3/§7 + C.14c/C.14a 已知缝 + Tina 计划。**本条仅文档立卡**；**不写** daemon/src 产品码直至 Tina 点名开发；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。
 > 63. **状态回写（2026-10-26 · 合入验收 TASK-C.14d / C.14e COMPLETED · 基线安全闭环）**：Tina t854u「开工」。**C.14d**：`dirty_exclusions` 物理清单→首张微合同 `scope.forbidden_paths`+白话「绝不触碰」；Gateway/Worker touch 脏区→`E_OUT_OF_SCOPE_UNTRACKED`+C.12c SIGINT→SIGKILL；E2E `.env.local`+未跟踪脚本不变。**C.14e**：`os-sandbox.ts`；Darwin `sandbox-exec`（写拒 **EPERM**=平台等价 EROFS；断网 **ENOTFOUND**）；档案附 `os_sandbox` 证明；未证明不得升级硬承诺。单测 `baseline-c14d/e` + C.14a–c 回归绿。**不**扩 Spec Freeze 五正文；WS/EO 余面仍 backlog。
+> 66. **状态回写（2026-10-26 · TASK-C.15b 活路径接线）**：Tina t866u「接线」。ReworkCounter 接入 `orchestrator.approve` seed、`execute` 断言失败计返工（含 LoopGuard 同轮 BLOCKED 仍计数）、超限 `ESCALATED_HUMAN`+吊销+`PENDING_RESUME`；HTTP `GET/POST /api/contracts/:id/rework(/failure|/assertions|/split)`；execute 响应附 `rework`+`delivery_state`。单测 `task-c15b-rework-live-path` + 库测/orchestrator/contract-api 回归绿。**不**扩 Spec Freeze；不改 D.1。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/Stagent_Spec_Freeze_Record_2026-10-26.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -2187,10 +2188,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   3. 与 C.12b 单测回归绿。
 * **FAIL**：删掉 epoch/seq；或允许 MERGED 后倒流返工。
 
-#### 【Task C.15b】EO-08 断言身份与返工计数 `[NEW_TASK]`
+#### 【Task C.15b】EO-08 断言身份与返工计数 `[COMPLETED]`
 * **任务编号**：`TASK-C.15b`
-* **前置依赖**：`TASK-C.15a` (NEW_TASK→实现序)
-* **任务状态**：**[NEW_TASK]**（Tina t855u）
+* **前置依赖**：`TASK-C.15a` (COMPLETED)
+* **任务状态**：**[COMPLETED]**（Tina t855u 库；t866u 活路径接线）
 * **对照痛点 / Spec 锚点**：§14.11 EO-08 / DEC-05；返工 2 次上限须不可伪造身份。
 * **v0.1 范围**：
   1. Daemon 以确定性 **`UUIDv5(namespace, assertion_text)`**（或 `contract_id + acceptance_assertion_id`）生成 `assertion_id`。
@@ -2203,7 +2204,8 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   2. 计数到 2 → 进入 `ESCALATED_HUMAN`（或返回该态建议）。
   3. 返工期 `addAssertion` 失败。
   4. 单测绿。
-* **FAIL**：模型可自造 ID 清零；或返工期默许加断言。
+  5. **活路径（t866u）**：签署 seed → execute 断言失败计返工 → 第 3 次升格 `PENDING_RESUME`；HTTP rework 读写权威。
+* **FAIL**：模型可自造 ID 清零；或返工期默许加断言；或库绿但 Daemon 不计数。
 
 #### 【Task C.15c】EO-05 两阶段归档/GC 细项 `[NEW_TASK]`
 * **任务编号**：`TASK-C.15c`
