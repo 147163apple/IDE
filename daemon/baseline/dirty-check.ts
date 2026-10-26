@@ -15,8 +15,11 @@ function parsePorcelainPath(line: string): {
   untracked: boolean;
 } | null {
   if (!line || line.length < 4) return null;
-  const code = line.slice(0, 2);
-  let rest = line.slice(3);
+  // porcelain: XY<space>path ；兼容偶发多空格
+  const m = /^(.{2})\s+(.*)$/.exec(line);
+  if (!m) return null;
+  const code = m[1] ?? "";
+  let rest = m[2] ?? "";
   // rename: "R  old -> new"
   if (rest.includes(" -> ")) {
     rest = rest.split(" -> ").pop() ?? rest;
