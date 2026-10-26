@@ -1218,12 +1218,32 @@ function Console() {
     setAuthorizeBusy(true);
     setConfirmPrototypeError(null);
     try {
-      // 若仅有草案：先落盘再批准
+      // 与老板快路径一致：落盘须为 PENDING_APPROVAL。
+      // 直接把 DRAFT 交给 approve 会 E_INVALID_STATE_TRANSITION。
+      const asPendingApproval = (contract: SoftwareContract): SoftwareContract =>
+        softwareContractSchema.parse({
+          ...contract,
+          lifecycle_state: "PENDING_APPROVAL",
+          approval: { status: "PENDING_REVIEW" },
+        });
+
       let contractId = selected?.contract_id;
       let target = selected;
-      if (!contractId && draft?.contract) {
-        const created = await createContractWithAdmission(conn, draft.contract);
-        const saved = created.contract;
+      const needsPersist =
+        (!contractId && draft?.contract) ||
+        (target != null &&
+          (target.lifecycle_state === "DRAFT" ||
+            target.approval?.status === "DRAFT"));
+      const source = needsPersist
+        ? (!contractId && draft?.contract ? draft.contract : target!)
+        : null;
+
+      if (source) {
+        const created = await createContractWithAdmission(
+          conn,
+          asPendingApproval(source),
+        );
+        const saved = created.admission?.contract ?? created.contract;
         contractId = saved.contract_id;
         target = saved;
         setContracts((prev) => {
@@ -1236,10 +1256,17 @@ function Console() {
         setConfirmPrototypeError("没有可授权的合同或草案。");
         return;
       }
-      await approveContract(conn, contractId, "local-user");
-      const list = await listContracts(conn);
+
+      // 创建时 admit 可能已自动批准；仅仍待审批时再显式签署
+      let list = await listContracts(conn);
       setContracts(list);
-      const approved = list.find((c) => c.contract_id === contractId);
+      let approved = list.find((c) => c.contract_id === contractId) ?? target;
+      if (approved?.lifecycle_state === "PENDING_APPROVAL") {
+        await approveContract(conn, contractId, "local-user");
+        list = await listContracts(conn);
+        setContracts(list);
+        approved = list.find((c) => c.contract_id === contractId) ?? approved;
+      }
       target = approved ?? target ?? selected;
       if (target) {
         const proposal = buildProposalFromContract(target);
