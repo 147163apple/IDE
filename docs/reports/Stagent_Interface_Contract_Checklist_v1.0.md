@@ -1,6 +1,6 @@
 # Stagent 系统内部接口与通信契约清单 (API / IPC Contract Checklist)
 **版本**: v1.0.0-draft  
-**状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**（对接看板；**API Top5 CLOSED**；非「代码已实现」）  
+**状态**: **讨论稿 / 已入库 reports**（对接看板；**API Top5 CLOSED**；Top5 Delta **已立卡** `TASK-C.12a`–`e`；**NEW_TASK ≠ 已实现**；正文仍非架构规范整份升格）  
 **关联基准**:
 - 《Stagent 系统架构设计规范 v1.6.1》
 - 《Stagent 研发任务拆解与工程执行规范 v1.6.2》
@@ -114,7 +114,7 @@
 
 ## 3. API Top5 定案（CLOSED · 2026-10-26 · As-is → To-be → EO）
 
-> **状态：CLOSED（规范定案）** — Tina 拍板。现网对账结论：五项均为 **半有** 或 **无**（通道/体感骨架多半有；EO 级硬核契约缺）。**不推翻**现网骨架，缺口映射为 **Delta 升级卡**。**CLOSED ≠ 已实现**；未升格、未立卡。交叉正文见《Stagent_Clarification_and_Authorization_Specification_v1.0》§6。
+> **状态：CLOSED（规范定案）** — Tina 拍板。现网对账结论：五项均为 **半有** 或 **无**（通道/体感骨架多半有；EO 级硬核契约缺）。**不推翻**现网骨架，缺口映射为 **Delta 升级卡**。**CLOSED ≠ 已实现**；正文仍讨论稿；Top5→TASK-C.12a–e 已立卡。交叉正文见《Stagent_Clarification_and_Authorization_Specification_v1.0》§6。
 
 | # | API Top5 | 代码现状 | 现网 As-is | 目标 To-be（定案） | 对应 EO | Delta 升级卡方针 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

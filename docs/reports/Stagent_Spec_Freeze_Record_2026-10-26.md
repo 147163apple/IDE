@@ -3,7 +3,7 @@
 **日期**: 2026-10-26（Asia/Hong_Kong）  
 **定位**: 短锚点 / 索引 — **不**合并五份正文；正文继续分治。  
 **权威声明**: 自消歧锚点 tip **`fb6167d`** 起，经 **`836be2b`**（API Top5）、**`cbc0216`**（DocGov/Workflow 分轨）至**本封版 tip**，**以本记录 + 下列 CLOSED 规范为唯一事实源**；此前讨论草稿、过时「待决议 / Open Decision」、与本记录冲突的旧词（单一 `DEMO_READY`、笼统交付 `VERIFIED`、资产 `FROZEN` 冒充主交付、弹窗静默放行等）**一律作废**。  
-**施工权威仍是**: 仓库根 `docs/`《架构规范》《任务规范》+ 升格后的任务卡；本目录讨论稿 **未升格、未立卡**。
+**施工权威仍是**: 仓库根 `docs/`《架构规范》《任务规范》+ 升格后的任务卡；讨论稿正文仍分治；**Top5 Delta 已升格立卡**为 `TASK-C.12a`–`TASK-C.12e`（见《任务规范》；**NEW_TASK ≠ 已实现**）。
 
 ---
 
@@ -42,7 +42,7 @@
 ### 2.1 轨 A — 交付主生命周期（EO-01 `DeliveryState` / `DeliveryLifecycleState`）
 
 **链（DAG，不可跳步）**：  
-`PLAN_*`（含 `PLAN_CONFIRMED`）→ **Demo 三态 READY** → `CONTRACT_SIGNED` → `IMPLEMENTING`/`EXECUTING`（可 `PAUSED` / `REWORK_REQUIRED`）→ `VERIFYING` → **`CANDIDATE_VERIFIED`** → **`MERGED`** → **`DELIVERED`**（可终态 `ABORTED` / `ESCALATED_HUMAN` 等）。
+`PLAN_*`（含 `PLAN_CONFIRMED`）→ **Demo 三态 READY** → **`CONTRACT_SIGNING`（轨 C 瞬态：Demo 确认后→签署前）** → `CONTRACT_SIGNED` → `IMPLEMENTING`/`EXECUTING`（可 `PAUSED` / `REWORK_REQUIRED`）→ `VERIFYING` → **`CANDIDATE_VERIFIED`** → **`MERGED`** → **`DELIVERED`**（可终态 `ABORTED` / `ESCALATED_HUMAN` 等）。
 
 | 旧写法（作废） | 新写法（CLOSED） |
 | :--- | :--- |
@@ -79,13 +79,13 @@
 
 现网对账多为 **半有 / 无**；定案映射为 **Delta 升级卡**，不推翻 session / STATE / prototypes 骨架。细节见澄清 **§6**、Checklist **§3**。
 
-| # | 缺口 | To-be 一句话 | EO |
-| :--- | :--- | :--- | :--- |
-| 1 | Token | 双层 + PAUSED 吊销 + resume/`jti` | EO-07 |
-| 2 | 重连 | `session_epoch`+`state_seq` → EO-01 | EO-01 |
-| 3 | 越界 | SIGINT 3s → SIGKILL → 吊销 → 清锁 | EO-02·07 |
-| 4 | Demo | 三态 + `can_sign` + records 拷贝 | EO-05·06 |
-| 5 | 无 Git 审计 | `audit-manifest.json` 侧车 | EO-03·04·05 |
+| # | 缺口 | To-be 一句话 | EO | 任务卡 |
+| :--- | :--- | :--- | :--- | :--- |
+| 1 | Token | 双层 + PAUSED 吊销 + resume/`jti` | EO-07 | **`TASK-C.12a`** |
+| 2 | 重连 | `session_epoch`+`state_seq` → EO-01 | EO-01 | **`TASK-C.12b`** |
+| 3 | 越界 | SIGINT 3s → SIGKILL → 吊销 → 清锁 | EO-02·07 | **`TASK-C.12c`** |
+| 4 | Demo | 三态 + `can_sign` + records 拷贝 | EO-05·06 | **`TASK-C.12d`** |
+| 5 | 无 Git 审计 | `audit-manifest.json` 侧车 | EO-03·04·05 | **`TASK-C.12e`** |
 
 ---
 
@@ -112,16 +112,26 @@
 └────────────────────────────────────────────────────────────┘
 ```
 
-讨论稿侧 Spec Freeze **不等于**升格为施工依据，**不等于**任务卡已立。
+讨论稿侧 Spec Freeze **不等于**已实现。Top5 Delta **已立卡** `TASK-C.12a`–`e`（仍为 NEW_TASK，待点名开发）。
 
 ---
 
-## 6. 下一步
+## 6. 升格立卡（2026-10-26 · Tina t817u）
 
-- **升格 / 立卡**：仅当 Tina **显式**下令；本记录是 Spec Freeze 封印，不是实施清单自动开工。  
-- 立卡时按层拆：右栏 EO → 澄清/Checklist Delta → DocGov/Workflow 词汇已对齐，按卡引用即可。  
-- 冲突裁决顺序：本封版记录 → CLOSED 五份规范正文 → 更早草稿（作废）。
+Tina 显式「升格立卡」后，Top5 Delta **已写入**《任务规范》为：
+
+| 卡 | 一句话 | 状态 |
+| :--- | :--- | :--- |
+| **`TASK-C.12a`** | 双层 Token（exec + resume/`jti`；PAUSED 吊销） | `[NEW_TASK]` |
+| **`TASK-C.12b`** | `session_epoch`+`state_seq` + EO-01（含 `CONTRACT_SIGNING`） | `[NEW_TASK]` |
+| **`TASK-C.12c`** | 越界原子拦截 SIGINT 3s→SIGKILL→吊销→清锁 | `[NEW_TASK]` |
+| **`TASK-C.12d`** | Demo 三态 + `can_sign` + records 拷贝 | `[NEW_TASK]` |
+| **`TASK-C.12e`** | `audit-manifest.json` 无 Git 侧车 | `[NEW_TASK]` |
+
+- **建议开发序**：C.12a→C.12b→C.12c→C.12d→C.12e；**当前首要** = C.12a。  
+- **仍成立**：CLOSED ≠ 已实现；点名开发前不写产品码；冲突裁决：本封版记录 → CLOSED 五份正文 → 更早草稿（作废）。  
+- 五份讨论稿正文**不整份**并入架构规范；施工只认任务卡 + 本锚点引用。
 
 ---
 
-*生成说明：压缩 Tina 对「为何需要 Spec Freeze」四因；事实对齐 tip `fb6167d` / `836be2b` / `cbc0216` 与同日三轨·Top5·物理隔离核验。Docs only。*
+*生成说明：压缩 Tina 对「为何需要 Spec Freeze」四因；事实对齐 tip `fb6167d` / `836be2b` / `cbc0216`；2026-10-26 升格立卡 C.12a–e。Docs only。*

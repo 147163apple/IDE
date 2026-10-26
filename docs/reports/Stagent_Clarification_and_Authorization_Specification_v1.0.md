@@ -1,7 +1,7 @@
 # Stagent 需求澄清与授权流程规范 (Clarification & Authorization Specification)
 **版本**: v1.0.0-draft  
 **状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**  
-**消歧对齐（2026-10-26）**: 本文已与 tip **`fb6167d`** 前序消歧（Top7 + 右栏 §8～§13 / DEC / EO-01～10 CLOSED）对齐；同日 Tina 将 **API Top5 As-is→To-be** 收口为 **CLOSED 定案条款**（见本文 **§6** 与《Stagent_Interface_Contract_Checklist_v1.0》§3）。原「Schema 待拍 / 待决议」残留已核销为交叉引用。**仍为讨论稿，未升格、未立卡**；**CLOSED ≠ 已实现**。  
+**消歧对齐（2026-10-26）**: 本文已与 tip **`fb6167d`** 前序消歧（Top7 + 右栏 §8～§13 / DEC / EO-01～10 CLOSED）对齐；同日 Tina 将 **API Top5 As-is→To-be** 收口为 **CLOSED 定案条款**（见本文 **§6** 与《Stagent_Interface_Contract_Checklist_v1.0》§3）。原「Schema 待拍 / 待决议」残留已核销为交叉引用。**讨论稿正文仍分治**；API Top5 Delta **已立卡** `TASK-C.12a`–`e`（见《任务规范》；**NEW_TASK ≠ 已实现**）。**CLOSED ≠ 已实现**。  
 **不作为**：任务卡 Scope、验收标准或「代码已实现」的证据。立卡前须对照《决策记录对账-2026-10-25》与合同说明 §7.5。  
 **关联基准**:
 - 《Stagent 系统架构设计规范 v1.6.1》（宪法；本文不改其正文）
@@ -302,4 +302,4 @@ type ResumeToken = {
 
 ---
 
-**落定句（讨论稿）**: 澄清授权稿已与 Top7 + 右栏 DEC/EO + **API Top5 CLOSED（§6）** 消歧；原 §5 四条待决议及 Schema「仍待拍」残留全部核销为定案交叉引用；**DocGov / Workflow 状态名与 EO-01/02 对齐已 CLOSED**（见《文档治理》§3.1/§11、《端到端工作流》§1.1/§4）；**仍讨论稿，未升格、未立卡**；**CLOSED ≠ 已实现**。
+**落定句（讨论稿）**: 澄清授权稿已与 Top7 + 右栏 DEC/EO + **API Top5 CLOSED（§6）** 消歧；原 §5 四条待决议及 Schema「仍待拍」残留全部核销为定案交叉引用；**DocGov / Workflow 状态名与 EO-01/02 对齐已 CLOSED**（见《文档治理》§3.1/§11、《端到端工作流》§1.1/§4）；**讨论稿正文仍分治**；Top5→`TASK-C.12a`–`e` 已立卡；**CLOSED ≠ 已实现**。
