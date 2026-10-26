@@ -1,16 +1,27 @@
 /**
- * TASK-C.14c：首张微合同默认排除未跟踪/未提交路径。
+ * TASK-C.14c / C.14d：首张微合同默认排除未跟踪/未提交路径。
+ * dirty_exclusions → scope.strictly_forbidden_paths（物理白名单）。
  */
 import { readBaselineArchive } from "./store";
 import type { WorkspaceDirtyReport } from "./types";
+import { matchesAnyPattern, normalizePath } from "../../src/lib/scope";
 
 /**
- * 从最新基线取出保护白名单路径（精确路径 → 可作为 strictly_forbidden）。
+ * 从最新基线取出脏区排除清单（优先 dirty_exclusions，回退 protect_paths）。
  */
-export function loadBaselineProtectPaths(repoRoot: string): string[] {
+export function loadBaselineDirtyExclusions(repoRoot: string): string[] {
   const archive = readBaselineArchive(repoRoot);
-  if (!archive?.dirty?.protect_paths?.length) return [];
-  return [...archive.dirty.protect_paths];
+  if (!archive?.dirty) return [];
+  const raw =
+    archive.dirty.dirty_exclusions?.length
+      ? archive.dirty.dirty_exclusions
+      : (archive.dirty.protect_paths ?? []);
+  return [...new Set(raw.map(normalizePath).filter(Boolean))].sort();
+}
+
+/** @deprecated 兼容旧名；请用 loadBaselineDirtyExclusions */
+export function loadBaselineProtectPaths(repoRoot: string): string[] {
+  return loadBaselineDirtyExclusions(repoRoot);
 }
 
 /**
@@ -20,7 +31,7 @@ export function mergeBaselineProtectIntoForbidden(
   repoRoot: string,
   existingForbidden: readonly string[],
 ): string[] {
-  const protect = loadBaselineProtectPaths(repoRoot);
+  const protect = loadBaselineDirtyExclusions(repoRoot);
   const set = new Set<string>([...existingForbidden, ...protect]);
   return [...set];
 }
@@ -28,5 +39,36 @@ export function mergeBaselineProtectIntoForbidden(
 export function dirtyProtectFromReport(
   dirty: WorkspaceDirtyReport,
 ): string[] {
-  return [...dirty.protect_paths];
+  const raw =
+    dirty.dirty_exclusions?.length > 0
+      ? dirty.dirty_exclusions
+      : dirty.protect_paths;
+  return [...new Set(raw.map(normalizePath).filter(Boolean))].sort();
+}
+
+/** 路径是否命中脏区排除清单（精确或 glob） */
+export function pathMatchesDirtyExclusion(
+  filePath: string,
+  dirtyExclusions: readonly string[],
+): boolean {
+  if (!dirtyExclusions.length) return false;
+  return matchesAnyPattern(filePath, [...dirtyExclusions]).matches;
+}
+
+/**
+ * 白话「绝不触碰」名单（合同正文用）。
+ * 超过 limit 条时截断并注明其余数量。
+ */
+export function formatDirtyExclusionsPlain(
+  dirtyExclusions: readonly string[],
+  limit = 12,
+): string | null {
+  const list = [...dirtyExclusions].map(normalizePath).filter(Boolean);
+  if (list.length === 0) return null;
+  const head = list.slice(0, limit);
+  const more =
+    list.length > limit ? `（另有 ${list.length - limit} 个未列出）` : "";
+  return (
+    `绝不触碰（本地未保存/未跟踪，已列入禁写）：${head.join("、")}${more}`
+  );
 }

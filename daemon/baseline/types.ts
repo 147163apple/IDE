@@ -48,8 +48,13 @@ export interface WorkspaceDirtyReport {
   untracked: string[];
   /** 管家话术（非报错恐吓） */
   steward_message: string | null;
-  /** 首张微合同默认排除路径 */
+  /** 首张微合同默认排除路径（与 dirty_exclusions 同义，兼容 C.14c） */
   protect_paths: string[];
+  /**
+   * TASK-C.14d：物理脏区排除清单（uncommitted + untracked）。
+   * 契约期注入 scope.strictly_forbidden_paths；施工期 touch → E_OUT_OF_SCOPE_UNTRACKED。
+   */
+  dirty_exclusions: string[];
 }
 
 export interface BaselineP0Skeleton {
@@ -76,6 +81,19 @@ export interface BaselineDeepPartial {
   incomplete: boolean;
 }
 
+
+export interface BaselineOsSandboxProof {
+  platform: NodeJS.Platform;
+  mode: "sandbox-exec" | "unshare-ro" | "logical_fallback";
+  write_denied: boolean;
+  /** Darwin 多为 EPERM；Linux RO 多为 EROFS */
+  write_error_code: string | null;
+  network_denied: boolean;
+  network_error_code: string | null;
+  proven_at: string;
+  notes: string[];
+}
+
 export interface BaselineArchive {
   schema_version: "1.0.0";
   /** 产品主名字段；永不使用 contract_000 */
@@ -92,6 +110,8 @@ export interface BaselineArchive {
   p0: BaselineP0Skeleton | null;
   deep: BaselineDeepPartial | null;
   dirty: WorkspaceDirtyReport;
+  /** TASK-C.14e：OS 沙盒证明；未证明不得升级硬承诺文案 */
+  os_sandbox: BaselineOsSandboxProof | null;
   ignore_rules: string[];
   incomplete: boolean;
   notes: string[];

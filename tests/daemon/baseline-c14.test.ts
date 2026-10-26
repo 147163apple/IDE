@@ -141,6 +141,7 @@ describe("TASK-C.14b progressive + store", () => {
         untracked: [],
         steward_message: null,
         protect_paths: [],
+        dirty_exclusions: [],
       },
       callbacks: {
         onP0: (a) => phases.push(`p0:${a.phase}`),
@@ -169,6 +170,7 @@ describe("TASK-C.14b progressive + store", () => {
         untracked: [],
         steward_message: null,
         protect_paths: [],
+        dirty_exclusions: [],
       },
     });
     const accepted = acceptBaselineAsReference(root);
@@ -198,7 +200,9 @@ describe("TASK-C.14b progressive + store", () => {
         untracked: [],
         steward_message: null,
         protect_paths: [],
+        dirty_exclusions: [],
       },
+      os_sandbox: null,
       ignore_rules: [],
       incomplete: false,
       notes: [],
@@ -243,7 +247,9 @@ describe("TASK-C.14c dirty + guard + scope", () => {
           untracked: [".env.local"],
           steward_message: buildStewardDirtyMessage(2),
           protect_paths: [".env.local", "src/dirty.ts"],
+          dirty_exclusions: [".env.local", "src/dirty.ts"],
         },
+        os_sandbox: null,
         ignore_rules: [],
         incomplete: false,
         notes: [],
@@ -278,7 +284,9 @@ describe("TASK-C.14c dirty + guard + scope", () => {
         untracked: [],
         steward_message: null,
         protect_paths: [],
+        dirty_exclusions: [],
       },
+      os_sandbox: null,
       ignore_rules: [],
       incomplete: false,
       notes: [],
@@ -301,6 +309,7 @@ describe("TASK-C.14c dirty + guard + scope", () => {
           untracked: [],
           steward_message: null,
           protect_paths: [],
+          dirty_exclusions: [],
         },
       });
       const nodes = [

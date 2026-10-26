@@ -163,9 +163,14 @@ const MAX_LIST_ENTRIES = 500;
  *
  * `checkWriteAccess()` 返回的是内部原因（`FORBIDDEN_PATH` / `NOT_WRITABLE`），
  * 直接当错误码回传会造成「实现码 ≠ 目录码」的契约漂移；此处统一映射：
- * 禁区 → `E_FORBIDDEN_PATH`，越界/只读 → `E_OUT_OF_SCOPE`（均归因 SCOPE_VIOLATION）。
+ * 脏区排除 → `E_OUT_OF_SCOPE_UNTRACKED`（TASK-C.14d）；
+ * 禁区 → `E_FORBIDDEN_PATH`；越界/只读 → `E_OUT_OF_SCOPE`。
  */
-function scopeErrorCode(reason: string | undefined): string {
+function scopeErrorCode(
+  reason: string | undefined,
+  opts?: { dirtyExclusionHit?: boolean },
+): string {
+  if (opts?.dirtyExclusionHit) return "E_OUT_OF_SCOPE_UNTRACKED";
   return reason === "FORBIDDEN_PATH" ? "E_FORBIDDEN_PATH" : "E_OUT_OF_SCOPE";
 }
 
@@ -209,6 +214,11 @@ export interface ScopedGatewayOptions {
         message: string;
       }) => void)
     | undefined;
+  /**
+   * TASK-C.14d：基线脏区排除清单。命中时错误码升为 E_OUT_OF_SCOPE_UNTRACKED，
+   * 并仍触发 onScopeBlocked → C.12c 软停链。
+   */
+  dirtyExclusions?: readonly string[] | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -239,6 +249,7 @@ export class ScopedWorktreeGateway {
   private readonly deadlock?: CommandTimeoutTracker | undefined;
   private readonly execToken?: ScopedGatewayOptions["execToken"];
   private readonly onScopeBlocked?: ScopedGatewayOptions["onScopeBlocked"];
+  private readonly dirtyExclusions: readonly string[];
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -270,6 +281,23 @@ export class ScopedWorktreeGateway {
     this.deadlock = options.deadlock;
     this.execToken = options.execToken;
     this.onScopeBlocked = options.onScopeBlocked;
+    this.dirtyExclusions = options.dirtyExclusions ?? [];
+  }
+
+  /** TASK-C.14d：是否命中脏区排除（施工禁止覆盖） */
+  private isDirtyExclusion(relPath: string): boolean {
+    if (this.dirtyExclusions.length === 0) return false;
+    return matchesAnyPattern(relPath, [...this.dirtyExclusions]).matches;
+  }
+
+  /** Scope 拒绝时的错误码：脏区优先升格为 E_OUT_OF_SCOPE_UNTRACKED */
+  private scopeBlockCode(
+    reason: string | undefined,
+    relPath: string,
+  ): string {
+    return scopeErrorCode(reason, {
+      dirtyExclusionHit: this.isDirtyExclusion(relPath),
+    });
   }
 
   /** TASK-C.12a：写路径 exec_token 校验；未配置 execToken 时跳过（兼容旧测） */
@@ -1029,8 +1057,11 @@ export class ScopedWorktreeGateway {
       this.contract.authorization.file_system_scope,
     );
     if (!access.allowed) {
-      const code = scopeErrorCode(access.reason);
-      const msg = access.message || "Write permission denied";
+      const code = this.scopeBlockCode(access.reason, safe.relativePath);
+      const dirtyHit = this.isDirtyExclusion(safe.relativePath);
+      const msg = dirtyHit
+        ? `[E_OUT_OF_SCOPE_UNTRACKED] 拒绝覆盖本地脏区「${safe.relativePath}」（基线排除，施工绝不触碰）`
+        : (access.message || "Write permission denied");
       this.logAudit({
         tool: "stagent_write_file",
         input: { path: rawPath },
@@ -1673,8 +1704,11 @@ export class ScopedWorktreeGateway {
       this.contract.authorization.file_system_scope,
     );
     if (!access.allowed) {
-      const code = scopeErrorCode(access.reason);
-      const msg = access.message || "Delete permission denied";
+      const code = this.scopeBlockCode(access.reason, safe.relativePath);
+      const dirtyHit = this.isDirtyExclusion(safe.relativePath);
+      const msg = dirtyHit
+        ? `[E_OUT_OF_SCOPE_UNTRACKED] 拒绝删除本地脏区「${safe.relativePath}」（基线排除，施工绝不触碰）`
+        : (access.message || "Delete permission denied");
       this.logAudit({
         tool: "stagent_delete_file",
         input: { path: rawPath },

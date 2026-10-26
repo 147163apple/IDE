@@ -8,3 +8,4 @@ export * from "./store";
 export * from "./progressive";
 export * from "./supervisor-guard";
 export * from "./scope-defaults";
+export * from "./os-sandbox";

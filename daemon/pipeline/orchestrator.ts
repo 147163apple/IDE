@@ -19,6 +19,7 @@ import {
   type ExecTokenStore,
 } from "../core/exec-token";
 import { runBoundaryStop } from "../guard/boundary-stop";
+import { loadBaselineDirtyExclusions } from "../baseline/scope-defaults";
 import { readDemoConfirm } from "../supervisor/demo/prototypes";
 import { canSign } from "../../src/lib/state/delivery-state";
 import { CostMonitor } from "../guard/cost-monitor";
@@ -1003,11 +1004,14 @@ export class ContractOrchestrator {
         this.onGatewayViolation?.(violation);
       },
     });
+    // TASK-C.14d：基线脏区排除 → Gateway 升格 E_OUT_OF_SCOPE_UNTRACKED
+    const dirtyExclusions = loadBaselineDirtyExclusions(this.repoRoot);
     const gateway = new ScopedWorktreeGateway(worktreePath, contract, {
       costMonitor,
       loopGuard,
       runtimeInterceptor: interceptor,
       requireRepoTrust: true,
+      dirtyExclusions,
       ...(this.deadlock === null ? {} : { deadlock: this.deadlock }),
       ...(signal === undefined ? {} : { signal }),
       ...(this.onTerminalLine === undefined
@@ -1021,7 +1025,7 @@ export class ContractOrchestrator {
         store: this.execTokenStore,
         getToken: () => this.activeExecTokens.get(contract.contract_id) ?? null,
       },
-      // TASK-C.12c：越界 → 原子拦截序列（hooks 可测；此处异步 fire-and-forget）
+      // TASK-C.12c / C.14d：越界（含脏区）→ 原子拦截序列
       onScopeBlocked: (_info) => {
         // TASK-C.12c：阻断当次 IO 后跑软停序列；吊销 token 并进入 PENDING_RESUME
         void runBoundaryStop({

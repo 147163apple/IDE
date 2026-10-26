@@ -138,8 +138,6 @@ Tina 显式「升格立卡」后，Top5 Delta **已写入**《任务规范》为
 
 - 权威讨论稿：[`已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`](./已有项目接管-基线档案体验设计讨论稿-2026-10-26.md)；产品名 **项目现状基线档案**；确认≠授权。  
 - 任务卡 **`TASK-C.14a`–`c`** 已 COMPLETED（tips `0417203` / `e01188f` / `dd14fa0`）。  
-- **不**把该讨论稿并入 Spec Freeze 五正文；本条仅为索引入口。
+- **`TASK-C.14d` / `C.14e`** 已 COMPLETED（Tina t854u）：脏区→Scope 真链路；OS 沙盒证明。**Darwin**：`sandbox-exec`；写拒多为 **EPERM**（≠ Linux EROFS）；断网多为 **ENOTFOUND**。Linux：`unshare -n`，无 RO mount 则 `logical_fallback`。证明前不得升级硬承诺。  
+- 仍 **不** 把讨论稿整份并入 Freeze 五正文。  
 
----
-
-*生成说明：压缩 Tina 对「为何需要 Spec Freeze」四因；事实对齐 tip `fb6167d` / `836be2b` / `cbc0216`；升格立卡 C.12a–e；2026-10-26 补 C.14 短锚 + 状态回写。Docs only。*

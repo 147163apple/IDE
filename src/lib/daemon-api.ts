@@ -629,6 +629,7 @@ export interface BaselineArchivePayload {
       untracked: string[];
       steward_message: string | null;
       protect_paths: string[];
+      dirty_exclusions: string[];
     };
     ignore_rules: string[];
     incomplete: boolean;

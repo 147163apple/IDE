@@ -7,6 +7,7 @@ import {
 } from "../../src/lib/contract.schema";
 import type { CostRecord } from "../guard/cost-monitor";
 import type { SupervisorBudgetLedger } from "./budget";
+import { formatDirtyExclusionsPlain } from "../baseline/scope-defaults";
 import { buildL0Plan, type L0DraftInput, type L0DraftPlan } from "./rules-l0";
 import type { SupervisorMessage } from "./types";
 
@@ -122,6 +123,11 @@ function l0Rationale(plan: L0DraftPlan): string[] {
       `注意：可写范围命中受保护内容（${plan.protected_entry_names.join("、")}），` +
         `需要你确认一次。`,
     );
+  }
+  // TASK-C.14d：白话显式列出脏区「绝不触碰」
+  const dirtyPlain = formatDirtyExclusionsPlain(plan.dirty_exclusions ?? []);
+  if (dirtyPlain) {
+    lines.push(dirtyPlain);
   }
   return lines;
 }

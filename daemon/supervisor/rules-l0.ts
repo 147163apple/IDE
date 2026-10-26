@@ -1,5 +1,9 @@
 import { intersectWithProtection } from "../protection/protection-list";
-import { mergeBaselineProtectIntoForbidden } from "../baseline/scope-defaults";
+import {
+  formatDirtyExclusionsPlain,
+  loadBaselineDirtyExclusions,
+  mergeBaselineProtectIntoForbidden,
+} from "../baseline/scope-defaults";
 import type {
   BudgetLimits,
   VerificationCommand,
@@ -188,6 +192,11 @@ export interface L0DraftPlan {
   writable_paths: string[];
   readonly_paths: string[];
   strictly_forbidden_paths: string[];
+  /**
+   * TASK-C.14d：基线 Dirty Check 物理排除清单（亦已并入 strictly_forbidden_paths）。
+   * 白话合同需显式列出「绝不触碰」。
+   */
+  dirty_exclusions: string[];
   commands: VerificationCommand[];
   budget: BudgetLimits;
   /** 与保护清单相交的文件（驱动 §0.2 的一次白话是/否） */
@@ -225,7 +234,8 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
   const baseForbidden = dedupe(
     input.scope?.strictlyForbiddenPaths ?? [...DEFAULT_FORBIDDEN_PATHS],
   );
-  // TASK-C.14c：首张微合同默认排除基线 Dirty Check 保护白名单
+  // TASK-C.14c/d：首张微合同强制注入 dirty_exclusions → strictly_forbidden_paths
+  const dirtyExclusions = loadBaselineDirtyExclusions(input.repoRoot);
   const forbiddenPaths = dedupe(
     mergeBaselineProtectIntoForbidden(input.repoRoot, baseForbidden),
   );
@@ -243,6 +253,13 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
   const protection = intersectWithProtection(input.repoRoot, effectiveWritable);
 
   const unresolved: string[] = [];
+  const dirtyPlain = formatDirtyExclusionsPlain(dirtyExclusions);
+  if (dirtyPlain) {
+    unresolved.push(
+      `本地脏区已列入禁写（施工绝不覆盖）：${dirtyExclusions.slice(0, 8).join("、")}`
+      + (dirtyExclusions.length > 8 ? ` 等 ${dirtyExclusions.length} 个` : ""),
+    );
+  }
   if (protection.hit && protection.files.length > 0) {
     const names = protection.entryNames.join("、");
     unresolved.push(
@@ -274,6 +291,7 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
     writable_paths: effectiveWritable,
     readonly_paths: readonlyPaths,
     strictly_forbidden_paths: forbiddenPaths,
+    dirty_exclusions: dirtyExclusions,
     commands,
     budget,
     protected_files: protection.files,

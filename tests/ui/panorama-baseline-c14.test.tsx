@@ -66,6 +66,7 @@ function makeBaseline(
         steward_message:
           "发现您本地有 1 个未保存的临时文件。请放心，系统已自动把它们加入保护白名单，后续施工绝不触碰或覆盖它们。",
         protect_paths: [".env.local"],
+        dirty_exclusions: [".env.local"],
       },
       ignore_rules: [],
       incomplete: false,

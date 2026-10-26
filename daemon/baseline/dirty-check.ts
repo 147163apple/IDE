@@ -1,6 +1,6 @@
 /**
- * TASK-C.14c：Workspace Dirty Check（工作区洁净度）。
- * 只记录与警示；管家话术；首张微合同默认排除脏路径。
+ * TASK-C.14c / C.14d：Workspace Dirty Check（工作区洁净度）。
+ * 产出 dirty_exclusions 物理清单；管家话术；首张微合同禁写注入。
  */
 import { execGit } from "../git/worktree-manager";
 import {
@@ -49,6 +49,7 @@ export async function inspectWorkspaceDirty(
         untracked: [],
         steward_message: null,
         protect_paths: [],
+        dirty_exclusions: [],
       };
     }
     stdout = result.stdout;
@@ -60,6 +61,7 @@ export async function inspectWorkspaceDirty(
       untracked: [],
       steward_message: null,
       protect_paths: [],
+      dirty_exclusions: [],
     };
   }
 
@@ -81,6 +83,7 @@ export async function inspectWorkspaceDirty(
     untracked,
     steward_message: clean ? null : buildStewardDirtyMessage(n),
     protect_paths: protect,
+    dirty_exclusions: protect,
   };
 }
 
@@ -103,5 +106,6 @@ export function dirtyReportFromPorcelain(stdout: string): WorkspaceDirtyReport {
     untracked,
     steward_message: clean ? null : buildStewardDirtyMessage(n),
     protect_paths: protect,
+    dirty_exclusions: protect,
   };
 }

@@ -9,6 +9,10 @@ import {
 } from "./sandbox-scanner";
 import { inspectWorkspaceDirty } from "./dirty-check";
 import {
+  proveOsSandbox,
+  osSandboxFullyProven,
+} from "./os-sandbox";
+import {
   newBaselineScanId,
   writeBaselineArchive,
   readBaselineArchive,
@@ -103,6 +107,17 @@ export async function runProgressiveBaselineScan(
     options.dirtyOverride ??
     (await inspectWorkspaceDirty(options.repoRoot));
 
+  // TASK-C.14e：OS 沙盒反向证明（写+网）；失败则 logical_fallback，不得升级硬承诺
+  const os_sandbox = proveOsSandbox(options.repoRoot);
+  const sandboxNotes = osSandboxFullyProven(os_sandbox)
+    ? [
+        `OS 沙盒已证明（mode=${os_sandbox.mode}；写拒=${os_sandbox.write_error_code}；断网=${os_sandbox.network_error_code}）`,
+      ]
+    : [
+        "OS 沙盒未完全证明，本轮仍按逻辑只读约束；不得对外宣称已兑现物理只读/断网硬承诺",
+        ...os_sandbox.notes,
+      ];
+
   let archive: BaselineArchive = {
     schema_version: "1.0.0",
     kind: "project_baseline_archive",
@@ -117,6 +132,7 @@ export async function runProgressiveBaselineScan(
     p0: null,
     deep: null,
     dirty,
+    os_sandbox,
     ignore_rules: [
       "node_modules/",
       ".git/",
@@ -126,7 +142,7 @@ export async function runProgressiveBaselineScan(
       "coverage/",
     ],
     incomplete: false,
-    notes: ["打开即自动扫；确认≠授权；观察≠质量结论"],
+    notes: ["打开即自动扫；确认≠授权；观察≠质量结论", ...sandboxNotes],
   };
 
   // —— P0 ——
