@@ -29,7 +29,29 @@ import type { SupervisorMessage } from "../../daemon/supervisor/types";
 
 const tmpDirs: string[] = [];
 
+/**
+ * 常规项目仓库：**有** `package.json`。
+ *
+ * 必须显式造出来，否则 `isGreenfieldRepo()` 会把这些临时目录判成绿野，
+ * `alignWritableWithNpmVerification` 就会把 14 条脚手架种子并入可写范围、
+ * 把预算抬到 40——那测的就不是「默认值」和「显式 scope」了。
+ * 绿野分支另有 `newGreenfieldRepo()` 专门覆盖。
+ */
 function newRepo(): string {
+  const dir = newTempRepo();
+  fs.writeFileSync(
+    path.join(dir, "package.json"),
+    JSON.stringify({ name: "fixture", private: true }),
+  );
+  return dir;
+}
+
+/** 绿野仓库：无 `package.json`，用于覆盖 npm 验收对齐补丁。 */
+function newGreenfieldRepo(): string {
+  return newTempRepo();
+}
+
+function newTempRepo(): string {
   const root = path.join(process.cwd(), ".tmp", "unit-supervisor-draft");
   fs.mkdirSync(root, { recursive: true });
   const dir = fs.mkdtempSync(path.join(root, "draft-"));
@@ -172,6 +194,44 @@ describe("L0 规则提取", () => {
       max_command_executions: DEFAULT_DRAFT_BUDGET.max_command_executions,
       max_tool_calls: DEFAULT_DRAFT_BUDGET.max_tool_calls,
     });
+  });
+
+  it("绿野 + npm 验收：并入脚手架种子并把文件预算抬到 40（正常项目不受影响）", async () => {
+    const reason = "给 `src/api/health.ts` 补一条健康检查";
+    const greenfield = newGreenfieldRepo();
+    const green = await generateContractDraft({
+      repoRoot: greenfield,
+      messages: msgs(reason),
+      trigger: "USER_REQUEST",
+    });
+    expect(green.generated).toBe(true);
+    if (!green.generated) return;
+
+    const scope = green.contract.authorization.file_system_scope.writable_paths;
+    // 用户提的路径仍排在最前，种子只做补齐
+    expect(scope[0]).toBe("src/api/health.ts");
+    expect(scope).toContain("package.json");
+    expect(scope).toContain("tsconfig.json");
+    expect(scope).toContain("tests/**");
+    expect(green.contract.authorization.budget_limits.max_file_modifications).toBe(
+      40,
+    );
+
+    // 对照组：仓库已有 package.json（非绿野）→ 不注入种子、预算保持默认
+    const normal = newRepo();
+    const plain = await generateContractDraft({
+      repoRoot: normal,
+      messages: msgs(reason),
+      trigger: "USER_REQUEST",
+    });
+    expect(plain.generated).toBe(true);
+    if (!plain.generated) return;
+    expect(
+      plain.contract.authorization.file_system_scope.writable_paths,
+    ).toEqual(["src/api/health.ts"]);
+    expect(
+      plain.contract.authorization.budget_limits.max_file_modifications,
+    ).toBe(DEFAULT_DRAFT_BUDGET.max_file_modifications);
   });
 
   it("草案 100% 通过 SoftwareContractV12 Schema，初始 DRAFT/DRAFT 且 worker_spec 齐备", async () => {

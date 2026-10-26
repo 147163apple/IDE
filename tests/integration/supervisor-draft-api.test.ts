@@ -30,10 +30,9 @@ describe("POST /api/supervisor/draft（Supervisor 草案控制面）", () => {
   ) => {
     daemon = createDaemon({
       repoRoot: repo,
-      // 3600–3610：避开 resume-abort 的 3690–3695（同段在 8 并发下必 EADDRINUSE），
-      // 也与 ipc-stream 3660–3670、contract-api 3680–3685、worktree-files 3700–3709 不重叠。
-      startPort: 3600,
-      endPort: 3610,
+      // 端口段：与其余套件不重叠，登记表见 tests/unit/test-port-map.test.ts
+      startPort: 3900,
+      endPort: 3909,
       enableCrashRecovery: false,
       ...(enrich === undefined ? {} : { supervisorEnrich: enrich }),
     });
@@ -56,6 +55,13 @@ describe("POST /api/supervisor/draft（Supervisor 草案控制面）", () => {
     fs.writeFileSync(
       path.join(repo, "src", "auth", "login.ts"),
       "export const auth = 1;\n",
+    );
+    // 常规项目夹具：**有** package.json。缺了它 `isGreenfieldRepo()` 会把本仓库
+    // 判成绿野，`alignWritableWithNpmVerification` 就会往可写范围里补 14 条
+    // 脚手架种子，`context_paths` 优先级那条断言就测不到真实意图了。
+    fs.writeFileSync(
+      path.join(repo, "package.json"),
+      JSON.stringify({ name: "sup-draft-fixture", private: true }),
     );
     git(repo, ["add", "."]);
     git(repo, ["commit", "-q", "-m", "init"]);
