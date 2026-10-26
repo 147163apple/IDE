@@ -28,6 +28,10 @@ export interface TaskGraphPaneProps {
   baselineBusy?: boolean | undefined;
   onAcceptBaseline?: (() => void) | undefined;
   onRescanBaseline?: (() => void) | undefined;
+  onRunWorker?: (() => void) | undefined;
+  canRunWorker?: boolean | undefined;
+  runWorkerBusy?: boolean | undefined;
+  runWorkerLabel?: string | undefined;
 }
 
 export function TaskGraphPane(props: TaskGraphPaneProps) {
@@ -90,6 +94,18 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
             {...(props.actionBusy === undefined
               ? {}
               : { actionBusy: props.actionBusy })}
+            {...(props.onRunWorker === undefined
+              ? {}
+              : { onRunWorker: props.onRunWorker })}
+            {...(props.canRunWorker === undefined
+              ? {}
+              : { canRunWorker: props.canRunWorker })}
+            {...(props.runWorkerBusy === undefined
+              ? {}
+              : { runWorkerBusy: props.runWorkerBusy })}
+            {...(props.runWorkerLabel === undefined
+              ? {}
+              : { runWorkerLabel: props.runWorkerLabel })}
           />
         }
       />

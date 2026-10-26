@@ -2550,6 +2550,28 @@ function Console() {
               void handleVerifyGraphNode(nodeId);
             }}
             actionBusy={graphActionBusy}
+            onRunWorker={() => {
+                  if (!selected) return;
+                  void runAction("worker", async () => {
+                    const result = await runWorker(conn, selected.contract_id);
+                    setWorkerResult(result);
+                    const restored = await fetchEvidence(
+                      conn,
+                      selected.contract_id,
+                    );
+                    setEvidence(restored);
+                  });
+                }}
+                canRunWorker={
+                  selected?.lifecycle_state === "EXECUTING" &&
+                  evidence?.verdict.status !== "PASSED"
+                }
+                runWorkerBusy={busy === "worker"}
+                runWorkerLabel={
+                  evidence?.verdict.status === "FAILED"
+                    ? "再跑 Worker"
+                    : "运行 Worker"
+                }
             baseline={baselinePayload}
             baselineBusy={baselineBusy}
             onAcceptBaseline={() => {
@@ -2785,6 +2807,28 @@ function Console() {
                   void handleVerifyGraphNode(nodeId);
                 }}
                 actionBusy={graphActionBusy}
+                onRunWorker={() => {
+                  if (!selected) return;
+                  void runAction("worker", async () => {
+                    const result = await runWorker(conn, selected.contract_id);
+                    setWorkerResult(result);
+                    const restored = await fetchEvidence(
+                      conn,
+                      selected.contract_id,
+                    );
+                    setEvidence(restored);
+                  });
+                }}
+                canRunWorker={
+                  selected?.lifecycle_state === "EXECUTING" &&
+                  evidence?.verdict.status !== "PASSED"
+                }
+                runWorkerBusy={busy === "worker"}
+                runWorkerLabel={
+                  evidence?.verdict.status === "FAILED"
+                    ? "再跑 Worker"
+                    : "运行 Worker"
+                }
                 baseline={baselinePayload}
             baselineBusy={baselineBusy}
             onAcceptBaseline={() => {

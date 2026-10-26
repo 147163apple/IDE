@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { intersectWithProtection } from "../protection/protection-list";
 import {
   formatDirtyExclusionsPlain,
@@ -73,6 +75,75 @@ export const DEFAULT_FORBIDDEN_PATHS: readonly string[] = [
   "package-lock.json",
   "pnpm-lock.yaml",
 ];
+
+/**
+ * 绿野仓库 + npm typecheck/test 验收时的默认可写范围补丁。
+ * 仅 src/** 时 Worker 无法落 package.json / 测试文件，验收命令必然失败；
+ * Gateway 的测试完整性门禁也要求显式 tests 目录或 *.test.ts 一类模式。
+ */
+export const GREENFIELD_NPM_WRITABLE_DEFAULTS: readonly string[] = [
+  "src/**",
+  "package.json",
+  "tsconfig.json",
+  "tsconfig.*.json",
+  "vitest.config.*",
+  "vite.config.*",
+  "*.config.ts",
+  "*.config.mjs",
+  "*.config.js",
+  "index.html",
+  "tests/**",
+  "**/*.test.ts",
+  "**/*.test.tsx",
+  "**/*.spec.ts",
+];
+
+/** 绿野：仓库根尚无 package.json（无法直接跑 npm 验收） */
+export function isGreenfieldRepo(repoRoot: string): boolean {
+  try {
+    return !fs.existsSync(path.join(repoRoot, "package.json"));
+  } catch {
+    return false;
+  }
+}
+
+/** 验收命令是否依赖 npm typecheck / npm test */
+export function commandsNeedNpmVerification(
+  commands: readonly VerificationCommand[],
+): boolean {
+  return commands.some((cmd) => {
+    if (cmd.executable !== "npm") return false;
+    const args = cmd.args.map((a) => a.toLowerCase());
+    if (args.includes("test")) return true;
+    if (args.includes("typecheck")) return true;
+    // npm run typecheck / npm run test
+    const runIdx = args.indexOf("run");
+    if (runIdx >= 0) {
+      const script = args[runIdx + 1] ?? "";
+      if (script === "typecheck" || script === "test") return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * 绿野 + npm 验收：把脚手架/测试路径并入可写范围（去重保序）。
+ * 非绿野或非 npm 验收原样返回。
+ */
+export function alignWritableWithNpmVerification(input: {
+  repoRoot: string;
+  writablePaths: readonly string[];
+  commands: readonly VerificationCommand[];
+}): string[] {
+  const base = [...input.writablePaths];
+  if (!isGreenfieldRepo(input.repoRoot)) return base;
+  if (!commandsNeedNpmVerification(input.commands)) return base;
+  const out: string[] = [];
+  for (const p of [...base, ...GREENFIELD_NPM_WRITABLE_DEFAULTS]) {
+    if (!out.includes(p)) out.push(p);
+  }
+  return out;
+}
 
 /**
  * 意图 → 目录的确定性映射（只在用户没提具体路径时兜底）。
@@ -225,7 +296,7 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
     ).filter(isSafeContractPath),
   );
   // 兜底：过滤后为空（例如用户只写了绝对路径）说明意图无法落到仓库内
-  const effectiveWritable =
+  const baseWritable =
     writablePaths.length > 0 ? writablePaths : ["src/**"];
 
   const readonlyPaths = dedupe(
@@ -245,8 +316,21 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
       ? input.commands
       : [...DEFAULT_DRAFT_COMMANDS];
 
+  // 绿野 + npm 验收：可写范围与 package.json / 测试路径对齐，避免验收要求写不了的文件
+  const effectiveWritable = alignWritableWithNpmVerification({
+    repoRoot: input.repoRoot,
+    writablePaths: baseWritable,
+    commands,
+  });
+
+  const greenfieldNpm =
+    isGreenfieldRepo(input.repoRoot) &&
+    commandsNeedNpmVerification(commands);
+
   const budget: BudgetLimits = {
     ...DEFAULT_DRAFT_BUDGET,
+    // 绿野脚手架通常超过默认 10 个文件；略抬高以免验收前被预算熔断
+    ...(greenfieldNpm ? { max_file_modifications: 40 } : {}),
     ...(input.budgetLimits ?? {}),
   };
 

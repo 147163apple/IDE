@@ -44,6 +44,14 @@ export interface TaskGraphPanelProps {
   onVerifyNode?: ((nodeId: string) => void) | undefined;
   /** C.10o：开工/核销飞行中 */
   actionBusy?: boolean | undefined;
+  /**
+   * EXECUTING + evidence FAILED（或可再跑）时，施工页稳定露出「运行/再跑 Worker」。
+   * 合同审阅台里的同名按钮仍保留；这里避免用户停在图谱视口时找不到入口。
+   */
+  onRunWorker?: (() => void) | undefined;
+  canRunWorker?: boolean | undefined;
+  runWorkerBusy?: boolean | undefined;
+  runWorkerLabel?: string | undefined;
 }
 
 type GraphView = "functional" | "dag";
@@ -58,6 +66,10 @@ export function TaskGraphPanel({
   onStartNode,
   onVerifyNode,
   actionBusy = false,
+  onRunWorker,
+  canRunWorker = false,
+  runWorkerBusy = false,
+  runWorkerLabel,
 }: TaskGraphPanelProps) {
   const [view, setView] = useState<GraphView>("functional");
   const [selectedAreaId, setSelectedAreaId] = useState<string | null>(null);
@@ -252,6 +264,28 @@ export function TaskGraphPanel({
               }`}
             >
               {actionBusy && verifiable ? "核销中…" : "核销点亮"}
+            </button>
+          ) : null}
+          {onRunWorker && canRunWorker ? (
+            <button
+              type="button"
+              data-testid="graph-run-worker"
+              disabled={Boolean(runWorkerBusy) || actionBusy}
+              aria-busy={Boolean(runWorkerBusy)}
+              title="按当前合同再跑 Worker（失败后可返工）"
+              onClick={() => {
+                if (runWorkerBusy || actionBusy) return;
+                onRunWorker();
+              }}
+              className={`rounded border border-violet-600/40 bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-900 ${
+                runWorkerBusy || actionBusy
+                  ? "cursor-not-allowed opacity-50"
+                  : "hover:bg-violet-100"
+              }`}
+            >
+              {runWorkerBusy
+                ? "Worker 运行中…"
+                : (runWorkerLabel ?? "运行 Worker")}
             </button>
           ) : null}
           {onRefresh ? (
