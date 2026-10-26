@@ -29,6 +29,13 @@ import {
   guardSupervisorAgainstBaselineRace,
   prependBaselineGuardNotice,
 } from "../../baseline/supervisor-guard";
+import type { ContractStore } from "../../pipeline/contract-store";
+import {
+  DraftContractIdError,
+  persistJourneyDraft,
+  journeyDraftSuccessFields,
+  requireDraftContractId,
+} from "./draft-contract-id";
 
 export interface JourneyOrchestrateInput {
   message: string;
@@ -52,6 +59,8 @@ export interface JourneyOrchestrateInput {
         risk: "LOW" | "MEDIUM",
       ) => Promise<ContractDraftGenerated>)
     | undefined;
+  /** TASK-H.5：落盘草案并回传顶层 contract_id；生产必传 */
+  contractStore?: ContractStore | undefined;
 }
 
 export interface JourneyOrchestrateResult {
@@ -60,6 +69,8 @@ export interface JourneyOrchestrateResult {
   plain_summary: string;
   dispute_report?: DisputeReport | undefined;
   draft?: ContractDraftGenerated | undefined;
+  /** TASK-H.5：顶层必带，与落盘合同一致 */
+  contract_id?: string | undefined;
   requirements_updated?: boolean | undefined;
   requirements_hint?: string | undefined;
   skip_demo?: boolean | undefined;
@@ -229,11 +240,51 @@ export async function orchestrateJourney(
           `标题：${draft.contract.intent.title}。左侧需求说明已刷新，你可以先看再决定是否开工。`,
         ].join(" ");
 
+  // TASK-H.5：成功草案必须带回顶层 contract_id；有 store 则落盘校验
+  let contract_id: string;
+  let draftOut: ContractDraftGenerated = draft;
+  if (input.contractStore) {
+    try {
+      const persisted = persistJourneyDraft(input.contractStore, draft);
+      contract_id = persisted.contract_id;
+      draftOut = { ...draft, contract: persisted.contract };
+    } catch (err) {
+      if (err instanceof DraftContractIdError) {
+        return {
+          intent,
+          route: intent.kind,
+          plain_summary: withGuard(err.message),
+          code: err.code,
+          skip_demo: intent.skip_demo,
+          suggest_viewport: "contract",
+        };
+      }
+      throw err;
+    }
+  } else {
+    try {
+      contract_id = requireDraftContractId(draft);
+    } catch (err) {
+      if (err instanceof DraftContractIdError) {
+        return {
+          intent,
+          route: intent.kind,
+          plain_summary: withGuard(err.message),
+          code: err.code,
+          skip_demo: intent.skip_demo,
+          suggest_viewport: "contract",
+        };
+      }
+      throw err;
+    }
+  }
+
   return {
     intent,
     route: intent.kind,
     plain_summary: withGuard(plain),
-    draft,
+    draft: draftOut,
+    ...journeyDraftSuccessFields(contract_id),
     requirements_updated: requirementsUpdated,
     ...(requirementsHint === undefined
       ? {}

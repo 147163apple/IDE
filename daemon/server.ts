@@ -89,6 +89,10 @@ import type { SupervisorProposalV1 } from "../src/lib/graph/task-graph";
 import { RequirementsStore } from "./supervisor/specs/requirements-store";
 import { orchestrateJourney } from "./supervisor/journey/orchestrate";
 import {
+  exportRedactedRecordsZip,
+  cleanupProjectRecords,
+} from "./pipeline/records-export-cleanup";
+import {
   buildTimeoutFallbackReport,
   runDisputeSelfCheck,
 } from "./supervisor/dispute";
@@ -1776,6 +1780,11 @@ export class StagentDaemon {
             error: "worktree_dirty_confirmation_required",
             code: "E_WORKTREE_DIRTY",
             message: err.message,
+            dirty_count: err.dirtyFiles.length,
+            dirty_files: err.dirtyFiles,
+            plain_message: err.guidance.plain_message,
+            exclusion_suggestions: err.guidance.exclusion_suggestions,
+            dirty_exclusions: err.guidance.dirty_exclusions,
           },
         };
       }
@@ -2568,6 +2577,7 @@ export class StagentDaemon {
         ...(sessionId === undefined ? {} : { sessionId }),
         requirementsStore: this.requirementsStore,
         budgetLedger: ledger,
+        contractStore: this.orchestrator.getStore(),
         ...(this.supervisorEnrich === undefined
           ? {}
           : { enrich: this.supervisorEnrich }),
@@ -2609,6 +2619,8 @@ export class StagentDaemon {
         requirements_hint: result.requirements_hint ?? null,
         suggest_viewport: result.suggest_viewport ?? null,
         code: result.code ?? null,
+        // TASK-H.5：顶层 contract_id（与落盘一致；草案失败路径为 null）
+        contract_id: result.contract_id ?? null,
         draft: draftPayload,
         dispute_report: result.dispute_report ?? null,
         budget: ledger.snapshot(),
@@ -3154,6 +3166,15 @@ export class StagentDaemon {
     }
 
     // TASK-C.14：项目现状基线档案
+    if (pathname.startsWith("/api/records")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleRecords(req, res, method, pathname);
+      return;
+    }
+
     if (pathname.startsWith("/api/baseline")) {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -3545,6 +3566,10 @@ export class StagentDaemon {
                 code: "E_WORKTREE_DIRTY",
                 message: err.message,
                 dirty_count: err.dirtyFiles.length,
+                dirty_files: err.dirtyFiles,
+                plain_message: err.guidance.plain_message,
+                exclusion_suggestions: err.guidance.exclusion_suggestions,
+                dirty_exclusions: err.guidance.dirty_exclusions,
               });
               return;
             }
@@ -3962,6 +3987,49 @@ export class StagentDaemon {
    * POST /api/baseline/scan      —— 强制重扫
    * POST /api/baseline/accept    —— 「认可此基线作为后续参考」（≠授权施工）
    */
+
+  /**
+   * TASK-H.8：records 脱敏导出 / 单项目清理（本地权威，不上云）。
+   * POST /api/records/export   —— 脱敏 zip
+   * POST /api/records/cleanup  —— 幂等清除 .stagent/records/
+   */
+  private async handleRecords(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+  ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    if (pathname === "/api/records/export") {
+      let outPath: string | undefined;
+      try {
+        const body = (await this.readJsonBody(req).catch(() => ({}))) as {
+          out_path?: unknown;
+        };
+        if (typeof body.out_path === "string" && body.out_path.trim()) {
+          outPath = body.out_path.trim();
+        }
+      } catch {
+        /* empty body ok */
+      }
+      const result = exportRedactedRecordsZip({
+        repoRoot: this.repoRoot,
+        ...(outPath ? { outPath } : {}),
+      });
+      this.sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    if (pathname === "/api/records/cleanup") {
+      const result = cleanupProjectRecords(this.repoRoot);
+      this.sendJson(res, result.ok ? 200 : 400, result);
+      return;
+    }
+    this.sendJson(res, 404, { error: "Not found" });
+  }
+
   private async handleBaseline(
     req: http.IncomingMessage,
     res: http.ServerResponse,

@@ -3,6 +3,7 @@
  * dirty_exclusions → scope.strictly_forbidden_paths（物理白名单）。
  */
 import { readBaselineArchive } from "./store";
+import { loadAcknowledgedDirtyExclusions } from "./dirty-guidance";
 import type { WorkspaceDirtyReport } from "./types";
 import { matchesAnyPattern, normalizePath } from "../../src/lib/scope";
 
@@ -11,12 +12,18 @@ import { matchesAnyPattern, normalizePath } from "../../src/lib/scope";
  */
 export function loadBaselineDirtyExclusions(repoRoot: string): string[] {
   const archive = readBaselineArchive(repoRoot);
-  if (!archive?.dirty) return [];
-  const raw =
-    archive.dirty.dirty_exclusions?.length
+  const fromBaseline: string[] = archive?.dirty
+    ? archive.dirty.dirty_exclusions?.length
       ? archive.dirty.dirty_exclusions
-      : (archive.dirty.protect_paths ?? []);
-  return [...new Set(raw.map(normalizePath).filter(Boolean))].sort();
+      : (archive.dirty.protect_paths ?? [])
+    : [];
+  // TASK-H.6：acknowledge_dirty 后写入的排除也并入禁写
+  const fromAck = loadAcknowledgedDirtyExclusions(repoRoot);
+  return [
+    ...new Set(
+      [...fromBaseline, ...fromAck].map(normalizePath).filter(Boolean),
+    ),
+  ].sort();
 }
 
 /** @deprecated 兼容旧名；请用 loadBaselineDirtyExclusions */

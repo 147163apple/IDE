@@ -18,7 +18,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify-env": "node scripts/verify-env.mjs",
-    "stagent": "tsx bin/stagent.ts"
+    "stagent": "tsx bin/stagent.ts",
+    "test:mainline": "node scripts/mainline-regression.mjs"
   },
   "overrides": {
     "rolldown": "1.2.1"

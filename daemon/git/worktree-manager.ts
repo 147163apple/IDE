@@ -6,6 +6,11 @@ import {
   validateTaskBranchOperation,
 } from "./branch-guard";
 import { assertIsolatedGitCwd, isTestRuntime } from "./test-isolation";
+import {
+  buildDirtyAckGuidance,
+  recordAcknowledgedDirtyExclusions,
+  type DirtyAckGuidance,
+} from "../baseline/dirty-guidance";
 
 export class WorktreeError extends Error {
   constructor(message: string) {
@@ -24,17 +29,16 @@ export interface WorktreeInfo {
   warnings: string[];
 }
 
-/** 主工作区存在未提交变更，需用户显式确认后才能创建 Worktree（规范 A.1 PASS-3） */
+/** 主工作区存在未提交变更，需用户显式确认后才能创建 Worktree（规范 A.1 PASS-3 / TASK-H.6） */
 export class DirtyWorktreeConfirmationRequiredError extends WorktreeError {
   readonly dirtyFiles: string[];
+  readonly guidance: DirtyAckGuidance;
   constructor(dirtyFiles: string[]) {
-    super(
-      `Main worktree has ${dirtyFiles.length} uncommitted change(s), which will NOT be included in the task worktree: ` +
-        `${dirtyFiles.slice(0, 5).join(", ")}${dirtyFiles.length > 5 ? ", ..." : ""}. ` +
-        `Confirm with the user, then retry with acknowledgeDirty: true.`,
-    );
+    const guidance = buildDirtyAckGuidance(dirtyFiles);
+    super(guidance.plain_message);
     this.name = "DirtyWorktreeConfirmationRequiredError";
     this.dirtyFiles = dirtyFiles;
+    this.guidance = guidance;
   }
 }
 
@@ -331,6 +335,10 @@ export async function createTaskWorktree(options: {
   const inspection = await inspectMainWorktree(resolvedRoot);
   if (!inspection.clean && !acknowledgeDirty) {
     throw new DirtyWorktreeConfirmationRequiredError(inspection.files);
+  }
+  // TASK-H.6：确认后脏路径写入禁写/排除清单
+  if (!inspection.clean && acknowledgeDirty && inspection.files.length > 0) {
+    recordAcknowledgedDirtyExclusions(resolvedRoot, inspection.files);
   }
   const warnings = inspection.warning ? [inspection.warning] : [];
 
