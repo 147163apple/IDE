@@ -18,12 +18,35 @@ const SAFE_DELETE_MARKER = "SAFE_DELETE_";
  */
 const TRANSIENT_RM_CODES = new Set(["EBUSY", "ENOTEMPTY"]);
 
+/**
+ * 环境拒绝「写」的错误码。全盘只读 / 配额耗尽时，探针连落盘都做不到：
+ * 那不是「删除被拒」，而是「无法观测删除」，两者对调用方都是同一种降级。
+ */
+const WRITE_DENIED_CODES = new Set([
+  "EACCES",
+  "EPERM",
+  "EROFS",
+  "EDQUOT",
+  "ENOSPC",
+]);
+
 function errorCode(error: unknown): string | undefined {
   if (typeof error === "object" && error !== null && "code" in error) {
     const code = (error as { code?: unknown }).code;
     if (typeof code === "string") return code;
   }
   return undefined;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** 环境的写/删拒绝：这类错误不该让辅助函数抛错，只该让判定降级 */
+function isEnvironmentDenial(error: unknown): boolean {
+  if (errorMessage(error).includes(SAFE_DELETE_MARKER)) return true;
+  const code = errorCode(error);
+  return code !== undefined && WRITE_DENIED_CODES.has(code);
 }
 
 function sleepSync(ms: number): void {
@@ -44,8 +67,10 @@ export function safeRmSync(target: string): boolean {
       fs.rmSync(target, { recursive: true, force: true });
       return true;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (message.includes(SAFE_DELETE_MARKER)) return false;
+      // 尺度刻意收窄：只有 safe-delete 垫片的拒绝算「环境不让删」。
+      // EACCES/EROFS 一类在这里仍然抛出——清理路径上出现只读或权限错误，
+      // 说明真出了问题（路径拼错、文件不在预期位置），不该被静默吞掉。
+      if (errorMessage(error).includes(SAFE_DELETE_MARKER)) return false;
       const code = errorCode(error);
       if (attempt < 2 && code !== undefined && TRANSIENT_RM_CODES.has(code)) {
         sleepSync(20 * (attempt + 1));
@@ -57,17 +82,32 @@ export function safeRmSync(target: string): boolean {
 }
 
 /**
- * 探测当前环境是否拒绝删除：写一个探针文件后尝试删除，删不掉即判定被拒。
+ * 探测某个位置上的删除是否可观测。
  *
- * 不要缓存结果——垫片是按「本轮累计删除次数」触发的，同一轮里前半段能删、
- * 后半段被拒是正常现象（这正是全量跑才偶发的原因）。
+ * - `blocked`：探针写进去了、但删不掉 → 删除被环境拒绝，盘上断言不可观测；
+ * - `allowed`：能写也能删 → 删除可观测；
+ * - `unavailable`：连探针都写不进去（全盘只读 / 配额耗尽）→ 这一处给不出答案，
+ *   既不能当成「能删」也不能抛错让用例变红，交由调用方换下一处或按不可观测处理。
+ *
+ * 删除步骤不看错误码、只看文件是否还在（与 `deadlock-call-sites` 原口径一致）：
+ * 探针只回答「环境让不让删」，任何「删了但文件还在」都归为不可观测。
  */
-export function diskDeleteBlocked(): boolean {
-  const base = path.join(process.cwd(), ".tmp", "unit-safe-delete-probe");
-  fs.mkdirSync(base, { recursive: true });
-  const dir = fs.mkdtempSync(path.join(base, "probe-"));
+type ProbeVerdict = "blocked" | "allowed" | "unavailable";
+
+function probeDeleteAt(base: string): ProbeVerdict {
+  let dir: string;
+  try {
+    fs.mkdirSync(base, { recursive: true });
+    dir = fs.mkdtempSync(path.join(base, "probe-"));
+    fs.writeFileSync(path.join(dir, "probe.lock"), "probe");
+  } catch (error) {
+    // 写不进去：环境层面的写拒绝降级为「这一处给不出答案」，
+    // 其余错误（ENOTDIR、路径拼错一类）照常抛出，避免把真 bug 当成环境问题。
+    if (isEnvironmentDenial(error)) return "unavailable";
+    throw error;
+  }
+
   const probe = path.join(dir, "probe.lock");
-  fs.writeFileSync(probe, "probe");
   try {
     fs.rmSync(probe, { force: true });
   } catch {
@@ -77,7 +117,52 @@ export function diskDeleteBlocked(): boolean {
   try {
     fs.rmSync(dir, { recursive: true, force: true });
   } catch {
-    /* 同上：清理探针本身失败不影响判定 */
+    /* 清理探针本身失败不影响判定 */
   }
-  return blocked;
+  return blocked ? "blocked" : "allowed";
+}
+
+/**
+ * 默认探针位置。刻意只放在工作区内：
+ * 受限沙箱本来就禁止删工作区外的文件（见 `vitest.global-setup.ts` 的说明），
+ * 拿 `/tmp` 一类外部路径当兜底只会探出「另一条策略拒绝删除」，
+ * 把正常环境误判成受限环境。
+ */
+function defaultProbeRoots(): string[] {
+  return [path.join(process.cwd(), ".tmp", "unit-safe-delete-probe")];
+}
+
+/**
+ * 按候选顺序探测，返回「删除是否不可观测」。
+ *
+ * 每一步：
+ * - 任一位置探到 `blocked` → 立刻 `true`（垫片是路径无关的）；
+ * - 任一位置探到 `allowed` → 立刻 `false`（能删就是能删）；
+ * - `unavailable` 只代表这一处没答案，继续看下一处；
+ * - 全部 `unavailable` → `true`：观测不到删除结果时必须降级，而不是让用例红。
+ *
+ * 导出是为让用例能注入一个只读目录来验证兜底分支，默认调用方用
+ * `diskDeleteBlocked()`。
+ */
+export function diskDeleteBlockedIn(roots: readonly string[]): boolean {
+  for (const root of roots) {
+    const verdict = probeDeleteAt(root);
+    if (verdict === "blocked") return true;
+    if (verdict === "allowed") return false;
+  }
+  return true;
+}
+
+/**
+ * 探测当前环境是否拒绝删除：写一个探针文件后尝试删除，删不掉即判定被拒。
+ *
+ * 不要缓存结果——垫片是按「本轮累计删除次数」触发的，同一轮里前半段能删、
+ * 后半段被拒是正常现象（这正是全量跑才偶发的原因）。
+ *
+ * 探针自己写不进去时（全盘只读）返回 `true` 而不是抛错：调用方拿它决定
+ * 「要不要把盘上断言降级为跳过」，让环境问题变成一条带原因的 skip，
+ * 而不是一条看起来像产品缺陷的红色失败。
+ */
+export function diskDeleteBlocked(): boolean {
+  return diskDeleteBlockedIn(defaultProbeRoots());
 }
