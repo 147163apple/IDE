@@ -24,6 +24,11 @@ import type { DisputeReport } from "../dispute/types";
 import type { RequirementsStore } from "../specs/requirements-store";
 import type { SupervisorBudgetLedger } from "../budget";
 import type { SupervisorMessage } from "../types";
+import { readBaselineArchive } from "../../baseline/store";
+import {
+  guardSupervisorAgainstBaselineRace,
+  prependBaselineGuardNotice,
+} from "../../baseline/supervisor-guard";
 
 export interface JourneyOrchestrateInput {
   message: string;
@@ -74,12 +79,18 @@ export async function orchestrateJourney(
 ): Promise<JourneyOrchestrateResult> {
   const intent = classifyJourneyIntent(input.message);
   const now = input.now?.() ?? new Date();
+  // TASK-C.14c：深度扫未完时防抢跑（不抛异常、不空白）
+  const baselineGuard = guardSupervisorAgainstBaselineRace(
+    readBaselineArchive(input.repoRoot),
+  );
+  const withGuard = (summary: string) =>
+    prependBaselineGuardNotice(summary, baselineGuard);
 
   if (intent.kind === "CHAT") {
     return {
       intent,
       route: "CHAT",
-      plain_summary: intent.reasons.join(" "),
+      plain_summary: withGuard(intent.reasons.join(" ") || "好的，我们慢慢聊。"),
     };
   }
 
@@ -88,8 +99,9 @@ export async function orchestrateJourney(
       return {
         intent,
         route: "DISPUTE",
-        plain_summary:
+        plain_summary: withGuard(
           "我听出你在质疑「这里做错了」。请先在左侧点一份合同（或先让我出草案），我才能对照蓝图帮你查。",
+        ),
         code: "CONTRACT_REQUIRED",
         suggest_viewport: "contract",
       };
@@ -110,7 +122,7 @@ export async function orchestrateJourney(
     return {
       intent,
       route: "DISPUTE",
-      plain_summary: report.plain_summary,
+      plain_summary: withGuard(report.plain_summary),
       dispute_report: report,
       suggest_viewport: "dispute",
       requirements_updated: true,
@@ -123,8 +135,9 @@ export async function orchestrateJourney(
       return {
         intent,
         route: "REAL_PLAYTEST",
-        plain_summary:
+        plain_summary: withGuard(
           "要打开真机预览，请先在左侧选一个合同（或先确认原型开工）。选好后再说「打开真机预览」。",
+        ),
         code: "CONTRACT_REQUIRED",
         suggest_viewport: "contract",
         skip_demo: true,
@@ -133,11 +146,13 @@ export async function orchestrateJourney(
     return {
       intent,
       route: "REAL_PLAYTEST",
-      plain_summary: [
-        "好，去开真机预览。",
-        ...intent.reasons,
-        "中栏会挂上真实页面，也可以点「在浏览器打开」。没有业务产物时会先放一页试玩桩，方便你点通流程。",
-      ].join(" "),
+      plain_summary: withGuard(
+        [
+          "好，去开真机预览。",
+          ...intent.reasons,
+          "中栏会挂上真实页面，也可以点「在浏览器打开」。没有业务产物时会先放一页试玩桩，方便你点通流程。",
+        ].join(" "),
+      ),
       suggest_viewport: "playtest",
       skip_demo: true,
       code: "START_REAL_PLAYTEST",
@@ -173,8 +188,9 @@ export async function orchestrateJourney(
       return {
         intent,
         route: intent.kind,
-        plain_summary:
+        plain_summary: withGuard(
           "这次没有生成草案（触发条件不满足）。请换一句更具体的需求再试。",
+        ),
         code: "DRAFT_SKIPPED",
         skip_demo: intent.skip_demo,
       };
@@ -216,7 +232,7 @@ export async function orchestrateJourney(
   return {
     intent,
     route: intent.kind,
-    plain_summary: plain,
+    plain_summary: withGuard(plain),
     draft,
     requirements_updated: requirementsUpdated,
     ...(requirementsHint === undefined

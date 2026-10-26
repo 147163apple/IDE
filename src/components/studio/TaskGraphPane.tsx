@@ -2,6 +2,7 @@ import { useState } from "react";
 import { TaskGraphPanel } from "@/components/graph/TaskGraphPanel";
 import type { TaskGraph } from "@/lib/graph/task-graph";
 import { PanoramaPane, type PanoramaSummary } from "./PanoramaPane";
+import type { BaselineArchivePayload } from "@/lib/daemon-api";
 import { StudioLensShell } from "./StudioLensShell";
 
 /**
@@ -22,6 +23,11 @@ export interface TaskGraphPaneProps {
   actionBusy?: boolean | undefined;
   /** C.10q：全景极薄摘要 */
   panoramaSummary?: PanoramaSummary | null | undefined;
+  /** C.14：项目现状基线档案 */
+  baseline?: BaselineArchivePayload | null | undefined;
+  baselineBusy?: boolean | undefined;
+  onAcceptBaseline?: (() => void) | undefined;
+  onRescanBaseline?: (() => void) | undefined;
 }
 
 export function TaskGraphPane(props: TaskGraphPaneProps) {
@@ -41,6 +47,16 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
         panorama={
           <PanoramaPane
             summary={props.panoramaSummary ?? null}
+            baseline={props.baseline ?? null}
+            {...(props.baselineBusy === undefined
+              ? {}
+              : { baselineBusy: props.baselineBusy })}
+            {...(props.onAcceptBaseline === undefined
+              ? {}
+              : { onAcceptBaseline: props.onAcceptBaseline })}
+            {...(props.onRescanBaseline === undefined
+              ? {}
+              : { onRescanBaseline: props.onRescanBaseline })}
             hasGraph={hasGraph}
             onGoConstruction={() => setPreferConstructionKey((n) => n + 1)}
             {...(props.onConfirmPrototype === undefined

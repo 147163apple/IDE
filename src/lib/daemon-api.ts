@@ -574,6 +574,101 @@ export async function fetchArchGraph(
   return request<ArchGraphPayload>(conn, "/api/arch/graph");
 }
 
+/** TASK-C.14：项目现状基线档案 */
+export interface BaselineArchivePayload {
+  archive: {
+    schema_version: string;
+    kind: "project_baseline_archive";
+    scan_id: string;
+    scanned_at: string;
+    tool_version: string;
+    review_status: "pending_review" | "accepted" | "incomplete";
+    accepted_at: string | null;
+    grants_construction: false;
+    phase: "idle" | "p0" | "p1" | "p2" | "done" | "failed";
+    progress_copy: string;
+    p0: {
+      package_name: string | null;
+      package_version: string | null;
+      top_level_entries: string[];
+      route_clues: string[];
+      module_entry_clues: string[];
+      scanned_paths_note: string[];
+      duration_ms: number;
+      timed_out: boolean;
+      network_denied: true;
+      dynamic_exec_denied: true;
+    } | null;
+    deep: {
+      structure_nodes: Array<{
+        id: string;
+        title: string;
+        kind: string;
+        provenance_plain: string;
+        status_plain: string;
+        confidence_label: string;
+      }>;
+      capability_nodes: Array<{
+        id: string;
+        title: string;
+        kind: string;
+        provenance_plain: string;
+        status_plain: string;
+        confidence_label: string;
+      }>;
+      test_file_count: number;
+      test_stat_note: string;
+      import_edge_count: number;
+      duration_ms: number;
+      timed_out: boolean;
+      incomplete: boolean;
+    } | null;
+    dirty: {
+      clean: boolean;
+      uncommitted: string[];
+      untracked: string[];
+      steward_message: string | null;
+      protect_paths: string[];
+    };
+    ignore_rules: string[];
+    incomplete: boolean;
+    notes: string[];
+  } | null;
+  scanning: boolean;
+  accept_label: string;
+  grants_construction: false;
+}
+
+export async function fetchBaselineArchive(
+  conn: DaemonConnection,
+): Promise<BaselineArchivePayload> {
+  return request<BaselineArchivePayload>(conn, "/api/baseline");
+}
+
+export async function rescanBaselineArchive(
+  conn: DaemonConnection,
+): Promise<BaselineArchivePayload> {
+  return request<BaselineArchivePayload>(conn, "/api/baseline/scan", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
+export async function acceptBaselineArchive(
+  conn: DaemonConnection,
+  scanId?: string,
+): Promise<{
+  archive: BaselineArchivePayload["archive"];
+  accepted: boolean;
+  grants_construction: false;
+  note: string;
+}> {
+  return request(conn, "/api/baseline/accept", {
+    method: "POST",
+    body: JSON.stringify(scanId ? { scan_id: scanId } : {}),
+  });
+}
+
 /** C.10f 热修：资源管理器纯文件树（相对路径列表，无 AST） */
 export interface RepoTreePayload {
   root: string;

@@ -2017,10 +2017,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
 * **FAIL**：仅写 Git Trailer 无侧车；或明文泄密；或阻断 v0.1 只因无 remote。
 
 
-#### 【Task C.14a】只读沙盒静态扫描器（基线 P0 骨架）`[NEW_TASK]`
+#### 【Task C.14a】只读沙盒静态扫描器（基线 P0 骨架）`[COMPLETED]`
 * **任务编号**：`TASK-C.14a`
 * **前置依赖**：`TASK-C.12e` (COMPLETED)、`TASK-C.10q` (COMPLETED)
-* **任务状态**：**[NEW_TASK]**（2026-10-26 立卡；Tina t835u「升格立卡」；**仅文档**；CLOSED 设计意图 ≠ 已实现）
+* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；只读沙盒静态扫描器 + 负例单测；CLOSED 设计意图已落地为可测实现）
 * **对照痛点 / Spec 锚点**：讨论稿 `docs/reports/已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`（tip `3c8411b`）文首 Tina 定案 3 + 工程补丁 1 + 原则 4 / §7.3。打开已有项目须「打开即自动深扫、零弹窗」，但不得动态执行项目脚本或触网。
 * **v0.1 范围（施工合同 · Delta）**：
   1. 实现（或挂载）**基线静态扫描器**：在 **只读挂载 + 物理断网 + 约 3 秒超时熔断** 的轻量沙盒内跑；**禁止**动态执行用户项目脚本（含 Webpack/Vite 配置副作用、加载 `.env` 触发外网、CLI 插件 init）。
@@ -2040,10 +2040,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   4. 不写入用户业务树受测路径；四件套绿。
 * **FAIL**：扫描触发用户脚本/外网；或同步卡死 > 数秒无熔断；或改 D.1 / 扩 Freeze。
 
-#### 【Task C.14b】渐进扫 + 基线档案落盘 + 全景视口 `[NEW_TASK]`
+#### 【Task C.14b】渐进扫 + 基线档案落盘 + 全景视口 `[COMPLETED]`
 * **任务编号**：`TASK-C.14b`
 * **前置依赖**：`TASK-C.14a` (NEW_TASK → 实现时须 COMPLETED)
-* **任务状态**：**[NEW_TASK]**（2026-10-26 立卡；Tina t835u；**仅文档**；CLOSED 设计意图 ≠ 已实现）
+* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；渐进扫 + `.stagent/records/baseline/` 落盘 + 全景视口 + 确认≠授权）
 * **对照痛点 / Spec 锚点**：讨论稿定案 1–2、工程补丁 2、阶段 A–E、升格备忘 3；产品名 **项目现状基线档案**；落盘 **`.stagent/records/baseline/`**（可带时间戳/commit）；**禁止** `contract_000` 伪合同命名。
 * **v0.1 范围**：
   1. **两段式渐进扫描**：P0 骨架亮起后解锁右栏对话；P1/P2（依赖/语义等）后台流式加深，节点逐个亮起；深度未完**不阻塞**用户提需求。
@@ -2059,10 +2059,10 @@ TASK-0.1 ──► TASK-0.2b ──► TASK-0.2c (Schema v1.3.0 & 自愈边) ─
   4. 点击「认可此基线作为后续参考」后档案标记已确认，但施工写权仍未授予（可测）；四件套绿。
 * **FAIL**：确认即开写；或深度扫卡死右栏；或落盘用 Contract #0 / contract_000 冒充施工合同。
 
-#### 【Task C.14c】Workspace Dirty Check + 图谱白话 + Supervisor 防抢跑 `[NEW_TASK]`
+#### 【Task C.14c】Workspace Dirty Check + 图谱白话 + Supervisor 防抢跑 `[COMPLETED]`
 * **任务编号**：`TASK-C.14c`
 * **前置依赖**：`TASK-C.14b` (NEW_TASK → 实现时须 COMPLETED)
-* **任务状态**：**[NEW_TASK]**（2026-10-26 立卡；Tina t835u；**仅文档**；CLOSED 设计意图 ≠ 已实现）
+* **任务状态**：**[COMPLETED]**（2026-10-26 本地实现；Tina t836u；Dirty Check 管家黄标 + 首张微合同排除 + 图谱两行白话 + Supervisor 防抢跑）
 * **对照痛点 / Spec 锚点**：讨论稿 §2.3、工程补丁 3、升格备忘 1–2；对齐 S.4 / `E_OUT_OF_SCOPE_UNTRACKED` 精神；文案「管家保护」而非系统报错。
 * **v0.1 范围**：
   1. 基线扫描强制 **Workspace Dirty Check**：记录扫描时是否存在 `uncommitted changes` / `untracked files`。

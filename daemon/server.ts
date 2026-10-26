@@ -190,6 +190,15 @@ import {
 } from "./supervisor/budget";
 import { EnrichError } from "./supervisor/enrich-openai";
 import type { SupervisorMessage } from "./supervisor/types";
+import {
+  acceptBaselineAsReference,
+  getLatestBaseline,
+  runProgressiveBaselineScan,
+  writeBaselineArchive,
+  newBaselineScanId,
+  SCAN_PROGRESS_COPY,
+  type BaselineArchive,
+} from "./baseline";
 
 export interface DaemonServerOptions extends PortFinderOptions {
   repoRoot: string;
@@ -294,6 +303,8 @@ export class StagentDaemon {
   private demoPreviewServer: DemoPreviewServer | null = null;
   private activePrototypeId: string | null = null;
   private stopSweepFn: (() => void) | null = null;
+  /** TASK-C.14：打开即扫的渐进基线（进行中 Promise，防重复扫） */
+  private baselineScanInFlight: Promise<BaselineArchive> | null = null;
 
   constructor(options: DaemonServerOptions) {
     this.repoRoot = path.resolve(options.repoRoot);
@@ -505,6 +516,8 @@ export class StagentDaemon {
     this.stopping = false;
     // TASK-D.3：1s 粒度的死锁扫描；判据最小为 15s，无需更高精度
     this.stopSweepFn = this.deadlock.startAutoSweep(1_000);
+    // TASK-C.14b：打开即自动扫（零弹窗；失败不挡启动）
+    void this.ensureBaselineScan().catch(() => undefined);
 
     // 服务端心跳守护：超过 30s 无任何帧的客户端强制断开
     this.heartbeatTimer = setInterval(() => {
@@ -3105,6 +3118,16 @@ export class StagentDaemon {
       return;
     }
 
+    // TASK-C.14：项目现状基线档案
+    if (pathname.startsWith("/api/baseline")) {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleBaseline(req, res, method, pathname);
+      return;
+    }
+
     if (pathname.startsWith("/api/graph")) {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -3661,6 +3684,133 @@ export class StagentDaemon {
       error: "Not Found",
       path: pathname,
     });
+  }
+
+
+  /**
+   * TASK-C.14：确保基线渐进扫在跑（打开即扫；已有进行中则复用）。
+   */
+  ensureBaselineScan(force = false): Promise<BaselineArchive> {
+    if (!force && this.baselineScanInFlight) {
+      return this.baselineScanInFlight;
+    }
+    const existing = getLatestBaseline(this.repoRoot);
+    if (
+      !force &&
+      existing &&
+      (existing.phase === "done" || existing.phase === "failed") &&
+      existing.p0
+    ) {
+      return Promise.resolve(existing);
+    }
+    // 同步落一张「正在整理现状」桩，保证首个 GET 立刻有进度文案
+    if (!existing || force) {
+      const stub: BaselineArchive = {
+        schema_version: "1.0.0",
+        kind: "project_baseline_archive",
+        scan_id: newBaselineScanId(),
+        scanned_at: new Date().toISOString(),
+        tool_version: this.version,
+        review_status: "pending_review",
+        accepted_at: null,
+        grants_construction: false,
+        phase: "p0",
+        progress_copy: SCAN_PROGRESS_COPY.scanning,
+        p0: null,
+        deep: null,
+        dirty: {
+          clean: true,
+          uncommitted: [],
+          untracked: [],
+          steward_message: null,
+          protect_paths: [],
+        },
+        ignore_rules: ["node_modules/", ".git/", ".stagent/"],
+        incomplete: false,
+        notes: ["打开即自动扫；确认≠授权"],
+      };
+      writeBaselineArchive(this.repoRoot, stub);
+    }
+    const run = runProgressiveBaselineScan({
+      repoRoot: this.repoRoot,
+      toolVersion: this.version,
+    }).finally(() => {
+      if (this.baselineScanInFlight === run) {
+        this.baselineScanInFlight = null;
+      }
+    });
+    this.baselineScanInFlight = run;
+    return run;
+  }
+
+  /**
+   * GET  /api/baseline           —— 读最新档案；若无则触发打开即扫
+   * POST /api/baseline/scan      —— 强制重扫
+   * POST /api/baseline/accept    —— 「认可此基线作为后续参考」（≠授权施工）
+   */
+  private async handleBaseline(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+    pathname: string,
+  ): Promise<void> {
+    try {
+      if (method === "GET" && pathname === "/api/baseline") {
+        let archive = getLatestBaseline(this.repoRoot);
+        if (!archive || archive.phase === "idle") {
+          void this.ensureBaselineScan();
+          archive = getLatestBaseline(this.repoRoot);
+        } else if (
+          archive.phase === "p0" ||
+          archive.phase === "p1" ||
+          archive.phase === "p2"
+        ) {
+          void this.ensureBaselineScan();
+        }
+        this.sendJson(res, 200, {
+          archive,
+          scanning: this.baselineScanInFlight !== null,
+          accept_label: "认可此基线作为后续参考",
+          grants_construction: false,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/baseline/scan") {
+        const archive = await this.ensureBaselineScan(true);
+        this.sendJson(res, 200, {
+          archive,
+          scanning: false,
+          accept_label: "认可此基线作为后续参考",
+          grants_construction: false,
+        });
+        return;
+      }
+
+      if (method === "POST" && pathname === "/api/baseline/accept") {
+        let body: { scan_id?: string } = {};
+        try {
+          body = (await this.readJsonBody(req)) as { scan_id?: string };
+        } catch {
+          body = {};
+        }
+        const archive = acceptBaselineAsReference(
+          this.repoRoot,
+          typeof body.scan_id === "string" ? body.scan_id : undefined,
+        );
+        this.sendJson(res, 200, {
+          archive,
+          accepted: true,
+          grants_construction: false,
+          note: "已认可为后续参考；未授予施工写权，未签发 exec_token",
+        });
+        return;
+      }
+
+      this.sendJson(res, 404, { error: "Not Found", path: pathname });
+    } catch (err) {
+      this.sendJson(res, 400, { error: (err as Error).message });
+    }
   }
 
   private installSignalHandlers(): void {

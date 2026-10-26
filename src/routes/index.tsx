@@ -35,6 +35,9 @@ import {
   admitContract,
   executeContract,
   fetchArchGraph,
+  fetchBaselineArchive,
+  acceptBaselineArchive,
+  rescanBaselineArchive,
   fetchRepoTree,
   deleteRepoPath,
   createRepoPath,
@@ -67,6 +70,7 @@ import {
   undoProtectionRound,
   unlockProtectionEntry,
   type ArchGraphPayload,
+  type BaselineArchivePayload,
   type AdmissionView,
   type DaemonConnection,
   type DiffFilesView,
@@ -255,6 +259,11 @@ function Console() {
   const [journeyCards, setJourneyCards] = useState<JourneyChatCard[]>([]);
   const [journeyBusy, setJourneyBusy] = useState(false);
   const [confirmPrototypeBusy, setConfirmPrototypeBusy] = useState(false);
+  /** TASK-C.14：项目现状基线档案（打开即扫） */
+  const [baselinePayload, setBaselinePayload] =
+    useState<BaselineArchivePayload | null>(null);
+  const [baselineBusy, setBaselineBusy] = useState(false);
+
   const [confirmPrototypeError, setConfirmPrototypeError] = useState<
     string | null
   >(null);
@@ -1527,6 +1536,69 @@ function Console() {
     void loadTaskGraph(selectedId ?? undefined);
   }, [connected, loadTaskGraph, selectedId]);
 
+
+  const loadBaseline = useCallback(async () => {
+    if (!connected || !conn) return;
+    try {
+      const payload = await fetchBaselineArchive(conn);
+      setBaselinePayload(payload);
+    } catch {
+      // 基线失败不挡主界面
+    }
+  }, [connected, conn]);
+
+  useEffect(() => {
+    if (!connected) return;
+    void loadBaseline();
+    const id = window.setInterval(() => {
+      void loadBaseline();
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [connected, loadBaseline]);
+
+  const handleAcceptBaseline = useCallback(async () => {
+    if (!conn) return;
+    setBaselineBusy(true);
+    try {
+      const res = await acceptBaselineArchive(
+        conn,
+        baselinePayload?.archive?.scan_id,
+      );
+      setBaselinePayload((prev) =>
+        prev
+          ? {
+              ...prev,
+              archive: res.archive,
+              scanning: false,
+              grants_construction: false,
+            }
+          : {
+              archive: res.archive,
+              scanning: false,
+              accept_label: "认可此基线作为后续参考",
+              grants_construction: false,
+            },
+      );
+    } catch {
+      // ignore
+    } finally {
+      setBaselineBusy(false);
+    }
+  }, [conn, baselinePayload?.archive?.scan_id]);
+
+  const handleRescanBaseline = useCallback(async () => {
+    if (!conn) return;
+    setBaselineBusy(true);
+    try {
+      const payload = await rescanBaselineArchive(conn);
+      setBaselinePayload(payload);
+    } catch {
+      // ignore
+    } finally {
+      setBaselineBusy(false);
+    }
+  }, [conn]);
+
   /** C.10o：PENDING→RUNNING（按依赖；Daemon startNode 校验前置已点亮） */
   const handleStartGraphNode = useCallback(
     async (nodeId: string) => {
@@ -2415,6 +2487,14 @@ function Console() {
               void handleVerifyGraphNode(nodeId);
             }}
             actionBusy={graphActionBusy}
+            baseline={baselinePayload}
+            baselineBusy={baselineBusy}
+            onAcceptBaseline={() => {
+              void handleAcceptBaseline();
+            }}
+            onRescanBaseline={() => {
+              void handleRescanBaseline();
+            }}
             panoramaSummary={
               selected
                 ? {
@@ -2642,7 +2722,15 @@ function Console() {
                   void handleVerifyGraphNode(nodeId);
                 }}
                 actionBusy={graphActionBusy}
-                panoramaSummary={
+                baseline={baselinePayload}
+            baselineBusy={baselineBusy}
+            onAcceptBaseline={() => {
+              void handleAcceptBaseline();
+            }}
+            onRescanBaseline={() => {
+              void handleRescanBaseline();
+            }}
+            panoramaSummary={
                   selected
                     ? {
                         contractTitle: selected.intent.title,

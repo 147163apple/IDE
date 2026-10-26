@@ -1,4 +1,5 @@
 import { intersectWithProtection } from "../protection/protection-list";
+import { mergeBaselineProtectIntoForbidden } from "../baseline/scope-defaults";
 import type {
   BudgetLimits,
   VerificationCommand,
@@ -221,8 +222,12 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
   const readonlyPaths = dedupe(
     (input.scope?.readonlyPaths ?? ["docs/**"]).filter(isSafeContractPath),
   );
-  const forbiddenPaths = dedupe(
+  const baseForbidden = dedupe(
     input.scope?.strictlyForbiddenPaths ?? [...DEFAULT_FORBIDDEN_PATHS],
+  );
+  // TASK-C.14c：首张微合同默认排除基线 Dirty Check 保护白名单
+  const forbiddenPaths = dedupe(
+    mergeBaselineProtectIntoForbidden(input.repoRoot, baseForbidden),
   );
 
   const commands =
