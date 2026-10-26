@@ -5,6 +5,11 @@ import type {
   WorkerGenerationResult,
   WorkerModelClient,
 } from "./ai-worker";
+import {
+  parseWorkerPatch,
+  withParseRetry,
+  type ParseRetryHooks,
+} from "./parse-worker-output";
 
 const workerOutputSchema = z.object({
   changes: z
@@ -21,17 +26,21 @@ const workerOutputSchema = z.object({
 /**
  * OpenAI 兼容模型客户端（Daemon 侧）。
  * 密钥仅从 Daemon 进程环境读取，绝不下发给浏览器或写入合同。
+ * TASK-H.1：格式校验失败时 ≤1 次本地重试，仍失败则抛可识别错误（不挂起）。
  */
 export class OpenAiWorkerClient implements WorkerModelClient {
   private readonly apiKey: string;
   private readonly modelId: string;
   private readonly baseURL?: string | undefined;
+  private readonly parseHooks: ParseRetryHooks;
 
   constructor(
     options: {
       apiKey?: string | undefined;
       modelId?: string | undefined;
       baseURL?: string | undefined;
+      /** 测试可注入重试钩子 */
+      parseHooks?: ParseRetryHooks | undefined;
     } = {},
   ) {
     const key = options.apiKey ?? getRuntimeKey();
@@ -43,6 +52,7 @@ export class OpenAiWorkerClient implements WorkerModelClient {
     this.apiKey = key;
     this.modelId = options.modelId ?? getRuntimeModel();
     this.baseURL = options.baseURL ?? process.env["OPENAI_BASE_URL"];
+    this.parseHooks = options.parseHooks ?? {};
   }
 
   async generateChanges(
@@ -60,12 +70,9 @@ export class OpenAiWorkerClient implements WorkerModelClient {
 
     const contract = input.contract;
     const task = input.task;
-
-    // System Prompt 的唯一来源：session-task-injector 依据已批准合同装配。
-    // 此处不再自行拼接范围/验收规则，避免「提示词与合同各说一套」。
     const system = task.system_prompt;
 
-    const prompt = [
+    const basePrompt = [
       `合同：${contract.contract_id}（revision ${task.contract_revision}）`,
       `工作目录：${task.worktree_root}`,
       `现有文件：\n${input.files
@@ -74,24 +81,45 @@ export class OpenAiWorkerClient implements WorkerModelClient {
       "请按输出契约返回 changes 数组（完整文件内容）；若无需改动返回空数组。",
     ].join("\n\n");
 
-    const result = await generateObject({
-      model: provider(this.modelId),
-      schema: workerOutputSchema,
-      system,
-      prompt,
-      ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
-    });
+    const strictSuffix =
+      "\n\n【重试】上次输出格式无效。请只返回合法 JSON 对象，字段必须含 changes:[{path,content}] 与 log:string[]，不要 markdown 围栏。";
 
-    const usage = result.usage as
-      { inputTokens?: number; outputTokens?: number } | undefined;
-
-    return {
-      changes: result.object.changes,
-      log: result.object.log,
-      usage: {
-        inputTokens: usage?.inputTokens ?? 0,
-        outputTokens: usage?.outputTokens ?? 0,
+    const { value } = await withParseRetry(
+      async (attempt) => {
+        const prompt = attempt === 0 ? basePrompt : basePrompt + strictSuffix;
+        const result = await generateObject({
+          model: provider(this.modelId),
+          schema: workerOutputSchema,
+          system,
+          prompt,
+          ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
+        });
+        const usage = result.usage as
+          | { inputTokens?: number; outputTokens?: number }
+          | undefined;
+        return {
+          object: result.object,
+          usage: {
+            inputTokens: usage?.inputTokens ?? 0,
+            outputTokens: usage?.outputTokens ?? 0,
+          },
+        };
       },
-    };
+      (raw, retriesUsed) => {
+        const envelope = raw as {
+          object: unknown;
+          usage: { inputTokens: number; outputTokens: number };
+        };
+        const patch = parseWorkerPatch(envelope.object, { retriesUsed });
+        return {
+          changes: patch.changes,
+          log: patch.log,
+          usage: envelope.usage,
+        } satisfies WorkerGenerationResult;
+      },
+      this.parseHooks,
+    );
+
+    return value;
   }
 }

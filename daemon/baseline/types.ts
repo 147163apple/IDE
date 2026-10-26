@@ -68,6 +68,11 @@ export interface BaselineP0Skeleton {
   timed_out: boolean;
   network_denied: true;
   dynamic_exec_denied: true;
+  /** TASK-H.3：硬上限/超时截断 */
+  truncated?: boolean;
+  truncate_reason?: "max_files" | "max_depth" | "timeout" | null;
+  files_scanned?: number;
+  truncate_plain?: string | null;
 }
 
 export interface BaselineDeepPartial {

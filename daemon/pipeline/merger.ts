@@ -3,6 +3,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { ContractStore } from "./contract-store";
 import { archiveContractRecords } from "./records-archive";
+import { publicDeliveryCopy } from "../../src/lib/state/terminal-delivery-closure";
 import { readStateFile } from "../guard/state-store";
 import type { SoftwareContract } from "../../src/lib/contract.schema";
 import {
@@ -49,12 +50,22 @@ export interface MergeResult {
   nothingToMerge: boolean;
   /** nothingToMerge 时的白话提示 */
   message?: string | undefined;
-  /** TASK-C.12d/e：MERGED 后 records 归档结果（失败则不得标 DELIVERED） */
+  /** TASK-C.12d/e：MERGED 后 records 归档结果（失败则不得标交付完成） */
   recordsArchive?: {
     ok: boolean;
     records_dir: string;
     copied: string[];
     error?: string;
+  };
+  /**
+   * TASK-H.2 方案 B：对外终态 = MERGED；
+   * delivery_complete 仅在 archive_ok 时为 true，失败不得伪造成功文案。
+   */
+  deliveryTerminal?: {
+    scheme: "B_MERGED_IS_TERMINAL";
+    lifecycle_state: "MERGED";
+    label: string;
+    delivery_complete: boolean;
   };
 }
 
@@ -569,6 +580,10 @@ async function mergeInternal(
     commit_sha: commitSha,
     events: [{ type: "MERGED", commit_sha: commitSha }],
   });
+  const delivery = publicDeliveryCopy({
+    lifecycle_state: "MERGED",
+    archive_ok: archive.ok,
+  });
   return {
     commitSha,
     commitMessage: message,
@@ -581,6 +596,12 @@ async function mergeInternal(
       records_dir: archive.records_dir,
       copied: archive.copied,
       ...(archive.error ? { error: archive.error } : {}),
+    },
+    deliveryTerminal: {
+      scheme: "B_MERGED_IS_TERMINAL",
+      lifecycle_state: "MERGED",
+      label: delivery.label,
+      delivery_complete: delivery.delivery_complete,
     },
   };
 }

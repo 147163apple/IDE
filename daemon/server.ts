@@ -174,6 +174,10 @@ import {
   DirtyWorktreeConfirmationRequiredError,
   WorktreeError,
 } from "./git/worktree-manager";
+import {
+  ensureGitInit,
+  inspectGitRepo,
+} from "./git/ensure-git-repo";
 import type { ChatAdapter } from "./chat/types";
 import { BaselineChatAdapter } from "./chat/baseline-adapter";
 import { DemoChatAdapter } from "./chat/demo-adapter";
@@ -3026,6 +3030,36 @@ export class StagentDaemon {
       } catch (err) {
         this.sendJson(res, 400, { error: (err as Error).message });
       }
+      return;
+    }
+
+    // TASK-H.4：空目录 / 无 .git 单键 git init（已有仓幂等跳过）
+    if (method === "POST" && pathname === "/api/repo/git-init") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      let body: { confirm?: boolean } = {};
+      try {
+        body = (await this.readJsonBody(req)) as { confirm?: boolean };
+      } catch {
+        body = {};
+      }
+      const info = inspectGitRepo(this.repoRoot);
+      // 单键：前端点确认后传 confirm:true；已有 .git 时幂等跳过
+      const result = ensureGitInit(this.repoRoot, {
+        confirm: body.confirm === true,
+      });
+      void info;
+      if (!result.ok) {
+        this.sendJson(res, result.code === "E_GIT_INIT_UNCONFIRMED" ? 409 : 500, {
+          error: result.message,
+          code: result.code ?? "E_GIT_INIT_FAILED",
+          ...result,
+        });
+        return;
+      }
+      this.sendJson(res, 200, result);
       return;
     }
 

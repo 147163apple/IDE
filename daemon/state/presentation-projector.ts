@@ -63,7 +63,7 @@ export const PRESENTATION_MESSAGES: Readonly<
   DISPUTED_INSPECTING: "正在做质疑自查",
   READY_TO_MERGE: "验收完成，可以合入了",
   CONFLICT: "检测到目标分支有新的改动，需要你选择处理方式",
-  MERGED: "已合入项目",
+  MERGED: "已交付归档",
   ABORTED: "任务已终止，工作区已清理",
 };
 

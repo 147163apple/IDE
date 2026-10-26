@@ -8,7 +8,7 @@ const STATE_LABEL: Record<string, string> = {
   VERIFYING: "验证中",
   PENDING_RESUME: "待恢复",
   AUDITED: "待核销",
-  MERGED: "已合并",
+  MERGED: "已交付归档",
   ABORTED: "已中止",
 };
 

@@ -38,6 +38,7 @@ import {
   resolveConsoleUiTarget,
   tryReuseRunningDaemon,
 } from "../daemon/core/open-workspace";
+import { ensureGitInit, inspectGitRepo } from "../daemon/git/ensure-git-repo";
 
 // 兼容 D.1b 单测：仍从本模块 re-export
 export {
@@ -271,6 +272,18 @@ async function runOpenOrStart(
     console.log(`  L1 补全: 已启用（DeepSeek / OpenAI 兼容口）`);
   } else {
     console.log(`  L1 补全: 未配置密钥（出草案默认纯 L0）`);
+  }
+
+  // TASK-H.4：无 .git 时友好自动 init（已有仓幂等跳过，绝不破坏历史）
+  const gitInfo = inspectGitRepo(options.repo);
+  if (!gitInfo.hasGit) {
+    const initResult = ensureGitInit(options.repo, { confirm: true });
+    if (!initResult.ok) {
+      console.error(`[stagent] ${initResult.message}`);
+      if (initResult.error) console.error(`  详情: ${initResult.error}`);
+      process.exit(1);
+    }
+    console.log(`  Git: ${initResult.message}`);
   }
 
   let daemon;

@@ -16,6 +16,11 @@ import type { BaselineP0Skeleton } from "./types";
 export const P0_TIMEOUT_MS = 3_000 as const;
 export const P0_TARGET_MS = 2_000 as const;
 
+/** TASK-H.3：文件数硬上限（可测注入覆盖） */
+export const SCAN_MAX_FILES = 5_000 as const;
+/** TASK-H.3：目录深度硬上限（根=0） */
+export const SCAN_MAX_DEPTH = 6 as const;
+
 const SKIP_DIR_NAMES = new Set([
   "node_modules",
   ".git",
@@ -142,13 +147,52 @@ function extractModuleEntries(repoRoot: string): string[] {
   return out.slice(0, 20);
 }
 
+export type ScanTruncateReason =
+  | "max_files"
+  | "max_depth"
+  | "timeout"
+  | null;
+
+export interface WalkCapState {
+  filesSeen: number;
+  truncated: boolean;
+  truncateReason: ScanTruncateReason;
+  maxFiles: number;
+  maxDepth: number;
+}
+
+function createWalkCapState(options?: {
+  maxFiles?: number | undefined;
+  maxDepth?: number | undefined;
+}): WalkCapState {
+  return {
+    filesSeen: 0,
+    truncated: false,
+    truncateReason: null,
+    maxFiles: options?.maxFiles ?? SCAN_MAX_FILES,
+    maxDepth: options?.maxDepth ?? SCAN_MAX_DEPTH,
+  };
+}
+
 function walkFiles(
   dir: string,
   deadline: number,
   onFile: (abs: string) => void,
   depth = 0,
+  cap?: WalkCapState,
+  now: () => number = Date.now,
 ): void {
-  if (Date.now() > deadline || depth > 6) return;
+  const state = cap ?? createWalkCapState();
+  if (now() > deadline) {
+    state.truncated = true;
+    state.truncateReason = state.truncateReason ?? "timeout";
+    return;
+  }
+  if (depth > state.maxDepth) {
+    state.truncated = true;
+    state.truncateReason = state.truncateReason ?? "max_depth";
+    return;
+  }
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -156,15 +200,44 @@ function walkFiles(
     return;
   }
   for (const ent of entries) {
-    if (Date.now() > deadline) return;
+    if (now() > deadline) {
+      state.truncated = true;
+      state.truncateReason = state.truncateReason ?? "timeout";
+      return;
+    }
+    if (state.filesSeen >= state.maxFiles) {
+      state.truncated = true;
+      state.truncateReason = state.truncateReason ?? "max_files";
+      return;
+    }
     if (SKIP_DIR_NAMES.has(ent.name) || ent.name.startsWith(".")) continue;
     const abs = path.join(dir, ent.name);
     if (ent.isDirectory()) {
-      walkFiles(abs, deadline, onFile, depth + 1);
+      walkFiles(abs, deadline, onFile, depth + 1, state, now);
+      if (state.truncated && state.truncateReason === "max_files") return;
     } else if (ent.isFile()) {
+      state.filesSeen += 1;
+      if (state.filesSeen > state.maxFiles) {
+        state.truncated = true;
+        state.truncateReason = "max_files";
+        return;
+      }
       onFile(abs);
     }
   }
+}
+
+export function truncatePlainMessage(reason: ScanTruncateReason): string | null {
+  if (reason === "max_files") {
+    return "扫描已截断：文件数达到上限，仅保留已探查部分（项目过大时属正常保护）。";
+  }
+  if (reason === "max_depth") {
+    return "扫描已截断：目录深度达到上限，深层文件夹未继续展开。";
+  }
+  if (reason === "timeout") {
+    return "扫描已截断：探查超时，已保留超时前结果。";
+  }
+  return null;
 }
 
 export interface RunP0ScanOptions {
@@ -172,6 +245,9 @@ export interface RunP0ScanOptions {
   /** 覆盖超时（测试） */
   timeoutMs?: number;
   now?: () => number;
+  /** TASK-H.3 测试可注入更小上限 */
+  maxFiles?: number;
+  maxDepth?: number;
 }
 
 /**
@@ -226,6 +302,25 @@ export function runP0SkeletonScan(options: RunP0ScanOptions): BaselineP0Skeleton
   const timed_out = now() > deadline;
   const duration_ms = Math.max(0, now() - started);
 
+  const cap = createWalkCapState({
+    maxFiles: options.maxFiles,
+    maxDepth: options.maxDepth,
+  });
+  walkFiles(
+    repoRoot,
+    deadline,
+    () => {
+      /* count only */
+    },
+    0,
+    cap,
+    now,
+  );
+  if (cap.truncated) {
+    const plain = truncatePlainMessage(cap.truncateReason);
+    if (plain) scanned_paths_note.push(plain);
+  }
+
   const skeleton: BaselineP0Skeleton = {
     package_name,
     package_version,
@@ -234,9 +329,13 @@ export function runP0SkeletonScan(options: RunP0ScanOptions): BaselineP0Skeleton
     module_entry_clues,
     scanned_paths_note,
     duration_ms,
-    timed_out,
+    timed_out: timed_out || cap.truncateReason === "timeout",
     network_denied: true,
     dynamic_exec_denied: true,
+    truncated: cap.truncated,
+    truncate_reason: cap.truncateReason,
+    files_scanned: cap.filesSeen,
+    truncate_plain: truncatePlainMessage(cap.truncateReason),
   };
 
   return redactDeep(skeleton).value as BaselineP0Skeleton;
@@ -250,6 +349,8 @@ export function runDeepStaticScan(options: {
   repoRoot: string;
   timeoutMs?: number;
   now?: () => number;
+  maxFiles?: number;
+  maxDepth?: number;
 }): {
   structure_paths: string[];
   test_file_count: number;
@@ -257,12 +358,21 @@ export function runDeepStaticScan(options: {
   duration_ms: number;
   timed_out: boolean;
   incomplete: boolean;
+  /** TASK-H.3 */
+  truncated: boolean;
+  truncate_reason: ScanTruncateReason;
+  files_scanned: number;
+  truncate_plain: string | null;
 } {
   const now = options.now ?? Date.now;
   const started = now();
   const timeoutMs = options.timeoutMs ?? 12_000;
   const deadline = started + timeoutMs;
   const repoRoot = path.resolve(options.repoRoot);
+  const cap = createWalkCapState({
+    maxFiles: options.maxFiles,
+    maxDepth: options.maxDepth,
+  });
 
   const structure_paths: string[] = [];
   let test_file_count = 0;
@@ -270,31 +380,103 @@ export function runDeepStaticScan(options: {
   const importRe =
     /(?:import\s+[^;]+from\s+['"`]([^'"`]+)['"`]|require\s*\(\s*['"`]([^'"`]+)['"`]\s*\))/g;
 
-  walkFiles(repoRoot, deadline, (file) => {
-    const rel = path.relative(repoRoot, file).split(path.sep).join("/");
-    if (structure_paths.length < 200) structure_paths.push(rel);
-    if (/\.(test|spec)\.(tsx?|jsx?)$/.test(rel) || /\/__tests__\//.test(rel)) {
-      test_file_count += 1;
-    }
-    if (/\.(tsx?|jsx?|mjs|cjs)$/.test(rel)) {
-      const text = safeReadText(file, 80_000);
-      if (!text) return;
-      importRe.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = importRe.exec(text)) !== null) {
-        import_edge_count += 1;
-        if (import_edge_count > 5000) break;
+  walkFiles(
+    repoRoot,
+    deadline,
+    (file) => {
+      const rel = path.relative(repoRoot, file).split(path.sep).join("/");
+      if (structure_paths.length < 200) structure_paths.push(rel);
+      if (/\.(test|spec)\.(tsx?|jsx?)$/.test(rel) || /\/__tests__\//.test(rel)) {
+        test_file_count += 1;
       }
-    }
-  });
+      if (/\.(tsx?|jsx?|mjs|cjs)$/.test(rel)) {
+        const text = safeReadText(file, 80_000);
+        if (!text) return;
+        importRe.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = importRe.exec(text)) !== null) {
+          import_edge_count += 1;
+          if (import_edge_count > 5000) break;
+        }
+      }
+    },
+    0,
+    cap,
+    now,
+  );
 
-  const timed_out = now() > deadline;
+  const timed_out = now() > deadline || cap.truncateReason === "timeout";
+  if (timed_out && !cap.truncated) {
+    cap.truncated = true;
+    cap.truncateReason = "timeout";
+  }
+  const incomplete = timed_out || cap.truncated;
   return {
     structure_paths,
     test_file_count,
     import_edge_count,
     duration_ms: Math.max(0, now() - started),
     timed_out,
-    incomplete: timed_out,
+    incomplete,
+    truncated: cap.truncated,
+    truncate_reason: cap.truncateReason,
+    files_scanned: cap.filesSeen,
+    truncate_plain: truncatePlainMessage(cap.truncateReason),
+  };
+}
+
+/**
+ * TASK-H.3：带硬上限的文件枚举（供 P0/单测直接断言截断）。
+ */
+export function runCappedFileWalk(options: {
+  repoRoot: string;
+  timeoutMs?: number;
+  now?: () => number;
+  maxFiles?: number;
+  maxDepth?: number;
+}): {
+  files: string[];
+  truncated: boolean;
+  truncate_reason: ScanTruncateReason;
+  files_scanned: number;
+  timed_out: boolean;
+  truncate_plain: string | null;
+  network_denied: true;
+  dynamic_exec_denied: true;
+} {
+  const now = options.now ?? Date.now;
+  const started = now();
+  const timeoutMs = options.timeoutMs ?? P0_TIMEOUT_MS;
+  const deadline = started + timeoutMs;
+  const repoRoot = path.resolve(options.repoRoot);
+  const cap = createWalkCapState({
+    maxFiles: options.maxFiles,
+    maxDepth: options.maxDepth,
+  });
+  const files: string[] = [];
+  walkFiles(
+    repoRoot,
+    deadline,
+    (abs) => {
+      files.push(path.relative(repoRoot, abs).split(path.sep).join("/"));
+    },
+    0,
+    cap,
+    now,
+  );
+  const timed_out = now() > deadline || cap.truncateReason === "timeout";
+  if (timed_out && !cap.truncated) {
+    cap.truncated = true;
+    cap.truncateReason = "timeout";
+  }
+  return {
+    files,
+    truncated: cap.truncated,
+    truncate_reason: cap.truncateReason,
+    files_scanned: cap.filesSeen,
+    timed_out,
+    truncate_plain: truncatePlainMessage(cap.truncateReason),
+    network_denied: true,
+    dynamic_exec_denied: true,
   };
 }
