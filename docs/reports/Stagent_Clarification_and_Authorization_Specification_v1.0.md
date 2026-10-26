@@ -1,47 +1,54 @@
 # Stagent 需求澄清与授权流程规范 (Clarification & Authorization Specification)
 **版本**: v1.0.0-draft  
 **状态**: **讨论稿 / 已入库 reports · 未升格为施工依据**  
+**消歧对齐（2026-10-26）**: 本文已与 tip **`d610d0a`**（《Supervisor右栏对话行为-设计》§8～§13 产品 CLOSED）及《工程决策拍板-Top7-2026-10-25》交叉消歧；过时「待决议」选择题已改为「已被 Top7 + 右栏 DEC/EO 取代」。**仍为讨论稿，未升格、未立卡**，不作为任务卡 Scope、验收标准或「代码已实现」的证据。  
 **不作为**：任务卡 Scope、验收标准或「代码已实现」的证据。立卡前须对照《决策记录对账-2026-10-25》与合同说明 §7.5。  
 **关联基准**:
 - 《Stagent 系统架构设计规范 v1.6.1》（宪法；本文不改其正文）
 - 《Stagent 研发任务拆解与工程执行规范 v1.6.2》（任务卡；本文不代立卡）
 - 《合同设计说明-2026-10-25》（导言 / §7.3–§7.5）
 - 《Supervisor运转机制-2026-10-25》（定稿；冲突时以定稿为准）
+- 《工程决策拍板-Top7-2026-10-25》（七条硬标准；冲突时本纪要 > 本文旧「待决议」）
+- 《Supervisor右栏对话行为-设计-2026-10-26》（讨论稿；**§0 / §8～§13 / DEC-01～06 / EO-01～10 CLOSED**；冲突时以该稿 CLOSED 条款为准，本文不得另开选择题）
 
-> **收紧注记（2026-10-25）**  
-> 1. **Impact Analysis**：文中「影响面推导 / AST」属**目标能力**；v0.1 可降级为保守 Scope + P.1，完整 AST = **v0.2+**（合同说明 §7.3.5 / §7.5 #7 = 未实现）。  
-> 2. **Execution Token / 只读租约 / 新事件名**：对接目标名词，**不暗示** JWT/gRPC 已落地。  
+> **收紧注记（2026-10-25 · 2026-10-26 消歧修订）**  
+> 1. **Impact Analysis**：文中「影响面推导 / AST」属**目标能力**；**v0.1 = 保守 Scope + P.1**，完整 AST = **v0.2+**（合同说明 §7.3.5 / §7.5 #7 = 未实现）。图注与案例一律按此标注，不得暗示 v0.1 已具备 AST Impact。  
+> 2. **Execution Token**：**通道**已由 Top7 §2 拍板（内存级轻量 Token + 本地 IPC / Domain Socket 实时校验）；**具体 Schema / Claim 字段**标明「待 API Top5 / 立卡时 Schema」，**不再**作为本文 Open Decision。  
 > 3. **仓库中不存在**《产品体验与技术底座设计规范 v1.1》——勿再引用为正式路径。  
-> 4. 质询超时：**不静默放行**（见 Supervisor 定稿 §5.2）。
+> 4. 质询超时：**不静默放行**（见 Supervisor 定稿 §5.2）。  
+> 5. **越界处置**：Gateway 检出越界时阻断 + `PAUSED` + 告警问人——见 **Top7 §3**；勿在本文另写静默放行或默认 `kill -9`。  
+> 6. **交付主状态**：废除以 `APPROVED` / `FROZEN` 作为主交付态叙事；对齐右栏 **EO-01 `DeliveryState`**（如 `PLAN_*` / `DEMO_*_READY` / `CONTRACT_SIGNED` / `CANDIDATE_VERIFIED` / `MERGED` / `DELIVERED`）。资产文件可仍有「草稿 / 签署冻结快照」语义，但不得冒充 DeliveryState。
 
 ---
 
 ## 1. 概述与核心术语
 
-本规范定义 Stagent 在用户发起需求时，从“自然语言对话”到“隔离演示体验”，再到“白话合同拟定”与“显式签署授权”的端到端交互协议、安全权限边界与状态转换机制。
+本规范定义 Stagent 在用户发起需求时，从“自然语言对话”到“方案草稿随聊生成”，再到“隔离 Demo / 流程卡体验”“白话合同拟定”与“显式签署授权”的端到端交互协议、安全权限边界与状态转换机制。
+
+**时间闸（与右栏 §11 对齐 · 方案早、Demo 晚）**：方案草稿可随聊平静生成；**Demo 绝不提前生成**，必须同时满足：① 机器规则判定 `sufficiency`；② 用户完成方案初步确认。真写主工程 / Worktree 仅在 Demo 合意确认 + 白话合同签署之后。
 
 ### 1.1 核心角色与组件定义
-- **用户 (User)**: 系统最终决策人。通过自然语言表达诉求，体验 Mock Demo，签署白话合同，并对交付物进行验收或拒绝。
+- **用户 (User)**: 系统最终决策人。通过自然语言表达诉求，确认方案草稿，体验 Demo / 流程卡，签署白话合同，并对交付物进行验收或拒绝。
 - **产品界面 Agent (Right-Panel Agent / Chat UI)**: 面向用户的交互前端与对话助理。负责亲和、白话的情感沟通与诉求接收，将用户的模糊想法转变为结构化要点。
-- **后台监理引擎 (Supervisor)**: 系统的中枢思考与分析大脑。具备只读代码理解、依赖影响分析、隔离 Mock Demo 生成、对抗性自查与白话合同草拟能力。**在用户正式授权前，Supervisor 绝无项目源码写权限**。
-- **系统核心守护进程 (Daemon)**: 系统状态与物理资产的唯一权威裁决者。负责校验合同规范性、冻结代码基线、核验物理指纹、派发执行凭证及调度沙盒生命周期。
-- **执行安全网关 (Execution Gateway)**: 命令执行与文件写入的物理拦截网关。基于 Daemon 签发的动态凭证（Execution Token）实施强制访问控制，拦截越界路径、越权网络出口及越界指令。
-- **隔离沙盒 (Sandbox)**: 独立于宿主机工作区与项目源码的临时受限运行环境。用于运行只读探测脚本、编译与托管 Mock Demo，以及后续合同履约施工。
+- **后台监理引擎 (Supervisor)**: 系统的中枢思考与分析大脑。具备只读代码理解、依赖影响分析（v0.2+）、隔离 Demo / 流程卡生成、对抗性自查与白话合同草拟能力。**在用户正式授权前，Supervisor 绝无项目源码写权限**；澄清期草稿仅可写入 `.stagent/drafts/`（见 EO-02）。
+- **系统核心守护进程 (Daemon)**: 系统状态与物理资产的唯一权威裁决者。负责校验合同规范性、冻结签署基线、核验物理指纹、派发 / 吊销执行凭证及调度沙盒与 Worktree 生命周期（对齐 EO-01 / EO-05 / EO-07）。
+- **执行安全网关 (Execution Gateway)**: 命令执行与文件写入的物理拦截网关。基于 Daemon 签发的动态凭证（Execution Token）实施强制访问控制；越界按 **Top7 §3** 阻断并置 `PAUSED`，不静默放行。
+- **隔离沙盒 (Sandbox)**: 独立于宿主机工作区与项目源码的临时受限运行环境。澄清 / 试玩期用于托管 **`.stagent/prototypes/`** 下的 Demo；签署后施工期 Worker **只挂载** **`.stagent/worktrees/{contract_id}/`**——**prototypes ≠ worktrees**（见 EO-02）。
 
 ### 1.2 核心资产定义
-- **白话合同提案 (Contract Proposal)**: 由 Supervisor 草拟、用户可读的执行方案。包含本轮改动范围、预期影响、安全下限、测试验收集及可写路径（`writable_paths`）。
-- **执行凭证 (Execution Token)**: 用户显式签署后由 Daemon 密码学签发的临时凭证。网关凭借该凭证对每一次文件修改与命令调用进行物理白名单校验。
-- **隔离 Mock Demo**: 基于只读探测与通用前端模板构建的轻量静态原型。运行在受限隔离 Origin 下，供用户在写代码前先行体验交互与界面感官。
+- **白话方案草稿 / 合同提案 (Plan Draft / Contract Proposal)**: 中栏给人看的白话短方案与可签署提案。草稿落盘于 **`.stagent/drafts/`**（DRAFT；未签无主仓库写权）。提案含本轮改动范围、预期影响、安全下限、测试验收集及可写路径（`writable_paths`）。
+- **执行凭证 (Execution Token)**: 用户显式签署后由 Daemon 签发的临时凭证。**校验通道** = Top7 §2（内存级轻量 Token + 本地 IPC / Domain Socket）；**具体 Schema** = 待 API Top5 / 立卡时 Schema（本文不再开选项）。
+- **隔离 Demo 资产**: 试玩期生成并运行在 **`.stagent/prototypes/{prototype_id}/`**（`.gitignore`；不合入主干）。三态（右栏 EO-06 / DEC-02）：`INTERACTIVE_DEMO` / `NATIVE_FLOW_CARD` / `DEGRADED_FLOW_CARD`。签署后门禁见 `can_sign`；施工 Worker **不得**挂载 / 修改该目录。
 
 ---
 
 ## 2. 端到端需求澄清与授权时序
 
-系统在进入真实代码修改前，严格遵循以下四阶段协同流程：
-1. **阶段一：白话澄清与业务拆解**
-2. **阶段二：只读代码分析与原型伴生**
-3. **阶段三：影响分析与合同起草**
-4. **阶段四：用户授权与凭证下发**
+系统在进入真实代码修改前，严格遵循「**方案早、Demo 晚**」四阶段协同流程（与右栏 §11 / §14 对齐）：
+1. **阶段一：白话澄清与方案草稿随聊生成**（可早出 DRAFT；落 `.stagent/drafts/`）
+2. **阶段二：只读代码分析与 Scope 收敛**（v0.1 = 保守 Scope + P.1；完整 Impact Analysis = v0.2+）
+3. **阶段三：方案初确 → sufficiency 通过后生成 Demo / 流程卡 → 用户确认**（三态分立；不得提前出 Demo）
+4. **阶段四：白话合同签署与凭证 / Worktree 下发**（`CONTRACT_SIGNED`；路径 `.stagent/worktrees/{contract_id}/`）
 
 ### 2.1 端到端交互时序图
 
@@ -53,40 +60,41 @@ sequenceDiagram
     participant Sup as Supervisor (后台)
     participant Dmn as Daemon (状态中枢)
     participant Gtw as Gateway (执行网关)
-    participant Sbx as 隔离沙盒 (Sandbox)
+    participant Proto as prototypes/ (Demo)
+    participant Wt as worktrees/{contract_id}/
 
-    Note over User, Sbx: 阶段一：白话澄清与业务意图拆解
+    Note over User, Wt: 阶段一：白话澄清 + 方案草稿随聊（方案早）
     User->>UI: 提出需求 ("我想加一个会员等级功能")
     UI->>Sup: 传递会话意图与上下文
-    Sup->>Sup: 意图分解、关键分歧识别、边界推演
-    Sup-->>UI: 梳理业务规则疑问 (规则/门槛/权益)
-    UI->>User: 白话确认核心逻辑与分歧点
-    User->>UI: 确认核心业务规则
+    Sup->>Sup: 意图分解、关键分歧识别（主动澄清 ≤2 轮选择题 · Top7 §4）
+    Sup-->>UI: 中栏更新白话方案草稿 (Quiet Live Patch)
+    Note over Sup: 草稿落 .stagent/drafts/ · DRAFT · 0 写主工程
 
-    Note over User, Sbx: 阶段二：只读探测与隔离 Mock Demo
+    Note over User, Wt: 阶段二：只读探测与 Scope（v0.1 保守；Impact=v0.2+）
     Sup->>Dmn: 请求只读分析临时租约
     Dmn->>Gtw: 签发只读令牌 (Read-Only Token)
     Sup->>Gtw: 读取已有项目路由、状态管理与数据结构
-    Gtw-->>Sup: 返回只读 AST/文件元数据
-    Sup->>Sbx: 在独立隔离沙盒中生成 Mock Demo 代码
-    Sbx-->>UI: 挂载独立 Origin 静态预览 (CSP 强限制)
-    UI->>User: 呈现可交互 Demo ("请先试玩这个会员等级界面")
-    User->>UI: 体验反馈与确认 ("样式与流程符合预期")
+    Gtw-->>Sup: 返回只读元数据（v0.1 可不依赖完整 AST）
+    Sup->>Sup: 保守 Scope + writable_paths（禁通配符）+ P.1
 
-    Note over User, Sbx: 阶段三：影响面收敛与白话合同草拟
-    Sup->>Sup: Scope 收敛（目标：Impact Analysis；v0.1 可降级为保守规则 + P.1）
-    Sup->>Sup: 计算 writable_paths、风险等级与回归测试集（禁通配符）
-    Sup->>Dmn: 提交合同草案 (Draft Proposal)
-    Dmn->>Dmn: 校验格式规范性、拒绝越界提议，生成指纹
-    Dmn-->>UI: 呈现白话授权卡片 (范围/改动文件/安全保证)
+    Note over User, Wt: 阶段三：方案初确 → Demo 晚（sufficiency + 初确后才出）
+    User->>UI: 方案初步确认
+    Sup->>Sup: sufficiency 结构化校验通过
+    Sup->>Proto: 在 .stagent/prototypes/{id}/ 生成 Demo / 流程卡
+    Proto-->>UI: 独立 Origin 预览 (CSP)；三态之一
+    UI->>User: 试玩 / 确认（INTERACTIVE / NATIVE_FLOW / DEGRADED）
+    User->>UI: Demo 合意确认（降级须显式接受风险）
 
-    Note over User, Sbx: 阶段四：用户显式签署与执行凭证激活
-    User->>UI: 点击确认签署 / 审批通过
-    UI->>Dmn: 提交显式授权指令 (含合同 Hash)
-    Dmn->>Dmn: 状态推进至 APPROVED，冻结当前代码与合同基线
-    Dmn->>Gtw: 密码学下发限制性 Execution Token (绑定 Scope)
-    Dmn-->>UI: 界面推进至第四屏 (任务图谱点亮)
-    Note over Gtw, Sbx: 正式进入实施阶段 (凭证受控写入)
+    Note over User, Wt: 阶段四：签署授权 → CONTRACT_SIGNED + Worktree
+    Sup->>Dmn: 提交合同草案 (指纹 / assertions / demo_mode)
+    Dmn->>Dmn: can_sign 硬谓词（EO-06）
+    Dmn-->>UI: 呈现白话授权卡片
+    User->>UI: 确认授权并开始施工
+    UI->>Dmn: 显式授权 (合同 Hash)
+    Dmn->>Dmn: DeliveryState → CONTRACT_SIGNED；冻结基线；签署期 GC（EO-05）
+    Dmn->>Wt: 分配 .stagent/worktrees/{contract_id}/
+    Dmn->>Gtw: 下发限权 Execution Token（通道=Top7 §2；Schema 待 API Top5）
+    Note over Gtw, Wt: Worker 只挂载本 worktree；禁挂 prototypes/records；禁 ../
 ```
 
 ---
@@ -97,59 +105,64 @@ sequenceDiagram
 
 ### 3.1 签署前后组件权限比对矩阵
 
-| 组件 / 维度 | 用户签署前 (澄清、分析与 Demo 期) | 用户签署后 (履约与实施期) |
+| 组件 / 维度 | 用户签署前 (澄清、方案草稿与 Demo 期) | 用户签署后 (履约与实施期) |
 | :--- | :--- | :--- |
-| **Supervisor** | • **允许**: 只读代码检索、AST 解析、草拟 Demo、起草合同提案、发起自查质询。<br>• **禁止**: 任何形式的项目代码写入、调用写接口、跳过用户审批。 | • **允许**: 在隔离 Worktree 内指挥实施 Agent 编写代码、生成改动补丁、执行测试。<br>• **禁止**: 擅自修改未授权路径、修改合同本身、直接合并至主干。 |
-| **Daemon** | • **允许**: 登记会话状态、调度只读租约、预热隔离沙盒、校验合同格式。<br>• **禁止**: 下发任何具备写权限的 Execution Token。 | • **允许**: 冻结基线、签发限权 Execution Token、监听物理事件、裁决 Graph 节点状态。<br>• **禁止**: 接受未经用户签署的 Token 请求、篡改已冻结合同。 |
-| **Gateway (执行网关)** | • **允许**: 拦截并放行只读文件访问；允许隔离沙盒内部临时文件的读写。<br>• **禁止**: 拦截所有针对项目主干工作区的 `write` / `delete` / `patch` 请求。 | • **允许**: 依据 Execution Token 严格放行 `writable_paths` 内的文件写入与受限命令。<br>• **禁止**: 拦截任何越界路径写入（报警 `E_OUT_OF_SCOPE`）、拦截未授权网络请求。 |
-| **隔离沙盒 (Sandbox)** | • **允许**: 挂载临时前端模板、生成 Mock Demo，静态资源以独立隔离 Origin 提供预览（CSP 禁用危险特权）。<br>• **禁止**: 访问宿主机敏感路径、访问主项目 Git 仓库。 | • **允许**: 挂载独立 Git Worktree、执行构建、运行自动化测试套件。<br>• **禁止**: 跨越容器命名空间、越权网络 Egress。 |
-| **文档与数据资产** | • **状态**: `requirements.md` 为 `DRAFT` 提案，仅保存在临时会话缓存中。 | • **状态**: `requirements.md` 固化为 `FROZEN`，计算 SHA-256 并永久绑定至当次合同。 |
+| **Supervisor** | • **允许**: 只读代码检索、草拟方案（`.stagent/drafts/`）、在 **prototypes/** 生成 Demo / 流程卡、起草合同提案、发起自查质询。<br>• **禁止**: 任何形式的项目主干代码写入、调用写接口、跳过用户审批、提前于 sufficiency+初确生成 Demo。 | • **允许**: 在 **`.stagent/worktrees/{contract_id}/`** 内指挥实施 Agent 编写代码、生成改动补丁、执行测试。<br>• **禁止**: 擅自修改未授权路径、修改合同本身、直接合并至主干、访问 / 改写 `prototypes/` 或 `records/`。 |
+| **Daemon** | • **允许**: 登记会话状态（EO-01）、调度只读租约、管理 drafts/prototypes、校验合同格式与 `can_sign`。<br>• **禁止**: 下发任何具备写权限的 Execution Token；把流程卡记成可交互 Demo。 | • **允许**: 推进 `CONTRACT_SIGNED`、冻结签署基线、签发 / 吊销 Token（EO-07）、分配 worktree、裁决交付态至 `MERGED`/`DELIVERED`（EO-05）。<br>• **禁止**: 接受未经用户签署的写 Token 请求、篡改已签合同快照、归档失败仍标 `DELIVERED`。 |
+| **Gateway (执行网关)** | • **允许**: 拦截并放行只读文件访问；允许 **prototypes/** 沙盒内临时文件读写。<br>• **禁止**: 拦截所有针对项目主干工作区的 `write` / `delete` / `patch` 请求。 | • **允许**: 依据 Execution Token 严格放行 `writable_paths` 内、且位于本 worktree 内的写入与受限命令。<br>• **禁止**: 越界路径写入 → 按 **Top7 §3** 阻断当次 IO + `PAUSED` + 告警问人（不静默放行；不默认 `kill -9`）。 |
+| **隔离运行区** | • **Demo 区 = `.stagent/prototypes/{prototype_id}/`**：独立 Origin / CSP；**不是**施工 Worktree。<br>• **禁止**: 访问宿主机敏感路径、把 Demo 依赖写入主工程 `package.json`。 | • **施工区 = `.stagent/worktrees/{contract_id}/`**：Worker **仅且只**挂载该目录（EO-02）；禁符号链接穿出、禁 `../`。<br>• **禁止**: 将 `prototypes/` 或 `records/` 挂进 Worker 沙盒。 |
+| **文档与数据资产** | • **状态**: 方案 / `requirements` 等为 **DRAFT**，落 **`.stagent/drafts/`**（Git 门禁豁免；gitignore ≠ 安全边界）。 | • **签署时**: 冻结当前版快照并算 `spec_sha256`（Pre-Execution Freeze & GC，见右栏补钉-3 / EO-05）；DeliveryState → **`CONTRACT_SIGNED`**（**不用** `APPROVED`/`FROZEN` 作主交付态）。<br>• **验收合并后**: `MERGED` → 脱敏归档入 `.stagent/records/{contract_id}/` → 成功才 **`DELIVERED`**（两阶段归档；EO-04 / EO-05 / EO-10）。 |
 
 ### 3.2 系统的硬性不变量 (Invariants)
-1. **零无授权写入 (Zero Unauthorized Writes)**: 在 Daemon 记录到合法的用户签署事件之前，项目工作区物理文件系统改动必须为严格的 0 字节。
-2. **最小权限原则 (Least Privilege Scope)**: `writable_paths` 只能是通过影响分析推导出的最小必要集合，任何通配符（如 `src/**` 或 `*`）在合同审核阶段将被 Daemon 直接拒批。
+1. **零无授权写入 (Zero Unauthorized Writes)**: 在 Daemon 记录到合法的用户签署事件之前，项目工作区物理文件系统改动必须为严格的 0 字节（`.stagent/drafts/` 与 `.stagent/prototypes/` 除外，且二者不得进入主干）。
+2. **最小权限原则 (Least Privilege Scope)**: `writable_paths` 只能是通过影响分析（v0.1=保守规则）推导出的最小必要集合，任何通配符（如 `src/**` 或 `*`）在合同审核阶段将被 Daemon 直接拒批。
 3. **提案与裁决解耦 (Separation of Proposal and Enforcement)**: Supervisor 只能提出建议，没有批准权；Daemon 拥有裁决权，但不直接生成代码。
-4. **演示不污染项目 (Demo Isolation)**: Mock Demo 的源码与依赖绝不得进入目标项目的 `package.json` 或主工程代码树中。
+4. **演示不污染项目 (Demo Isolation)**: Demo 源码与依赖绝不得进入目标项目的 `package.json` 或主工程代码树；持久化仅在 `.stagent/prototypes/`（Top7 §1）。
+5. **prototypes ≠ worktrees (EO-02)**: 试玩资产与施工 Worktree 物理分立；Worker 只挂载 `.stagent/worktrees/{contract_id}/`；`.gitignore` 不承担访问控制。
+6. **脱敏入盘 (EO-04 / EO-10)**: v0.1 不落明文原文；持久化审计流须经 L1+L2 脱敏管道；「永久保留」指脱敏后完整记录，不是未处理原文。
 
 ---
 
 ## 4. 全流程实战案例：给系统增加“会员等级”功能
 
-以下以典型业务诉求“给现有系统增加会员等级功能”为例，展示本规范各环节的执行细节。
+以下以典型业务诉求“给现有系统增加会员等级功能”为例，展示本规范各环节的执行细节（**方案早、Demo 晚**）。
 
-### 4.1 步骤 1：白话需求澄清与意图对齐
+### 4.1 步骤 1：白话需求澄清与方案草稿（可早）
 * **用户输入**: “我想在系统里增加会员等级功能，分为普通、黄金和铂金会员，不同等级有不同折扣。”
 * **右侧 Agent 与 Supervisor 交互**:
-  * Agent 捕捉到 3 个业务分歧点：
+  * Agent 捕捉到 3 个业务分歧点，并按 **Top7 §4** 收敛为带唯一推荐项的白话选择题（主动澄清 ≤ 2 轮；未决细项用安全默认写入合同供一键确认）：
     1. 会员等级是系统内固定配置还是管理员可在后台动态添加？
     2. 等级评定依据是什么（累计消费金额、积分还是手动设置）？
     3. 折扣是在结算页面自动计算，还是需要领券？
   * Agent 转换成用户友好的自然语言提问：“这个等级目前是固定 3 级，还是后续需要支持自定义？另外，用户的等级是根据消费金额自动升级，还是管理员手动调整？”
 * **用户澄清回复**: “固定 3 级就行，按累计消费满 500 元升黄金、满 2000 元升铂金。结账时系统自动打折。”
+* **中栏**: 随聊更新白话方案草稿（DRAFT → `.stagent/drafts/`）；**此时不出 Demo**。
 
 ### 4.2 步骤 2：只读影响分析与最小 Scope 推导
-* **Supervisor 动作**（Impact = 目标；v0.1 可用机械/关键词保守圈选 + P.1 补漏）:
+* **Supervisor 动作**（**Impact Analysis = v0.2+ 目标**；**v0.1 = 机械/关键词保守圈选 + P.1 补漏**）:
   * 申请只读分析，检索现有项目代码树：
     * 发现用户表位于 `src/types/user.ts`
     * 发现结账总价计算逻辑位于 `src/lib/checkout.ts`
     * 发现个人中心信息展示位于 `src/components/profile/UserInfo.tsx`
     * 发现订单结算组件位于 `src/components/checkout/OrderSummary.tsx`
-  * 推导改动范围，确定影响面爆炸半径：
+  * 推导改动范围，确定影响面爆炸半径（v0.1 保守）：
     * **核心改动路径**: 4 个文件
     * **只读依赖路径**: `src/lib/api.ts`, `src/types/order.ts`
     * **保护区域 (严禁修改)**: `src/auth/*`, `src/server/payments/*` (支付网关核心)
 
-### 4.3 步骤 3：伴生隔离 Mock Demo 体验
-* **Supervisor & 沙盒动作**:
-  * Supervisor 在独立沙盒内生成独立的静态 Mock 页面（不改动项目代码）：
+### 4.3 步骤 3：方案初确 → 再出隔离 Demo（Demo 晚）
+* **前置闸门**: 用户对中栏方案点「大致对」+ 机器 `sufficiency` 通过（右栏 §11）后，才允许生成 Demo。
+* **Supervisor & prototypes 动作**:
+  * 在 **`.stagent/prototypes/{prototype_id}/`** 生成独立静态 Mock（不改动项目代码、不进 worktree）：
     * 包含一个可拖动的“累计消费模拟滑块”（0 ~ 3000 元）；
     * 随滑块变化，页面展示个人徽章变更为“黄金会员 (95折)”或“铂金会员 (88折)”；
     * 提供模拟购物车页面，直观呈现原始价格与会员折后价。
-  * 沙盒启动独立 Origin 预览端口，Agent 在界面推送：“我做了一个交互原型，你可以拖动测试升级规则和结账折算效果，确认这是你想要的方式吗？”
-* **用户体验**: 用户点击试玩，发现 95 折与 88 折的视觉徽章与结算计算符合预期，回复：“确认，就是这个交互。”
+  * 本例为 **`INTERACTIVE_DEMO`**；若纯后端任务则走 **`NATIVE_FLOW_CARD`**（非降级）；构建失败才走 **`DEGRADED_FLOW_CARD`**（须显式接受风险 + 合同 ⚠️）。
+  * Agent 推送：“我做了一个交互原型，你可以拖动测试升级规则和结账折算效果，确认这是你想要的方式吗？”
+* **用户体验**: 用户试玩后回复：“确认，就是这个交互。”（写入对应 `DemoConfirmationEvent`，供后续 `can_sign`）
 
 ### 4.4 步骤 4：生成白话合同卡片
-Daemon 校验 Supervisor 提交的提案，并在前端呈现《白话授权卡》：
+Daemon 校验 Supervisor 提交的提案（含 `demo_mode` 与确认事件匹配），并在前端呈现《白话授权卡》：
 
 ```markdown
 📋 【施工合同】增加会员等级与结账折扣 (Contract #c_mem_001)
@@ -165,6 +178,7 @@ Daemon 校验 Supervisor 提交的提案，并在前端呈现《白话授权卡�
   • src/components/profile/UserInfo.tsx (展示会员徽章)
   • src/components/checkout/OrderSummary.tsx (显示会员减免金额)
 - 受保护区域：支付结算网关底层与用户认证模块完全受保，不会做任何触碰。
+- Demo 模式：INTERACTIVE_DEMO（已试玩确认）
 
 🧪 验收测试计划：
 - 新增单元测试：测试 499元、500元、1999元、2000元边界值的等级判定与折扣算法。
@@ -173,43 +187,58 @@ Daemon 校验 Supervisor 提交的提案，并在前端呈现《白话授权卡�
 [ 签署合同并授权开始实施 ]  [ 修改需求细节 ]
 ```
 
+* **拒约 / 改细节**：默认**保留** Demo 与会话上下文继续改（**Top7 §5**）；仅业务流程大改或 Scope 剧烈扩散时重跑只读分析 / 重做 Demo；草案版本按草稿递增（如 `v1.0-draft` → `v1.1-draft`），签署前旧草案标 `SUPERSEDED`。
+
 ### 4.5 步骤 5：用户签署与凭证生效
 * 用户点击 `[ 签署合同并授权开始实施 ]`。
-* **Daemon 响应**:
-  1. 记录签署事件与时间戳，冻结需求快照 `requirements.md`（状态变更为 `FROZEN`）；
-  2. 针对 Git 当前 HEAD 创建受限 Worktree 分支 `worktree/contract-c_mem_001`；
-  3. 签发限权执行许可（对接目标名 `ExecutionToken`；具体形态待 API Top5 决议），白名单路径严格绑定为上述 4 个文件；
-  4. 唤醒实施引擎，任务图谱切入第四屏，首个节点点亮并开始执行。
+* **Daemon 响应**（对齐 EO-01 / EO-05 / EO-02 / Top7 §2）:
+  1. 记录签署事件与时间戳；冻结需求快照并计算 `spec_sha256`；DeliveryState → **`CONTRACT_SIGNED`**（**不以** `APPROVED`/`FROZEN` 作为主交付态）；
+  2. 签署期 GC：仅清当前合同可重建临时缓存（不得清活跃 Demo、已校验签署快照、中栏仍引用的 drafts 正文）；
+  3. 分配施工目录 **`.stagent/worktrees/{contract_id}/`**（本例即 `.stagent/worktrees/c_mem_001/`）；Worker 只挂载该路径；
+  4. 签发限权执行许可：通道 = **Top7 §2**（内存级轻量 Token + 本地 IPC）；**具体 Schema / Claim 字段 = 待 API Top5 / 立卡时 Schema**；白名单路径严格绑定为上述 4 个文件；
+  5. 唤醒实施引擎进入 `IMPLEMENTING`；后续验收合并后走 `MERGED` → 脱敏归档 `records/` → `DELIVERED`（失败停在 `MERGED`，不伪标交付）。
 
 ---
 
-## 5. 待补充与待决议项 (Open Decisions)
+## 5. 已被 Top7 + 右栏 DEC/EO 取代的原「待决议」（不再开放选择题）
 
-为了使本规范能够直接指导前后端代码与自动化测试编写，目前仍需补充并决议以下关键技术细节：
+> **口径**：下列四条原 Open Decisions **已全部被取代**；本文**不再**保留 A/B 选项供再选。实现细节若仍缺字段级 Schema，归口 **API Top5 / 立卡时 Schema** 或右栏 **EO**，**不**再回写为本澄清稿的开放决议。
 
-### 5.1 待决议 1：执行凭证 (Execution Token) 的具体格式与校验机制
-* **当前现状**: 仅定义了“Daemon 签发、Gateway 拦截”，缺乏具体的底层实现机制。
-* **待定选项**:
-  - **选项 A**: JWT 签名令牌（携带 `exp`, `contract_id`, `writable_paths`, `allowed_commands` 等 Claim，Gateway 本地使用 Daemon 公钥验签）。
-  - **选项 B**: Daemon 内存共享 Session / 双向 gRPC 实时鉴权（Gateway 每执行一次文件 IO 或 Shell 调用，均向 Daemon 进程 RPC 询问）。
-* **影响面**: 决定了 Gateway 的性能开销及沙盒进程异常崩溃后的凭证撤销能力。
+### 5.1 原「待决议 1」：Execution Token 格式与校验 → **已被取代**
+* **通道（产品/工程硬标准）**: 《工程决策拍板-Top7》**§2** — **内存级轻量 Token + 本地 IPC / Domain Socket 实时校验**（Daemon 权威；Gateway 每次敏感操作询问或等价本地校验）。**不采用（v0.1）** 纯离线 JWT 作为唯一撤销通道。
+* **暂停 / 恢复凭证**: 右栏 **EO-07** — 进入 `PAUSED` 立即吊销 `exec_token`；恢复续发一次性 `resume_token`；旧凭证一律拒绝。
+* **具体 Schema / Claim 字段名 / 序列化**: **待 API Top5 / 立卡时 Schema** — **不是**本澄清稿 Open Decision；本文仅保留对接目标名词，不暗示 JWT/gRPC 已落地。
 
-### 5.2 待决议 2：Mock Demo 的代码与状态持久化生命周期
-* **当前现状**: 定义了在独立 Origin 预览，但未明确用户满意或放弃后 Demo 代码的去向。
-* **待定选项**:
-  - **选项 A**: 纯即弃型（Ephemeral）：仅存在于临时沙盒内存或 `/tmp`，合同签署后立即销毁，项目代码从零编写。
-  - **选项 B**: 资产沉淀型（Assetized）：Demo 代码存档在 `.stagent/prototypes/<id>`，作为后续 UI 实施 Agent 的代码生成与视觉对齐参考资产。
-* **影响面**: 影响磁盘占用、设计一致性以及是否能在后续返工时重新查看旧原型。
+### 5.2 原「待决议 2」：Mock Demo 持久化生命周期 → **已被取代**
+* **归宿**: Top7 **§1** + 右栏 **DEC-01 / 补钉-4 / EO-02** — 活跃态存 **`.stagent/prototypes/{prototype_id}/`**，gitignore，不合入主干。
+* **三态与门禁**: 右栏 **DEC-02 / EO-06** — `INTERACTIVE_DEMO` / `NATIVE_FLOW_CARD` / `DEGRADED_FLOW_CARD`；签署须 `can_sign`；降级须显式接受并带 ⚠️。
+* **流转**: 签署后 prototypes 只读作 Golden Benchmark；验收合并后轻量拷贝进 **`.stagent/records/{contract_id}/demo_snapshot/`**，再进入 `DELIVERED` 事务（EO-05）；**prototypes ≠ worktrees**。
+* **废止**: 「纯即弃 /tmp」与「进主干」两选项均不再讨论。
 
-### 5.3 待决议 3：需求澄清阶段的多轮分歧收敛上限
-* **当前现状**: 依赖 Agent 与用户自然语言沟通，缺乏收敛指标。
-* **待定选项**:
-  - **选项 A**: 限制最大澄清轮次（如最多主动提问 2 轮，未决细节按安全默认推荐并标注在合同中供用户一键确认）。
-  - **选项 B**: 动态置信度打分（Supervisor 计算意图清晰度评分，达到 85 分以上方允许起草合同，否则继续询问）。
-* **影响面**: 决定了非技术用户的沟通疲劳度与交付偏差控制之间的平衡。
+### 5.3 原「待决议 3」：澄清轮次上限 → **已被取代**
+* **标准**: Top7 **§4** — 主动澄清 **≤ 2 轮**；每题为带**唯一推荐项**的白话选择题；未决细项用**安全默认**写入白话合同供一键确认。
+* **禁止**: 无休止开放式追问、技术填空卷。
+* **与右栏**: sufficiency / 方案初确 / Demo 晚见 **§11（产品 CLOSED）**；不得用「动态置信度分数」替代结构化 sufficiency（§11.2.1）。
 
-### 5.4 待决议 4：合同草案拒绝与返工流转规范
-* **当前现状**: 用户点击“修改需求细节”或直接拒绝合同时，系统的回退路径未规范化。
-* **待定选项**:
-  - 需明确：回退是保留 Mock Demo 继续修改，还是重新进行只读代码分析？合同版本号递增规则（如 `v1.0-draft` → `v1.1-draft`）与会话快照归档机制。
+### 5.4 原「待决议 4」：拒约 / 改细节回退 → **已被取代**
+* **标准**: Top7 **§5** — 默认**保留** Demo 与会话上下文继续改；仅业务流程大改或 Scope 剧烈扩散时重跑只读影响分析 / 重做 Demo。
+* **版本**: 合同草案按草稿递增（如 `v1.0-draft` → `v1.1-draft`）；签署前旧草案作废或标记 `SUPERSEDED`。
+* **放弃本轮**: 右栏 **DEC-03** — 须二次确认；中栏置灰只读截断；非成功终态归档（不得标成已交付三件套）。
+* **返工计数**: 右栏 **DEC-05 / EO-08** — 合并前按 `assertion_id` 独立计数；返工期严禁追加新断言；合并后新缺陷必须新微合同。
 
+### 5.5 消歧对照摘要（本文叙事 → 权威条款）
+
+| 本文旧叙事 / 风险点 | 权威收口 |
+| :--- | :--- |
+| 方案与 Demo「伴生同时出」 | 右栏 **§11**：方案早、Demo 晚 |
+| 主交付态 `APPROVED` / `FROZEN` | 右栏 **EO-01**：`CONTRACT_SIGNED` / `MERGED` / `DELIVERED` 等 |
+| 草稿只在「临时会话缓存」 | **`.stagent/drafts/`**（§8 / EO-02） |
+| Demo 与施工同一沙盒含糊 | **prototypes ≠ worktrees**；Worker 只挂 **`.stagent/worktrees/{contract_id}/`**（EO-02） |
+| Demo 单一「可交互」默认 | **EO-06** 三态 + `can_sign` |
+| 「永久原声」vs 脱敏字面冲突 | **DEC-01 / EO-04 / EO-10** + 两阶段归档（补钉-3） |
+| Token 开 JWT vs gRPC 选择题 | **Top7 §2** 定通道；Schema → **API Top5 / 立卡** |
+| 越界怎么处置未写清 | **Top7 §3**（阻断 + `PAUSED` + 问人） |
+
+---
+
+**落定句（讨论稿）**: 澄清授权稿已与 Top7 + 右栏 DEC/EO（tip `d610d0a` 及后续 EO 加固）消歧；原 §5 四条待决议全部关闭为交叉引用；**仍讨论稿，未升格、未立卡**。
