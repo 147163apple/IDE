@@ -295,6 +295,7 @@ describe("STATE_CHANGED 载荷与证据信号", () => {
       lifecycle_state: "EXECUTING",
       approval_status: "APPROVED",
       persisted_at: "2026-10-23T10:00:00.000Z",
+      delivery_state: "IMPLEMENTING",
     });
   });
 

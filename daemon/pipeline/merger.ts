@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { ContractStore } from "./contract-store";
+import { archiveContractRecords } from "./records-archive";
 import { readStateFile } from "../guard/state-store";
 import type { SoftwareContract } from "../../src/lib/contract.schema";
 import {
@@ -48,6 +49,13 @@ export interface MergeResult {
   nothingToMerge: boolean;
   /** nothingToMerge 时的白话提示 */
   message?: string | undefined;
+  /** TASK-C.12d/e：MERGED 后 records 归档结果（失败则不得标 DELIVERED） */
+  recordsArchive?: {
+    ok: boolean;
+    records_dir: string;
+    copied: string[];
+    error?: string;
+  };
 }
 
 export class MergeGateError extends Error {
@@ -547,6 +555,18 @@ async function mergeInternal(
     lifecycleState: "MERGED",
   });
 
+  // 8. TASK-C.12d/e：MERGED 后轻量 records 归档 + audit-manifest（失败不标 DELIVERED）
+  const archive = archiveContractRecords({
+    repoRoot,
+    contract_id: contract.contract_id,
+    snapshot: {
+      contract_id: contract.contract_id,
+      commit_sha: commitSha,
+      lifecycle_state: "MERGED",
+    },
+    commit_sha: commitSha,
+    events: [{ type: "MERGED", commit_sha: commitSha }],
+  });
   return {
     commitSha,
     commitMessage: message,
@@ -554,6 +574,12 @@ async function mergeInternal(
     worktreeRemoved,
     conflictResolution,
     nothingToMerge: false,
+    recordsArchive: {
+      ok: archive.ok,
+      records_dir: archive.records_dir,
+      copied: archive.copied,
+      ...(archive.error ? { error: archive.error } : {}),
+    },
   };
 }
 

@@ -8,6 +8,12 @@ import {
   type PresentationState,
 } from "../../src/lib/state/presentation-state";
 import type { PersistedPresentationRecord } from "./presentation-store";
+import type { SeqStamp } from "./session-seq";
+import {
+  projectDeliveryState,
+  type ActivityTransient,
+  type DemoMode,
+} from "../../src/lib/state/delivery-state";
 
 /**
  * TASK-D.3（续）：把合同 + 运行时判据投影成可持久化/可广播的记录。
@@ -138,7 +144,19 @@ export function projectContract(
 /** 把持久化记录转成 `STATE_CHANGED` 载荷（字段一一对应，避免两处漂移） */
 export function toStateChangedPayload(
   record: PersistedPresentationRecord,
+  extras?: {
+    seq?: SeqStamp;
+    activity_transient?: ActivityTransient | null;
+    demo_confirmed?: boolean;
+    demo_mode?: DemoMode | null;
+  },
 ): StateChangedPayload {
+  const delivery_state = projectDeliveryState({
+    lifecycle_state: record.lifecycle_state,
+    activity_transient: extras?.activity_transient ?? null,
+    demo_confirmed: extras?.demo_confirmed,
+    demo_mode: extras?.demo_mode,
+  });
   return {
     contract_id: record.contract_id,
     presentation_state: record.presentation_state,
@@ -146,6 +164,13 @@ export function toStateChangedPayload(
     lifecycle_state: record.lifecycle_state,
     approval_status: record.approval_status,
     persisted_at: record.updated_at,
+    ...(extras?.seq
+      ? {
+          session_epoch: extras.seq.session_epoch,
+          state_seq: extras.seq.state_seq,
+        }
+      : {}),
+    delivery_state,
   };
 }
 

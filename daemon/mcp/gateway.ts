@@ -49,6 +49,11 @@ import {
   scopeExplicitlyIncludesTests,
 } from "../guard/test-integrity";
 import { guardAgentFileOperation } from "../protection/protection-list";
+import {
+  ExecTokenError,
+  type ExecTokenStore,
+} from "../core/exec-token";
+
 
 /**
  * TASK-D.3 / D-5：命令超时分层。
@@ -184,6 +189,26 @@ export interface ScopedGatewayOptions {
   requireRepoTrust?: boolean | undefined;
   /** TASK-D.3 / D-5：命令超时看门狗（缺省时不登记，行为退化为仅靠 runner 超时） */
   deadlock?: CommandTimeoutTracker | undefined;
+  /**
+   * TASK-C.12a：签署后施工写权。缺省不强制（兼容旧单测）；
+   * orchestrator / 新测传入后，写/删必须持有未吊销 exec_token。
+   */
+  execToken?:
+    | {
+        store: ExecTokenStore;
+        /** 当前施工令牌明文；PAUSED 后应为 null */
+        getToken: () => string | null | undefined;
+      }
+    | undefined;
+  /** TASK-C.12c：写/删越界被阻断后回调（调用方可跑 SIGINT→…→PAUSED） */
+  onScopeBlocked?:
+    | ((info: {
+        tool: string;
+        path: string;
+        code: string;
+        message: string;
+      }) => void)
+    | undefined;
 }
 
 /** G-09 分列记账快照（工具调用 / 命令执行互不折算） */
@@ -212,6 +237,8 @@ export class ScopedWorktreeGateway {
   private readonly runtimeInterceptor?: RuntimeInterceptor | undefined;
   private readonly requireRepoTrust: boolean;
   private readonly deadlock?: CommandTimeoutTracker | undefined;
+  private readonly execToken?: ScopedGatewayOptions["execToken"];
+  private readonly onScopeBlocked?: ScopedGatewayOptions["onScopeBlocked"];
 
   private auditLog: AuditLogEntry[] = [];
   private modifiedFiles: Set<string> = new Set();
@@ -241,6 +268,39 @@ export class ScopedWorktreeGateway {
     this.runtimeInterceptor = options.runtimeInterceptor;
     this.requireRepoTrust = options.requireRepoTrust ?? false;
     this.deadlock = options.deadlock;
+    this.execToken = options.execToken;
+    this.onScopeBlocked = options.onScopeBlocked;
+  }
+
+  /** TASK-C.12a：写路径 exec_token 校验；未配置 execToken 时跳过（兼容旧测） */
+  private assertExecTokenOrDeny(
+    tool: string,
+  ): MCPToolCallResult | null {
+    if (!this.execToken) return null;
+    try {
+      this.execToken.store.assertExecTokenForWrite({
+        token: this.execToken.getToken(),
+        contract_id: this.contract.contract_id,
+        worktree: this.worktreeRoot,
+      });
+      return null;
+    } catch (err) {
+      const code =
+        err instanceof ExecTokenError ? err.code : "E_EXEC_TOKEN_MISSING";
+      const message = err instanceof Error ? err.message : String(err);
+      this.logAudit({
+        tool,
+        input: {},
+        outcome: "BLOCKED",
+        violationCode: code,
+        details: message,
+      });
+      return {
+        isError: true,
+        content: [{ type: "text", text: `[${code}] ${message}` }],
+        error: { code, message },
+      };
+    }
   }
 
   public getWorktreeRoot(): string {
@@ -913,6 +973,12 @@ export class ScopedWorktreeGateway {
 
     const { path: rawPath, content } = parsed.data;
 
+    // 0. TASK-C.12a：exec_token（签署后写权）
+    {
+      const denied = this.assertExecTokenOrDeny("stagent_write_file");
+      if (denied) return denied;
+    }
+
     // 1. Cost cap check
     if (this.costMonitor?.isTripped()) {
       this.logAudit({
@@ -964,6 +1030,7 @@ export class ScopedWorktreeGateway {
     );
     if (!access.allowed) {
       const code = scopeErrorCode(access.reason);
+      const msg = access.message || "Write permission denied";
       this.logAudit({
         tool: "stagent_write_file",
         input: { path: rawPath },
@@ -971,10 +1038,16 @@ export class ScopedWorktreeGateway {
         violationCode: code,
         details: access.message ?? undefined,
       });
+      this.onScopeBlocked?.({
+        tool: "stagent_write_file",
+        path: rawPath,
+        code,
+        message: msg,
+      });
       return {
         isError: true,
         content: [
-          { type: "text", text: access.message || "Write permission denied" },
+          { type: "text", text: msg },
         ],
         error: {
           code,
@@ -1565,6 +1638,12 @@ export class ScopedWorktreeGateway {
 
     const rawPath = parsed.data.path;
 
+    // 0. TASK-C.12a：exec_token
+    {
+      const denied = this.assertExecTokenOrDeny("stagent_delete_file");
+      if (denied) return denied;
+    }
+
     // 1. 路径安全解析（拒绝绝对路径、.. 与越界符号链接）
     let safe;
     try {
@@ -1595,6 +1674,7 @@ export class ScopedWorktreeGateway {
     );
     if (!access.allowed) {
       const code = scopeErrorCode(access.reason);
+      const msg = access.message || "Delete permission denied";
       this.logAudit({
         tool: "stagent_delete_file",
         input: { path: rawPath },
@@ -1602,14 +1682,20 @@ export class ScopedWorktreeGateway {
         violationCode: code,
         details: access.message ?? undefined,
       });
+      this.onScopeBlocked?.({
+        tool: "stagent_delete_file",
+        path: rawPath,
+        code,
+        message: msg,
+      });
       return {
         isError: true,
         content: [
-          { type: "text", text: access.message || "Delete permission denied" },
+          { type: "text", text: msg },
         ],
         error: {
           code,
-          message: access.message || "Delete permission denied",
+          message: msg,
           details: { path: safe.relativePath, pattern: access.pattern },
         },
       };

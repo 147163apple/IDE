@@ -129,6 +129,12 @@ export interface StateChangedPayload {
   approval_status?: string;
   /** 该快照的生成时刻，便于断线重连后比对新鲜度 */
   persisted_at?: string;
+  /** TASK-C.12b / EO-01：会话代际；重连或强制重置时递增 */
+  session_epoch?: number;
+  /** TASK-C.12b / EO-01：同 epoch 内单调递增序号；客户端丢弃更小 seq */
+  state_seq?: number;
+  /** 强类型交付主态或轨 C 瞬态；不得与 DocumentAssetStatus 混用 */
+  delivery_state?: string;
 }
 
 export interface ScopeAlertPayload {

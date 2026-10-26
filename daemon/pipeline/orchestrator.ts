@@ -13,6 +13,14 @@ import {
 } from "../../src/lib/evidence.schema";
 import { ContractStore } from "./contract-store";
 import { ScopedWorktreeGateway } from "../mcp/gateway";
+import {
+  getExecTokenStore,
+  tokenFingerprint,
+  type ExecTokenStore,
+} from "../core/exec-token";
+import { runBoundaryStop } from "../guard/boundary-stop";
+import { readDemoConfirm } from "../supervisor/demo/prototypes";
+import { canSign } from "../../src/lib/state/delivery-state";
 import { CostMonitor } from "../guard/cost-monitor";
 import { LoopGuard } from "../guard/loop-guard";
 import { isTestPath } from "../guard/test-integrity";
@@ -149,6 +157,9 @@ export class ContractOrchestrator {
    * 由 Daemon 注入（单一租约/看门狗表），orchestrator 不自建第二套。
    */
   private deadlock: DeadlockResilience | null = null;
+  /** TASK-C.12a：合同 → 当前有效 exec_token 明文（仅进程内；日志用指纹） */
+  private readonly activeExecTokens = new Map<string, string>();
+  private readonly execTokenStore: ExecTokenStore = getExecTokenStore();
 
   constructor(options: OrchestratorOptions) {
     this.repoRoot = path.resolve(options.repoRoot);
@@ -156,6 +167,35 @@ export class ContractOrchestrator {
     this.acknowledgeDirty = options.acknowledgeDirty ?? false;
     this.onTerminalLine = options.onTerminalLine;
     this.onGatewayViolation = options.onGatewayViolation;
+  }
+
+  /** 测试/诊断：当前合同是否持有有效 exec_token */
+  hasActiveExecToken(contractId: string): boolean {
+    const t = this.activeExecTokens.get(contractId);
+    return Boolean(t && this.execTokenStore.hasActiveToken(t));
+  }
+
+  getActiveExecTokenFingerprint(contractId: string): string | null {
+    const t = this.activeExecTokens.get(contractId);
+    return t ? tokenFingerprint(t) : null;
+  }
+
+  /** PAUSED / 越界：吊销施工写权 */
+  revokeExecTokenFor(contractId: string): boolean {
+    this.activeExecTokens.delete(contractId);
+    return this.execTokenStore.revokeExecToken(contractId);
+  }
+
+  private issueExecForContract(contract: SoftwareContract, worktreePath: string): string {
+    const writable =
+      contract.authorization.file_system_scope.writable_paths ?? [];
+    const issued = this.execTokenStore.issueExecToken({
+      contract_id: contract.contract_id,
+      worktree: path.resolve(worktreePath),
+      writable_paths: writable,
+    });
+    this.activeExecTokens.set(contract.contract_id, issued.token);
+    return issued.token;
   }
 
   /** TASK-D.3：由 Daemon 注入看门狗实例（同一张表，避免各层各自判死） */
@@ -189,6 +229,25 @@ export class ContractOrchestrator {
           );
         }
 
+        // TASK-C.12d：仅当用户已确认 Demo 时硬校验 can_sign（未确认/无记录不挡旧 approve 路径）
+        {
+          const demoRec = readDemoConfirm(this.repoRoot);
+          if (demoRec?.confirmed) {
+            const can = canSign({
+              demo_mode: demoRec.demo_mode ?? "INTERACTIVE_DEMO",
+              confirmed: true,
+              accept_degraded: demoRec.accept_degraded,
+            });
+            if (!can.ok) {
+              const err = new Error(
+                `[E_CAN_SIGN_DENIED] ${can.reason}`,
+              ) as Error & { code: string };
+              err.code = "E_CAN_SIGN_DENIED";
+              throw err;
+            }
+          }
+        }
+
         const approvedAt = new Date().toISOString();
         // 先落审批事实，再进入准备阶段（§9.1.1：避免只更新其中一个字段）
         // approved_revision 绑定被批准的合同版本：任何后续 Scope/预算变更都会
@@ -211,10 +270,14 @@ export class ContractOrchestrator {
           });
           // 依赖复用/隔离决策（ADR-002）
           await this.prepareDependencies(contractId);
-          return this.store.transition({
+          const executing = this.store.transition({
             contractId,
             lifecycleState: "EXECUTING",
           });
+          // TASK-C.12a：签署开工后签发 exec_token
+          const wt = getWorktreePath(this.repoRoot, contractId);
+          this.issueExecForContract(executing, wt);
+          return executing;
         } catch (err) {
           // 准备中断：回退等待重新审批，并留存原因
           await this.writeEvidence(current, {
@@ -412,6 +475,20 @@ export class ContractOrchestrator {
             `Cannot resume ${contractId}: worktree is not a healthy git workspace (${head.stderr || head.stdout})`,
           );
         }
+
+        // TASK-C.12a：一次性 resume_token(jti) → 新 exec_token
+        this.revokeExecTokenFor(contractId);
+        const worktreeResolved = path.resolve(worktreePath);
+        const resume = this.execTokenStore.issueResumeToken({
+          contract_id: contractId,
+        });
+        const writable =
+          current.authorization.file_system_scope.writable_paths ?? [];
+        const issued = this.execTokenStore.consumeResumeToken(resume.token, {
+          worktree: worktreeResolved,
+          writable_paths: writable,
+        });
+        this.activeExecTokens.set(contractId, issued.token);
 
         return this.store.transition({
           contractId,
@@ -726,6 +803,10 @@ export class ContractOrchestrator {
         ? "PENDING_RESUME"
         : "EXECUTING";
 
+    if (nextState === "PENDING_RESUME") {
+      this.revokeExecTokenFor(contractId);
+    }
+
     const contract = this.store.transition({
       contractId,
       lifecycleState: nextState,
@@ -772,6 +853,7 @@ export class ContractOrchestrator {
         return await worker.run();
       } catch (err) {
         if (costMonitor.isTripped()) {
+          this.revokeExecTokenFor(contractId);
           this.store.transition({
             contractId,
             lifecycleState: "PENDING_RESUME",
@@ -934,6 +1016,40 @@ export class ContractOrchestrator {
             onTerminalLine: (stream, line) =>
               this.onTerminalLine?.(contract.contract_id, stream, line),
           }),
+      // TASK-C.12a：施工写必须持有 exec_token
+      execToken: {
+        store: this.execTokenStore,
+        getToken: () => this.activeExecTokens.get(contract.contract_id) ?? null,
+      },
+      // TASK-C.12c：越界 → 原子拦截序列（hooks 可测；此处异步 fire-and-forget）
+      onScopeBlocked: (_info) => {
+        // TASK-C.12c：阻断当次 IO 后跑软停序列；吊销 token 并进入 PENDING_RESUME
+        void runBoundaryStop({
+          contract_id: contract.contract_id,
+          repoRoot: this.repoRoot,
+          worktreePath,
+          tokenStore: this.execTokenStore,
+          workerPid: null,
+        }).then(() => {
+          this.activeExecTokens.delete(contract.contract_id);
+          try {
+            const cur = this.store.get(contract.contract_id);
+            if (
+              cur &&
+              (cur.lifecycle_state === "EXECUTING" ||
+                cur.lifecycle_state === "VERIFYING" ||
+                cur.lifecycle_state === "PREPARING")
+            ) {
+              this.store.transition({
+                contractId: contract.contract_id,
+                lifecycleState: "PENDING_RESUME",
+              });
+            }
+          } catch {
+            // 状态机拒绝时不吞写阻断本身
+          }
+        });
+      },
     });
     return { gateway, costMonitor, loopGuard, worktreePath, interceptor };
   }

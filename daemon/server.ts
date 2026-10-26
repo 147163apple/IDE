@@ -142,6 +142,7 @@ import {
   toStateChangedPayload,
   type DaemonRuntimeSignals,
 } from "./state/presentation-projector";
+import { SessionSeqTracker } from "./state/session-seq";
 import type { SoftwareContract } from "../src/lib/contract.schema";
 import type { EvidenceBundle } from "../src/lib/evidence.schema";
 import { WorktreeWatcher } from "./watcher/fs-watcher";
@@ -277,6 +278,8 @@ export class StagentDaemon {
   private armedContractId: string | null = null;
   /** TASK-D.3：五类死锁自愈看门狗（D-1~D-5） */
   private readonly deadlock: DeadlockResilience;
+  /** TASK-C.12b：STATE_CHANGED 的 session_epoch + state_seq */
+  private readonly stateSeq = new SessionSeqTracker();
   /** 已发起停止、尚在回收中的合同（投影层据此呈现 STOPPING） */
   private readonly stoppingContracts: Set<string> = new Set();
   /**
@@ -670,7 +673,16 @@ export class StagentDaemon {
     if (!record) return 0;
 
     persistPresentation(this.repoRoot, record);
-    return this.broadcast("STATE_CHANGED", toStateChangedPayload(record));
+    const seq = this.stateSeq.next();
+    const demo = readDemoConfirm(this.repoRoot);
+    return this.broadcast(
+      "STATE_CHANGED",
+      toStateChangedPayload(record, {
+        seq,
+        demo_confirmed: demo?.confirmed === true,
+        demo_mode: demo?.demo_mode ?? null,
+      }),
+    );
   }
 
   /** 断线重连/重启后，从 `.stagent/state.json` 还原全部展示态 */
@@ -679,11 +691,22 @@ export class StagentDaemon {
     let sent = 0;
     for (const record of Object.values(snapshot.contracts)) {
       if (ws.readyState !== WebSocket.OPEN) break;
-      ws.send(
-        JSON.stringify(
-          createFrame("STATE_CHANGED", toStateChangedPayload(record)),
-        ),
-      );
+      {
+        const seq = this.stateSeq.next();
+        const demo = readDemoConfirm(this.repoRoot);
+        ws.send(
+          JSON.stringify(
+            createFrame(
+              "STATE_CHANGED",
+              toStateChangedPayload(record, {
+                seq,
+                demo_confirmed: demo?.confirmed === true,
+                demo_mode: demo?.demo_mode ?? null,
+              }),
+            ),
+          ),
+        );
+      }
       sent += 1;
     }
     return sent;
@@ -2420,12 +2443,26 @@ export class StagentDaemon {
         });
         return;
       }
-      const rec = confirmDemoPrototype(this.repoRoot, prototypeId);
+      const demoModeRaw =
+        typeof body.demo_mode === "string" ? body.demo_mode.trim() : "";
+      const demo_mode =
+        demoModeRaw === "NATIVE_FLOW_CARD" ||
+        demoModeRaw === "DEGRADED_FLOW_CARD" ||
+        demoModeRaw === "INTERACTIVE_DEMO"
+          ? demoModeRaw
+          : "INTERACTIVE_DEMO";
+      const accept_degraded = body.accept_degraded === true;
+      const rec = confirmDemoPrototype(this.repoRoot, prototypeId, {
+        demo_mode,
+        ...(accept_degraded ? { accept_degraded: true } : {}),
+      });
       this.sendJson(res, 200, {
         prototype_id: rec.prototype_id,
         relative_root: rec.relative_root,
         confirmed: rec.confirmed,
         confirmed_at: rec.confirmed_at,
+        demo_mode: rec.demo_mode ?? "INTERACTIVE_DEMO",
+        accept_degraded: rec.accept_degraded === true,
         preview_url: null,
         preview_status: null,
         message: "Demo 已确认，可以签署白话合同后开工",

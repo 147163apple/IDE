@@ -12,11 +12,20 @@ export const PROTOTYPES_ROOT = ".stagent/prototypes" as const;
 export const DEMO_CONFIRM_STATE_FILE =
   ".stagent/metadata/demo-confirm.json" as const;
 
+export type DemoMode =
+  | "INTERACTIVE_DEMO"
+  | "NATIVE_FLOW_CARD"
+  | "DEGRADED_FLOW_CARD";
+
 export interface DemoConfirmRecord {
   prototype_id: string;
   confirmed: boolean;
   confirmed_at: string | null;
   relative_root: string;
+  /** TASK-C.12d / EO-06：三态；缺省视为 INTERACTIVE_DEMO（兼容 C.11b 旧记录） */
+  demo_mode?: DemoMode;
+  /** 用户显式接受降级/流程卡（⚠️） */
+  accept_degraded?: boolean;
 }
 
 export function prototypeRelativeRoot(prototypeId: string): string {
@@ -104,8 +113,13 @@ export function upsertDemoConfirm(
 export function confirmDemoPrototype(
   repoRoot: string,
   prototypeId: string,
-  now: () => Date = () => new Date(),
+  options: {
+    now?: () => Date;
+    demo_mode?: DemoMode;
+    accept_degraded?: boolean;
+  } = {},
 ): DemoConfirmRecord {
+  const now = options.now ?? (() => new Date());
   const id = sanitizePrototypeId(prototypeId);
   const existing = readDemoConfirm(repoRoot, id);
   const relative_root = existing?.relative_root ?? prototypeRelativeRoot(id);
@@ -114,6 +128,10 @@ export function confirmDemoPrototype(
     confirmed: true,
     confirmed_at: now().toISOString(),
     relative_root,
+    demo_mode: options.demo_mode ?? existing?.demo_mode ?? "INTERACTIVE_DEMO",
+    ...(options.accept_degraded === true || existing?.accept_degraded === true
+      ? { accept_degraded: true }
+      : {}),
   };
   upsertDemoConfirm(repoRoot, record);
   return record;
@@ -196,4 +214,32 @@ function escapeHtml(s: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+
+/** TASK-C.12d：基于确认记录评估 can_sign（委托 EO-06 硬谓词） */
+export function evaluateCanSign(
+  repoRoot: string,
+  prototypeId: string,
+): { ok: true; demo_mode: DemoMode } | { ok: false; reason: string } {
+  const rec = readDemoConfirm(repoRoot, prototypeId);
+  if (!rec) {
+    return { ok: false, reason: "无 Demo 确认记录" };
+  }
+  const demo_mode: DemoMode = rec.demo_mode ?? "INTERACTIVE_DEMO";
+  // 延迟导入避免循环；本文件是 daemon 侧，可直接内联谓词
+  if (!rec.confirmed) {
+    return { ok: false, reason: "Demo 尚未确认，禁止签署" };
+  }
+  if (demo_mode === "INTERACTIVE_DEMO") {
+    return { ok: true, demo_mode };
+  }
+  if (rec.accept_degraded === true) {
+    return { ok: true, demo_mode };
+  }
+  return {
+    ok: false,
+    reason:
+      "流程卡/降级卡不得冒充可交互 Demo 偷渡签署；须显式接受降级（accept_degraded）",
+  };
 }
