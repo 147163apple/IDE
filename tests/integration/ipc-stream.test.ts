@@ -60,6 +60,28 @@ function nextFrame(ws: WebSocket, timeoutMs = 2_000): Promise<IpcFrame> {
   });
 }
 
+/** 跳过基线进度等旁路广播，等到指定类型（全量并发下防竞态）。 */
+function waitForFrameType(
+  ws: WebSocket,
+  type: IpcFrame["type"],
+  timeoutMs = 3_000,
+): Promise<IpcFrame> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.off("message", onMessage);
+      reject(new Error(`timeout waiting for ${type}`));
+    }, timeoutMs);
+    const onMessage = (raw: Buffer) => {
+      const frame = JSON.parse(raw.toString()) as IpcFrame;
+      if (frame.type !== type) return;
+      clearTimeout(timer);
+      ws.off("message", onMessage);
+      resolve(frame);
+    };
+    ws.on("message", onMessage);
+  });
+}
+
 describe("M4 / TASK-D.1 Local IPC / WebSocket 通信桥", () => {
   let repo: string;
   let daemon: StagentDaemon | null = null;
@@ -146,13 +168,11 @@ describe("M4 / TASK-D.1 Local IPC / WebSocket 通信桥", () => {
         contract_id: "c1",
         lifecycle_state: "EXECUTING",
       });
-      const update = await nextFrame(ws);
-      expect(update.type).toBe("CONTRACT_UPDATE");
+      const update = await waitForFrameType(ws, "CONTRACT_UPDATE");
       expect(update.payload).toMatchObject({ contract_id: "c1" });
 
       daemon?.emitWorkerLog("c1", ["x".repeat(20_000)]);
-      const logFrame = await nextFrame(ws);
-      expect(logFrame.type).toBe("WORKER_LOG");
+      const logFrame = await waitForFrameType(ws, "WORKER_LOG");
       const payload = logFrame.payload as {
         lines: string[];
         truncated?: boolean;

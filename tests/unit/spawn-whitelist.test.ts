@@ -83,6 +83,22 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
     reason:
       "TASK-D.1c：仅 spawn 本仓 stagent start 以唤起最近项目 Daemon（非任意用户命令；路径须已在最近列表）",
   },
+  {
+    file: "daemon/baseline/os-sandbox.ts",
+    module: "daemon/baseline",
+    reason:
+      "TASK-C.14e：sandbox-exec / unshare 只读断网证明（固定系统二进制，非任意用户命令）",
+  },
+  {
+    file: "daemon/git/ensure-git-repo.ts",
+    module: "daemon/git",
+    reason: "TASK-H.4：仅 execFileSync 调用 git init（固定 git 二进制，需用户确认）",
+  },
+  {
+    file: "daemon/pipeline/records-export-cleanup.ts",
+    module: "daemon/pipeline",
+    reason: "TASK-H.8：仅 spawnSync zip 打包 .stagent/records/ 脱敏导出（不上云）",
+  },
 ];
 
 const CLI_HOST_PREFIX = "daemon/worker/cli-host/";
@@ -112,6 +128,26 @@ const LINE_ALLOWLIST: Array<{
     file: "daemon/supervisor/demo/demo-generator.ts",
     pattern: /\/\^\\s\*\[-\*\]\\s\+\(\.\+\)\$\/\.exec\(line\)/,
     reason: "RegExp.prototype.exec，Markdown 列表解析（TASK-S.4）",
+  },
+  {
+    file: "daemon/baseline/dirty-check.ts",
+    pattern: /\/\^\(\.\{2\}\)\\s\+\(\.\*\)\$\/\.exec\(line\)/,
+    reason: "RegExp.prototype.exec，git porcelain 解析（TASK-H trim / dirty）",
+  },
+  {
+    file: "daemon/baseline/sandbox-scanner.ts",
+    pattern: /routeRe\.exec\(text\)/,
+    reason: "RegExp.prototype.exec，路由线索提取（非子进程）",
+  },
+  {
+    file: "daemon/baseline/sandbox-scanner.ts",
+    pattern: /importRe\.exec\(text\)/,
+    reason: "RegExp.prototype.exec，import 边计数（非子进程）",
+  },
+  {
+    file: "daemon/worker/parse-worker-output.ts",
+    pattern: /fence\.exec\(trimmed\)/,
+    reason: "RegExp.prototype.exec，剥 markdown 围栏（TASK-H.1）",
   },
 ];
 

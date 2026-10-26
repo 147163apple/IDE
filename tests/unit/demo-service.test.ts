@@ -87,10 +87,17 @@ function rawGet(
   });
 }
 
-function occupyPort(port: number): Promise<net.Server> {
+/** 返回自有 blocker；若端口已被他进程占用则返回 null（视为已占）。 */
+function occupyPort(port: number): Promise<net.Server | null> {
   return new Promise((resolve, reject) => {
     const blocker = net.createServer();
-    blocker.once("error", reject);
+    blocker.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") {
+        resolve(null);
+        return;
+      }
+      reject(err);
+    });
     blocker.listen({ port, host: "127.0.0.1" }, () => resolve(blocker));
   });
 }
@@ -217,9 +224,13 @@ describe("预览服务：独立端口、冲突回退与响应头", () => {
     try {
       const server = demoServing(dir);
       const handle = await server.start();
-      expect(handle.port).toBe(4101);
+      // 4100 已被占（本测 blocker 或残留 Daemon Demo）→ 回退到更高端口
+      expect(handle.port).toBeGreaterThan(4100);
+      expect(handle.port).toBeLessThanOrEqual(4110);
     } finally {
-      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      if (blocker) {
+        await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      }
     }
   });
 

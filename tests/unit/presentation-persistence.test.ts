@@ -281,7 +281,7 @@ describe("投影：daemon 信号 → 展示态", () => {
   it("白话文案带合同标题，前端零映射", () => {
     const record0 = projectContract(contractAt("EXECUTING", APPROVED));
     expect(record0?.message).toBe("记账本：正在按计划施工");
-    expect(humanMessageFor("MERGED")).toBe("已合入项目");
+    expect(humanMessageFor("MERGED")).toBe("已交付归档"); // TASK-H.2：MERGED = 对外终态文案
   });
 });
 

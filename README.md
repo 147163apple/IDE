@@ -132,24 +132,25 @@ docs/                 架构规范 v1.6.1、任务规范 v1.6.2、reports/
 
 ```bash
 node scripts/verify-env.mjs     # 环境 + typecheck + lint + test（一键）
-npm test                        # 仅测试
+npm run test:mainline           # H.7 主链路回归（打开→归档 + 质疑/返工/porcelain）
+npm test                        # 全量 Vitest
 npm run build                   # 前端与装配 dist/
 ```
 
-测试数量随合入变化：以最近一次四件套实跑为准（D.1c 合入后约为 **1204 passed / 6 skipped**）。README 不再写死过期「154 项」口径。
+发布口径（2026-10-26 硬化收官）：`npm run test:mainline` **14 passed**；全量 `npm test` **1438 passed / 6 skipped**。Tag **`v0.1.0`**。详见 `docs/reports/v0.1-硬化收官纪要-2026-10-26.md`。
 
 ---
 
 ## v0.1 已知限制
 
 1. **无系统「选任意文件夹」**：浏览器做不到；最近列表可用（D.1c）；真·选夹见正式推迟的 `TASK-D.1e`（v0.2+ / P5.8）。
-3. **AI Worker / 真施工**：完整改码依赖可用模型 Key 与适配器；`TASK-W.5b` / `W.5c` 等仍按任务规范推进。
+3. **AI Worker / 真施工**：完整改码依赖可用模型 Key 与内建适配器；`TASK-W.5b` / `W.5c` **封印至 v0.2+**（硬化收官不立卡）。
 4. **架构雷达 1000 节点 60 FPS 未实测**（v0.2+）。
 5. **单任务串行**：Daemon 当前并行度按 v0.1 约定为 1。
 6. **跨平台**：仅 macOS 为主实测面；Linux/Windows 待加强真机验证。
 7. **账单精度**：默认 `ESTIMATED`，`UNAVAILABLE` 时只作上限约束。
 
-按规范 §10，上述关键体验与安全叙述未闭环前，**不得**把 v0.1 表述为「已验证的生产安全成品」。打开项目进门路径以 D.1d 同源单窗口为准；真·选夹见 D.1e（v0.2+）。
+按规范 §10，上述关键体验与安全叙述未闭环前，**不得**把 v0.1 表述为「已验证的生产安全成品」。打开项目进门路径以 D.1d 同源单窗口为准；真·选夹见 D.1e（v0.2+）。**v0.1 周期以 Tag `v0.1.0` 收官**（主路径 + 硬化），不是「全功能 / 87 卡全绿」。
 
 ---
 
@@ -157,6 +158,8 @@ npm run build                   # 前端与装配 dist/
 
 - 架构规范：`docs/Stagent_System_Architecture_Specification_v1.6.1.md`
 - 任务拆解：`docs/Stagent_v0.1_Development_Tasks_Specification_v1.6.2.md`
+- **v0.1 主路径里程碑**：`docs/reports/v0.1-主路径里程碑纪要-2026-10-26.md`
+- **v0.1 硬化收官**：`docs/reports/v0.1-硬化收官纪要-2026-10-26.md`（Tag `v0.1.0`）
 - 打开项目愿景/现状：`docs/reports/打开项目-愿景与现状.md`
 - 非技术旅程验收：`docs/reports/非技术用户旅程验收稿.md`
 - 自举报告：`docs/reports/v0.1-dogfooding-report.md`

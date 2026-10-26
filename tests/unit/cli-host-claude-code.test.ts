@@ -452,6 +452,12 @@ describe("TASK-W.5a spawn 静态禁令", () => {
       "daemon/git/worktree-manager.ts",
       // TASK-D.1c：最近项目一点重开，仅 spawn 本仓 stagent start
       "daemon/core/open-workspace.ts",
+      // TASK-C.14e：OS 只读/断网证明
+      "daemon/baseline/os-sandbox.ts",
+      // TASK-H.4：确认后 git init
+      "daemon/git/ensure-git-repo.ts",
+      // TASK-H.8：records zip 导出
+      "daemon/pipeline/records-export-cleanup.ts",
     ]);
     const hits: string[] = [];
     const walk = (dir: string) => {
