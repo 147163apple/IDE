@@ -1611,7 +1611,7 @@ export class ScopedWorktreeGateway {
       };
     } catch (err) {
       // 命令安全校验（注入符号 / 空命令 / 非法 argv）统一归到目录码
-      // E_UNAUTHORIZED_COMMAND（§9.3），避免回传内部实现码 COMMAND_REJECTED
+      // E_UNAUTHORIZED_COMMAND（§9.3），避免回传内部实现码 E_COMMAND_REJECTED
       const code =
         err instanceof CommandSecurityError
           ? E_UNAUTHORIZED_COMMAND
