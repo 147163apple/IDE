@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 末尾登记 K-1～K-9 收紧项；§18 增 V-10～V-13。 |
 | **v2.1 证据台账契约** | 2026-10-28 | §14 增补 §14.11 证据台账（Evidence Ledger）契约与不可变式（INV-LEDGER-01～04）：条目级 Schema、EditRef 手改证据、原话子串确定性校验、代选择阻断、墓地不可复活与逃生口、Delta 回写与快照继承权威方向、与 docs/templates/ REQ/ADR/EVID 主键映射表。 |
 | **v2.1 增补** | 2026-10-27 | 交互温度层增补：点击溯源双向联动、白话合同三层折叠与单向投影不变式、质询台三栏并排规格与双白话按钮、重试非警报呈现与交付仪式卡、低置信度分流保守默认（不变式 C-1）；§18 验收矩阵增补 6 条（V-10, S2-09, J-12～J-15，全部 `⏳`），总计 35 条（`✅ 0 / ⏳ 35`）。 |
 | **v2.1** | 2026-10-27 | 新增第三部分（§13～§20）：意图编译器（增量补丁、模型出结构代码出图、只认用户原话）；中栏《改动范围与验收方式》与 `ScopePlan` 单一事实源，确认谓词纳入范围，杜绝确认后 403；确认后单页四幕旅程（`JourneyStage` 映射表、交接、施工对话四类分流、三段式意外卡、对话式验收、单页 Fast Path）；决策 D6–D10；验收矩阵增补 29 条（全部 `⏳`）；实现落差登记 L-01～L-10。 |
@@ -987,6 +988,8 @@ type SchemeOp =
 
 每次成功合并 → `scheme_revision + 1` → 触发 §15 的范围预检 → 广播给前端。
 
+> **实施口径**：上表各行的求值顺序、两级原子性（结构错误整补丁丢弃 / 溯源错误单 op 丢弃）、依赖闭包与死锁处置，见 [`scheme-patch-engine.md`](./scheme-patch-engine.md) §2（`TASK-J.9`）。
+
 ### 14.4 触发节拍与成本纪律
 
 | 事件 | 编译器行为 |
@@ -1150,6 +1153,16 @@ export interface EvidenceLedger {
 | `ADR-####` | **Decision Ledger** (`decisions`) | 记录架构选型与行为决策；通过 `pending` 状态消除静默代选择。 |
 | `EVID-###` | **EvidenceItem** (`TurnRef` / `EditRef`) | 细化到对话原话定位高亮或手动修改事件，提供确定性审计链路。 |
 | *(传统模板无对应)* | **Graveyard Ledger** (`graveyard`) | 传统文档中否决分支随会话丢失；台账中永久留存被否决方案与理由，斩断金鱼记忆。 |
+
+#### 4. 实施口径与收紧项（`TASK-J.9`）
+
+`INV-LEDGER-01～03` 的零模型判定算法见 [`scheme-patch-engine.md`](./scheme-patch-engine.md)：引用锚定 §3，墓地复活 §4。该文件 §1.3 登记了对本节的收紧与补全，要点如下：
+
+- **K-1**：编译器 op 只能携带 `TurnRef`；op 里的 `EditRef` 一律判伪造。`EditRef` 只由用户手改产生。
+- **K-2**：`mark_user_confirmed`、墓地复活、新条目声明 `user_said` 三种场景 `quote` 必填（后者缺失时降级为 `ai_inferred`）。
+- **K-4**：`RejectedAlternative` 追加可选字段 `item_ref`、`fingerprint`、`revival_keys`、`rejected_after_turn_seq`、`status`、`revived`；墓碑只标记复活，不删除。
+- **K-5 / K-6**：`rejected_by: "security_gate"` 的墓碑不能经补丁复活；`disallow_revival: false` 命中时转待决推荐卡，不直接写入。
+- **K-7**：§14.7「撤销这次整理」产生新修订，修订号永不回退。
 
 ---
 
@@ -1501,6 +1514,10 @@ interface ScopePlan {
 | V-07 | 三张图由 `renderSchemeDiagrams` 从结构渲染，与模块/流程一一对应 | `tests/unit/scheme-diagrams.test.ts` | ⏳ |
 | V-08 | 金标对话集：模块召回 ≥ 80%，凭空捏造 = 0 | `tests/eval/intent-compiler-golden.test.ts` | ⏳ |
 | V-09 | 单个有界面模块 + 主流程 + 无冲突 + 有业务输入 → `demoReady = true` | `tests/unit/scheme-confirmation-gate.test.ts` | ⏳ |
+| V-10 | `INV-LEDGER-01`：`quote` 只容忍排版噪声（CRLF、空白、零宽、NFKC），释义、大小写、标点变化一律丢弃该 op；多次出现默认锚定最后一处 | `tests/unit/evidence-anchor.test.ts` + `tests/unit/scheme-patch-merge.test.ts`（`TASK-J.9`） | ⏳ |
+| V-11 | `INV-LEDGER-02`：`ai_inferred` 只能经带本批用户原话、晚于条目出现、非否定非问句的 `mark_user_confirmed` 升级 | `tests/unit/scheme-patch-merge.test.ts`（`TASK-J.9`） | ⏳ |
+| V-12 | `INV-LEDGER-03`：命中活跃墓碑的 AI op 被拦截；仅本批、晚于否决、含复活关键词、肯定且非问句的用户原话可复活；拿不准转追问卡 | `tests/unit/graveyard-revival.test.ts`（`TASK-J.9`） | ⏳ |
+| V-13 | 冻结 → 结构 → 修订号 → 溯源 → 来源 → 墓地 → 钉选的优先级；墓地命中的内容不出覆盖建议卡 | `tests/unit/scheme-patch-precedence.test.ts`（`TASK-J.9`） | ⏳ |
 | S2-01 | `ScopePlan` 修订号与方案不一致 → `E_SCOPE_NOT_READY` | `tests/unit/scheme-confirmation-gate.test.ts`（`TASK-J.3`） | ⏳ |
 | S2-02 | 分级拒绝的范围先自动收敛；仍不合规 → `E_SCOPE_POLICY` 且有白话说明 | `tests/unit/scope-plan.test.ts`（收敛，`TASK-J.2`）+ `tests/unit/scheme-confirmation-gate.test.ts`（谓词，`TASK-J.3`） | ⏳ |
 | S2-03 | 有未表态的敏感项 → `E_SCOPE_APPROVAL_REQUIRED` | `tests/unit/scheme-confirmation-gate.test.ts`（`TASK-J.3`） | ⏳ |

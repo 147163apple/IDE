@@ -106,6 +106,7 @@
 > 74. **状态回写（2026-10-26 · 立卡并完成 TASK-C.20 / DOC-ARCHIVE-Supervisor-pre-SSOT）**：Tina t908u「归档」。新增 **`TASK-C.20`** 并由同授权收口为 **`[COMPLETED]`**。交付：`docs/archive/supervisor-pre-ssot/`；`git mv` 右栏设计 / E2E 工作流 / 澄清授权 / 接口清单 / 运转机制；原 `docs/reports/` 路径保留 stub 指向 SSOT+归档；更新 archive/reports README、Spec Freeze、SSOT 路径表；Spec Freeze 总册保留。**仅文档**；不改产品代码；不抢 D.1e；不扩 v0.2。
 > 75. **状态回写（2026-10-26 · 立卡并完成 TASK-C.21 / DOC-SSOT-Supervisor-Patch）**：Tina t910u「补丁」。新增 **`TASK-C.21`** 并由同授权收口为 **`[COMPLETED]`**。交付：SSOT 升 **v2.0.1**——钉死 Demo 可选门禁（覆盖 EO-06 硬卡误读）、通配符分级与落盘收敛、「确认方案」五步原子时序、`user_pinned` 字段级脏检查、Demo 失败双按钮降级与风险标记、`demoReady` 硬性布尔底线。**仅文档**；不改产品代码；不抢 D.1e；不扩 v0.2。
 > 76. **状态回写（2026-10-27 · 立卡 TASK-J.1–J.8 · 闭环旅程 v2.1 第一批）**：按 [`supervisor.md`](./supervisor.md) 第三部分 §19 落差 L-01～L-10 与 §20 施工顺序拆出第一批八张卡（§3.4c）。主链：**`TASK-J.2`**（`ScopePlan` 单一来源）→ **`TASK-J.3`**（唯一谓词纳入范围）∥ **`TASK-J.4`**（Daemon 预检接口与快照绑定）→ **`TASK-J.5`**（确认接线改造）→ **`TASK-J.6`**（中栏范围区块）∥ **`TASK-J.7`**（交接进度与右栏解锁）。并行：**`TASK-J.1`**（右栏搭档只读，**P0**：现网 Claude Code 右栏以 `acceptEdits` + Edit/Write 在仓库根运行）、**`TASK-J.8`**（`JourneyStage` 投影）。**当前首要**→ **J.1**（并行）与 **J.2**。**本条仅文档立卡**；意图编译器、施工对话、试玩合入留第二批（§3.4c 末预告）。
+> 77. **状态回写（2026-10-27 · 立卡 TASK-J.9 · 闭环旅程 v2.1 第二批首卡）**：依 [`supervisor.md`](./supervisor.md) §14.2、§14.3、§14.11 立 **`TASK-J.9`**（SchemePatch 零模型确定性合并引擎）。实施口径与测试矩阵见新文件 [`scheme-patch-engine.md`](./scheme-patch-engine.md)：补丁级闸门「冻结 → 基线审计 → 结构 → 修订号」、op 级「溯源 → 来源 → 墓地 → 钉选 → 写入」拒绝优先；引用锚定算法；墓地复活三值判定。原第二批预告中的 `renderSchemeDiagrams`（V-07）拆为 **J.9b**，不在本卡。**本条仅文档立卡**，代码由本地团队施工。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/spec-freeze-record.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -210,6 +211,7 @@
 | **TASK-J.6** | 中栏《改动范围与验收方式》区块 | 工作台 UX | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.5`<br>• 五块白话呈现；排除区域 / 敏感项表态触发预检<br>• 无技术单位、无手写 glob |
 | **TASK-J.7** | 交接三步进度与右栏解锁 | 工作台 UX | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.1`（硬）、`J.5`<br>• COMMIT 后解锁；冻结后消息只作只读问答<br>• 仅补偿失败保持锁定 |
 | **TASK-J.8** | `JourneyStage` 投影与广播 | 状态权威 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • SSOT §16.2 / J-01 / L-10<br>• Daemon 投影随 `STATE_CHANGED` 下发；表外组合告警<br>• `DELIVERED` 呈现为已合入（不删枚举） |
+| **TASK-J.9** | SchemePatch 零模型确定性合并引擎 | 意图编译器 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • SSOT §14.2 / §14.3 / §14.11；V-01～V-04、V-10～V-13<br>• 实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)<br>• 纯函数零模型；可用桩编译器 |
 | **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
 | **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
 | **TASK-H.3** | 基线扫描硬上限与超时熔断 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.14a` COMPLETED<br>• 文件数/深度硬上限 + 超时中断；防 Daemon 假死<br>• 沿用 OS 只读证明；禁 AST/Impact |
@@ -2807,11 +2809,39 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **关键文件**：`src/lib/state/journey-stage.ts`（新）、`src/lib/ipc/frames.ts`、`daemon/state/presentation-projector.ts`、`src/lib/state/delivery-state.ts`（只读复用 `projectDeliveryState`）
 * **估算**：S
 
+#### 【Task J.9】SchemePatch 零模型确定性合并引擎 `[NEW_TASK]`
+
+* **任务编号**：`TASK-J.9`
+* **任务名称**：编译器补丁的确定性合并、证据锚定与墓地复活判定（纯函数）
+* **对应规格**：SSOT 第三部分 §14.2、§14.3、§14.11（`INV-LEDGER-01～03`）；§18 `V-01`～`V-04`、`V-10`～`V-13`。**实施口径**：[`scheme-patch-engine.md`](./scheme-patch-engine.md)（与 SSOT 冲突时以 SSOT 为准）
+* **前置依赖**：无硬依赖（纯函数，可立即开工）。合并成功后触发范围预检的接线在 `TASK-J.10`，届时依赖 `TASK-J.2`
+* **优先级**：P1（闭环 v2.1 第二批首卡；`J.10` 硬依赖本卡）
+* **状态**：`[NEW_TASK]`
+* **对照痛点（代码事实）**：方案今天由 `src/lib/journey/scheme-draft.ts` 的 `MODULE_HINTS` 正则启发式整份生成，没有补丁、没有证据、没有 pin 合并规则，也没有墓地；SSOT §14.3 的合并表与 §14.11 的不变式在代码里 0 命中。
+* **一句话目标**：给定当前台账状态、编译器补丁与只读对话记录，引擎零模型地算出「整补丁冻结 / 拒绝 / 过期」或「逐 op 写入 / 出卡 / 丢弃」，同样输入永远得到逐字节相同的输出。
+* **范围**：
+  1. 新建 `src/lib/journey/scheme-patch-types.ts`：类型、zod Schema、码表（`PATCH_CODES` / `OP_CODES` / `SUGGESTION_KINDS` / `WARNING_CODES`）与常量（实施口径 §5.2、§5.3）。
+  2. 新建 `src/lib/journey/evidence-anchor.ts`：`normalizeForAnchor`（CRLF、零宽、按字素 NFKC、空白折叠、去首尾）、`anchorQuote`（全部出现位置、短引用整句边界、默认取最后一处、原文偏移映射）（实施口径 §3）。
+  3. 新建 `src/lib/journey/graveyard-revival.ts`：墓碑指纹、`matchesTombstone`（id / key / Dice ≥ 0.75）、`judgeRevival`（R0～R9 三值判定）、`buildTombstone`、`migrateGraveyardEntry`（实施口径 §4）。
+  4. 新建 `src/lib/journey/scheme-patch-engine.ts`：`mergeSchemePatch` 及其 `stage*` Pipeline；配套 `applyUserEdit`、`undoLastPatch`、`acceptSuggestion`、`rejectSuggestion`、`rejectItemToGraveyard`、`expireSuggestionsOnFreeze`、`auditLedgerState`、`projectEvidenceLedger`（实施口径 §2、§5.4～§5.6）。
+  5. 四个文件零 `node:*` 导入、零时钟、零随机数、零网络；id 由 `ctx.newId` 注入。
+* **非目标**：不接真模型、不做防抖与预算（`J.10`）；不改 `scheme-draft.ts` 现行启发式（`J.10` 降级为离线兜底）；不做 `renderSchemeDiagrams`（`J.9b`）；不做 Worker 产出物墓地门禁；不做冻结后回写补丁（`INV-LEDGER-04`，`J.16`）；不改任何 UI；不向 `src/lib/error-codes.ts` 的 `ERROR_CODES` 增码（实施口径 K-9）。
+* **验收（PASS）**：实施口径 §6 测试矩阵全部用例通过，具体为：
+  - `tests/unit/evidence-anchor.test.ts`：Q-01～Q-23 全部判例，锚点偏移逐字段相等。
+  - `tests/unit/graveyard-revival.test.ts`：R-01～R-17 与 TM-Y-18～30。
+  - `tests/unit/scheme-patch-merge.test.ts`：TM-G（含 144 组笛卡尔积对拍）、TM-P、TM-S、TM-C、TM-X、TM-A、TM-R、TM-D、TM-L、TM-E。
+  - `tests/unit/scheme-patch-precedence.test.ts`：TM-Z 14 组对拍 + TM-Z-13～15；对拍神谕由第二人按实施口径 §2.3 表格独立编写。
+  - `npm run typecheck` 相对基线无新增；`npm run lint` 0 error。
+* **FAIL**：任一 op 在证据不合格时被部分应用；墓地命中的内容以覆盖建议卡形式出现在用户面前（Z-04）；一次成功合并使修订号增加超过 1；同一输入两次调用结果不同；引擎源码出现 `node:` 导入、`Date.now`、`Math.random` 或网络调用。
+* **关键文件**：`src/lib/journey/scheme-patch-types.ts`（新）、`src/lib/journey/evidence-anchor.ts`（新）、`src/lib/journey/graveyard-revival.ts`（新）、`src/lib/journey/scheme-patch-engine.ts`（新）、`tests/helpers/scheme-patch-fixtures.ts`（新）
+* **估算**：M
+
 #### 第二批预告（本批合入后再细化立卡，**本条不立卡**）
 
 | 预定编号 | 内容 | 规格 | 依赖 |
 | :--- | :--- | :--- | :--- |
-| J.9 | 补丁协议与确定性合并（可用桩模型）：`SchemeDraftV2`、`SchemePatch`、合并规则、`renderSchemeDiagrams` | §14.2、§14.3、§14.7；V-01～V-04、V-07 | J.2 |
+| ~~J.9~~ | **已立卡**（见上方【Task J.9】）：补丁协议与确定性合并。`renderSchemeDiagrams` 拆出为 J.9b | §14.2、§14.3、§14.11；V-01～V-04、V-10～V-13 | — |
+| J.9b | `renderSchemeDiagrams`：三张图由结构确定性渲染 | §14.1 原则 1、§14.2 注；V-07 | J.9 |
 | J.10 | 意图编译器接真模型：触发节拍、输入裁剪、独立账本、离线兜底；`demoReady` 改判 | §14.4～§14.8、§14.10；V-05、V-06、V-09；L-01、L-07 | J.9 |
 | J.11 | 金标对话集与评测脚本 | §14.9；V-08 | J.10 |
 | J.12 | 用户主动暂停接口 `POST /api/contracts/:id/pause` | §16.4；L-09 | — |
