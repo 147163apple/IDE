@@ -1,51 +1,40 @@
-# docs/reports · 阅读顺序与索引
+# docs/reports · 历史签收与封版记录
 
-> 更新日期：2026-10-26（Asia/Hong_Kong）· 同日 D 类过程件归档至 `docs/archive/`  
-> **Spec Freeze 锚点**：[`Stagent_Spec_Freeze_Record_2026-10-26.md`](./Stagent_Spec_Freeze_Record_2026-10-26.md) — 规范资产封版记录（CLOSED 五份+右栏索引；CLOSED≠免体验；**C.12a–e / C.14a–c 已 COMPLETED**；基线见封版 §7，不并入五正文）  
-> **v0.1 主路径里程碑**：[`v0.1-主路径里程碑纪要-2026-10-26.md`](./v0.1-主路径里程碑纪要-2026-10-26.md) — **主路径可签收**（工程管理→MERGED；非「全功能完成」；W.5b/c 与 v0.2 DEFERRED 不纳入）  
-> 本目录是设计说明、对账与讨论稿的落点；**造 Stagent 的施工权威**仍是仓库根 `docs/` 下的《架构规范》《任务规范》。  
-> **讨论稿 ≠ 施工依据**；写代码只认任务卡 + 合同说明 §7.5 钉桩。
+> **更新日期**：2026-10-27（Asia/Hong_Kong）· 文档治理重组
+> **本目录只保留「对外签收凭据」**：封版记录与 v0.1 的两份里程碑纪要。
+> **施工权威不在这里**——造 Stagent 只认 [`../specs/`](../specs/) 四件套 + [`../adr/`](../adr/)。地图见 [`../README.md`](../README.md)。
 
-## Supervisor 单一事实源（2026-10-26 起）
+---
 
-- **现行权威**：[`../specs/Stagent_Supervisor_Specification_v2.0.md`](../specs/Stagent_Supervisor_Specification_v2.0.md)（五大章；`TASK-C.19` COMPLETED；体验对齐 `TASK-C.18`）。
-- **合流前碎片已归档**（Tina t908u · `TASK-C.20`）：正文在 [`../archive/supervisor-pre-ssot/`](../archive/supervisor-pre-ssot/)；本目录同名路径仅为 **stub**（右栏 / 工作流 / 澄清授权 / 接口清单 / 运转机制）。与 SSOT 冲突**以 SSOT 为准**。
-- Spec Freeze 总册仍在本目录（全局索引，未整份归档）。
+## 保留清单
 
-## 推荐阅读顺序（决策 / Supervisor 相关）
+| 文件 | 定位 | 说明 |
+| :--- | :--- | :--- |
+| [`spec-freeze-record.md`](./spec-freeze-record.md) | **Spec Freeze 封版索引** | 全局多主题封版锚点（CLOSED 五正文 + 右栏；**CLOSED ≠ 免体验**；C.12a–e / C.14a–c 已 COMPLETED）。Supervisor 体验与监理语义的现行权威已升级为 [`../specs/supervisor.md`](../specs/supervisor.md)，本记录保留为**封版历史索引**。 |
+| [`v0.1-mainline-milestone.md`](./v0.1-mainline-milestone.md) | **v0.1 主路径 Sign-off** | 主路径**可签收**；**不是**全功能完成，不是 87 卡全绿。 |
+| [`v0.1-hardening-closure.md`](./v0.1-hardening-closure.md) | **v0.1 硬化收官** | H.1–H.8 落地；Tag **`v0.1.0`**；终态口径锁定为 `MERGED`（见 [ADR-0012](../adr/0012-merged-as-terminal-state.md)）。 |
 
-0. [`Stagent_Spec_Freeze_Record_2026-10-26.md`](./Stagent_Spec_Freeze_Record_2026-10-26.md) — **Spec Freeze 封版记录**（唯一事实源锚点；CLOSED≠免体验；§6 → C.12；**§7 → 基线 C.14a–c**，不并入五正文）
-0b. [`v0.1-主路径里程碑纪要-2026-10-26.md`](./v0.1-主路径里程碑纪要-2026-10-26.md) — **v0.1 主路径 Sign-off**（已验闭环 + 已知缝；**不是**全功能完成）
-1. [`合同设计说明-2026-10-25.md`](./合同设计说明-2026-10-25.md) — 护照 vs 宪法、导言三锤、§7.3–§7.5  
-2. [`Supervisor运转机制-2026-10-25.md`](./Supervisor运转机制-2026-10-25.md)（**stub**）→ 归档 [`../archive/supervisor-pre-ssot/Supervisor运转机制-2026-10-25.md`](../archive/supervisor-pre-ssot/Supervisor运转机制-2026-10-25.md)；**以 SSOT 为准**  
-3. [`核心资产治理-追溯与变更判定-2026-10-25.md`](./核心资产治理-追溯与变更判定-2026-10-25.md) — 六类资产生命周期、追溯硬门禁、轻量变更判定  
-4. [`工程决策拍板-Top7-2026-10-25.md`](./工程决策拍板-Top7-2026-10-25.md) — Demo/Token/越界/澄清轮次/拒约回退/重连/无Git 七条硬标准（讨论稿未整份升格）  
-4b. [`Supervisor右栏对话行为-设计-2026-10-26.md`](./Supervisor右栏对话行为-设计-2026-10-26.md)（**stub**）→ 归档 [`../archive/supervisor-pre-ssot/Supervisor右栏对话行为-设计-2026-10-26.md`](../archive/supervisor-pre-ssot/Supervisor右栏对话行为-设计-2026-10-26.md)；**以 SSOT 为准**（原 Spec Freeze 五正文之一，字段档案）
-5. [`任务图谱-设计说明-2026-10-24.md`](./任务图谱-设计说明-2026-10-24.md) — 全景 / 施工双视角  
-6. ~~决策记录对账~~ → 已归档 [`../archive/决策记录对账-2026-10-25.md`](../archive/决策记录对账-2026-10-25.md)（过程件，非现行权威）  
-7. 三份讨论稿（已入库、未升格）：
-   - [`Stagent_Clarification_and_Authorization_Specification_v1.0.md`](./Stagent_Clarification_and_Authorization_Specification_v1.0.md)（**stub**）→ [`../archive/supervisor-pre-ssot/Stagent_Clarification_and_Authorization_Specification_v1.0.md`](../archive/supervisor-pre-ssot/Stagent_Clarification_and_Authorization_Specification_v1.0.md)
-   - [`Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md`](./Stagent_Documentation_Governance_Lifecycle_Chapter_v1.0.md) — **DocumentAssetStatus** 与 EO-01 交付主态**分轨**（§3.1）；**仍讨论稿未升格**
-   - [`Stagent_Interface_Contract_Checklist_v1.0.md`](./Stagent_Interface_Contract_Checklist_v1.0.md)（**stub**）→ [`../archive/supervisor-pre-ssot/Stagent_Interface_Contract_Checklist_v1.0.md`](../archive/supervisor-pre-ssot/Stagent_Interface_Contract_Checklist_v1.0.md)
-   - [`已有项目接管-基线档案体验设计讨论稿-2026-10-26.md`](./已有项目接管-基线档案体验设计讨论稿-2026-10-26.md) — 项目现状基线档案（Tina 三题定案+工程补丁+升格备忘；**讨论稿正文仍不整份并入 Freeze**；确认≠授权；双图谱分离；**`TASK-C.14a`–`c` COMPLETED**，见封版 §7）
-8. 骨架附件（以定稿为准）：[`Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](./Stagent_Supervisor_End_to_End_Workflow_v1.0.md)（**stub**）→ [`../archive/supervisor-pre-ssot/Stagent_Supervisor_End_to_End_Workflow_v1.0.md`](../archive/supervisor-pre-ssot/Stagent_Supervisor_End_to_End_Workflow_v1.0.md)
+---
 
-## 仍缺（指导写码前）
+## 推荐阅读顺序（新同学/新会话）
 
-Top7 已拍板；C.11a–e / C.12a–e / C.14a–f / C.15a–d 主路径已落地并走查（见封版 §6–§7、任务规范与 [`v0.1-主路径里程碑纪要-2026-10-26.md`](./v0.1-主路径里程碑纪要-2026-10-26.md)；C.11 起床 BRIEF 已归档）。**五份规范+右栏 Spec Freeze**（见封版记录；**不**把基线讨论稿并入五正文）。**主路径已签收口径见里程碑纪要**；W.5b/c 未实现、Impact/Mode/AST/云归档 = v0.2+ DEFERRED；下一项待 Tina 点名。
+1. [`../README.md`](../README.md) — 全局地图与三条铁律
+2. [`../specs/system-architecture.md`](../specs/system-architecture.md) §0 — 产品定义与八步旅程
+3. [`../specs/runtime-contract-and-safety.md`](../specs/runtime-contract-and-safety.md) — 运行时硬契约（**写代码前必读**）
+4. [`../specs/supervisor.md`](../specs/supervisor.md) — Supervisor 产品与监理语义
+5. [`../specs/development-tasks.md`](../specs/development-tasks.md) — 该改哪张卡
+6. 本目录三份 — 历史签收口径
 
-## 目录精简（2026-10-25）
+---
 
-已删除 32 份过期单卡交付说明、phase-checklist、走查/复审/一致性报告等；本目录仅保留决策与设计相关重要文档。施工验收仍以《任务规范》与 git 历史为准，不以已删报告为准。
+## 已移出本目录（2026-10-27）
 
-## 已归档过程件（勿当现行权威）
+设计说明、讨论稿、拍板纪要、过程验收稿**全部移入** [`../archive/`](../archive/)；非技术旅程验收稿按裁决 D-6 降为过程稿归档。完整映射见 [`../README.md`](../README.md) 与 [`../archive/README.md`](../archive/README.md)。
 
-见 [`docs/archive/README.md`](../archive/README.md)。过程件：决策记录对账、BRIEF-C11、P1 验收核查清单、W3 待办、W5a isolation-design。**Supervisor 合流前 5 份** → [`../archive/supervisor-pre-ssot/`](../archive/supervisor-pre-ssot/)（`TASK-C.20`）。
+## 已删除（勿再引用）
 
-## 正式规范（不在本目录）
+`v0.1-dogfooding-report.md`、`phase-checklist-M1.md`…`M8.md`、`工作台交互走查-2026-10-24.md`、`W5a-真实CLI验证报告-2026-10-21.md`、`stagent-task-flow-and-comparison.md`，以及 5 份 Supervisor stub 短桩。
 
-- `docs/Stagent_System_Architecture_Specification_v1.6.1.md`
-- `docs/Stagent_v0.1_Development_Tasks_Specification_v1.6.2.md`
-- `docs/Stagent_v0.2_Architecture_Evolution_RFC.md`
+## 反虚构提醒
 
-**仓库中不存在**《产品体验与技术底座设计规范 v1.1》。
+**仓库中不存在**《产品体验与技术底座设计规范 v1.1》。任何文档或代码注释都不得再引用该路径为正式规范。

@@ -12,8 +12,9 @@ import {
 import { git } from "../helpers/git";
 
 /**
- * 临门一脚闭环：Resume 与 Abort 链路（此前 orchestrator.resume 无 HTTP 端点、
- * 中止/驳回完全无实现，见 docs/reports/stagent-task-flow-and-comparison.md）。
+ * 临门一脚闭环：Resume 与 Abort 链路（此前 orchestrator.resume 无 HTTP 端点、中止/驳回完全无实现）。
+ * 注：原对照文档 docs/reports/stagent-task-flow-and-comparison.md 已于 2026-10-25 docs/reports/
+ * 目录精简时删除；现行权威见 docs/specs/runtime-contract-and-safety.md（执行凭证与越界熔断）。
  */
 describe("M8 / Resume 与 Abort 动作端点（Bearer 保护）", () => {
   let repo: string;

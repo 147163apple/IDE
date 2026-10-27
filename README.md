@@ -21,7 +21,7 @@ node scripts/verify-env.mjs            # 环境门槛 + typecheck + lint + 单�
 
 ### 打开一个业务项目（当前真实可用路径）
 
-生产级愿景与分层说明见：`docs/reports/打开项目-愿景与现状.md`。  
+生产级愿景与分层说明见：`docs/archive/open-project-vision-and-status.md`（过程稿归档；现行施工依据为 `docs/specs/development-tasks.md` 中 `TASK-D.1b`–`D.1d` 卡）。  
 `TASK-D.1d` 已修复同源空白：先 `npm run build`，再用 `stagent open` 即可单窗口进入工作台（仍走 `#token=`；Demo 仍独立 Origin）。
 
 #### 推荐：一键 open（D.1b + D.1d 同源单窗口）
@@ -123,7 +123,7 @@ src/
   components/         工作台 / Studio / Diff / 编辑器等
   routes/             控制台路由（TanStack Start）
 tests/                unit / components / integration / e2e
-docs/                 架构规范 v1.6.1、任务规范 v1.6.2、reports/
+docs/                 specs/（规范四件套）· adr/ · rfc/ · reports/ · backlog/ · archive/ · templates/
 ```
 
 ---
@@ -137,7 +137,7 @@ npm test                        # 全量 Vitest
 npm run build                   # 前端与装配 dist/
 ```
 
-发布口径（2026-10-26 硬化收官）：`npm run test:mainline` **14 passed**；全量 `npm test` **1438 passed / 6 skipped**。Tag **`v0.1.0`**。详见 `docs/reports/v0.1-硬化收官纪要-2026-10-26.md`。
+发布口径（2026-10-26 硬化收官）：`npm run test:mainline` **14 passed**；全量 `npm test` **1438 passed / 6 skipped**。Tag **`v0.1.0`**。详见 `docs/reports/v0.1-hardening-closure.md`。
 
 ---
 
@@ -156,11 +156,21 @@ npm run build                   # 前端与装配 dist/
 
 ## 文档
 
-- 架构规范：`docs/Stagent_System_Architecture_Specification_v1.6.1.md`
-- 任务拆解：`docs/Stagent_v0.1_Development_Tasks_Specification_v1.6.2.md`
-- **v0.1 主路径里程碑**：`docs/reports/v0.1-主路径里程碑纪要-2026-10-26.md`
-- **v0.1 硬化收官**：`docs/reports/v0.1-硬化收官纪要-2026-10-26.md`（Tag `v0.1.0`）
-- 打开项目愿景/现状：`docs/reports/打开项目-愿景与现状.md`
-- 非技术旅程验收：`docs/reports/非技术用户旅程验收稿.md`
-- 自举报告：`docs/reports/v0.1-dogfooding-report.md`
-- 阶段核对：`docs/reports/phase-checklist-M1.md` … `M8.md`
+**全局地图见 [`docs/README.md`](docs/README.md)。**（2026-10-27 文档治理重组：文件名已去除版本号与日期后缀，改为英文 kebab-case；版本流转交由 Git Tag 与 commit 历史承载。）
+
+现行规范四件套：
+
+- 架构宪法：[`docs/specs/system-architecture.md`](docs/specs/system-architecture.md)（定稿基线 v1.6.1）
+- 任务拆解：[`docs/specs/development-tasks.md`](docs/specs/development-tasks.md)（定稿基线 v1.6.2）
+- Supervisor SSOT：[`docs/specs/supervisor.md`](docs/specs/supervisor.md)（v2.0 正文 + v2.0.2 裁定层合流）
+- 运行时硬契约：[`docs/specs/runtime-contract-and-safety.md`](docs/specs/runtime-contract-and-safety.md)
+
+历史签收与封版：
+
+- **v0.1 主路径里程碑**：[`docs/reports/v0.1-mainline-milestone.md`](docs/reports/v0.1-mainline-milestone.md)
+- **v0.1 硬化收官**：[`docs/reports/v0.1-hardening-closure.md`](docs/reports/v0.1-hardening-closure.md)（Tag `v0.1.0`）
+- **Spec Freeze 封版记录**：[`docs/reports/spec-freeze-record.md`](docs/reports/spec-freeze-record.md)
+
+架构决策记录：[`docs/adr/`](docs/adr/)（ADR-0001～0013）。
+
+> **已删除文档的说明（2026-10-27 更正）**：本 README 早期版本曾指向 `docs/reports/v0.1-dogfooding-report.md` 与 `docs/reports/phase-checklist-M1.md` … `M8.md`。这两类文件已于 **2026-10-25 `docs/reports/` 目录精简时删除**，当前仓库中不存在。自举（Dogfooding）结论以 [`docs/specs/development-tasks.md`](docs/specs/development-tasks.md) 中 `TASK-E.2` 卡与 git 历史为准；阶段核对以任务规范 §4 Sprint 门禁为准。

@@ -14,7 +14,8 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
  * TASK-W.5a Claude Code 适配器（headless + stream-json）。
  *
  * 用户决定（2026-10-20）：一律使用 ANTHROPIC_API_KEY 按量计费。
- * 隔离方式（草案，待 Tina 决定，见 docs/reports/W5a-isolation-design.md）：以
+ * 隔离方式（Tina 已于 2026-10-20 批准，权威决策见 docs/adr/0013-cli-isolation-without-bare.md；
+ * 实测档案见 docs/archive/claude-code-isolation-design.md）：以
  * `--setting-sources ""` + `--tools` 启动（规范写的是 --bare，但实测 2.1.296 的 --bare 会连
  * --settings 里的 hooks 一起跳过）—— 不加载仓库里的 .claude/settings.json hooks 与 .mcp.json（否则是绕过口），
  * 只加载 Stagent 生成的 `--settings` 与 `--mcp-config`（配合 --strict-mcp-config）。
@@ -49,7 +50,9 @@ export interface ClaudeCodeAdapterOptions {
 /**
  * 实测记录：2026-10-20 首次实测（Tina 批准），2026-10-21 步骤 D 以
  * `deepseek-chat` @ `https://api.deepseek.com/anthropic` 复跑真实 CLI 负例 4/4 全绿后回填。
- * 证据见 docs/reports/W5a-真实CLI验证报告-2026-10-21.md。
+ * 证据见 docs/archive/claude-code-isolation-design.md §4 与 docs/adr/0013-cli-isolation-without-bare.md
+ * （原独立验证报告 docs/reports/W5a-真实CLI验证报告-2026-10-21.md 已于 2026-10-25 目录精简时删除，
+ * 结论已并入上述两处，**切勿再引用该路径**）。
  * 官方 Anthropic 原装模型复测为后续回归项，不阻塞。
  */
 export const CLAUDE_CODE_VERIFIED_ON =
