@@ -7,6 +7,7 @@
 > **状态**：架构演进与工程实施定稿基线（经四轮架构与代码事实对照评审闭环，确立代码基线与目标数据模型边界，状态机合法边与迁移防御完全闭环）  
 > **基线代码对照**：`daemon/`、`src/lib/contract.schema.ts`（当前代码基线为 Schema v1.2.0，目标模型 v1.3.0 显式归入 §10 路线图 P0.2c 阶段）、`src/lib/evidence.schema.ts`、`src/lib/state-machine.ts`、`tests/unit/state-machine-matrix.test.ts`  
 > **修订核心目标**：严格对齐代码实现事实与目标架构演进路线；闭环 Fast Path 状态机流转（杜绝跳过 `PREPARING`，规范熔断两步法为升版挂起，杜绝非法逆向边）、收敛数据迁移白名单并确立“零静默授权”不变式、彻底根除 AST 模糊术语、在类型系统层面彻底剥离 Supervisor 提案运行态字段、强化挂起恢复自愈与外部改码级联降级门禁，确立生产级落地与迁移工程规范。
+> **2026-10-28 口径补充**：C-3（§0.2.3.1 Worktree 例外指针）、C-4（§6.4 D-3 白话二选）、C-5（§6.4 D-1 计数口径）已拍板，依据 supervisor 第三部分 §16.11 与审计台账。本次为裁决落笔，未改变基线版本号。
 
 ---
 
@@ -141,6 +142,8 @@ Stagent 是面向**非技术业务用户、独立开发者与外包工程师**�
 #### 0.2.3.1 Fast Path 状态机流转与安全熔断规约 `[v1.6.1 闭环 C-02]`
 
 > **⚠️ 交互已改判（Supervisor SSOT 第三部分 §16.11 · D10）**：小改动**不得**从聊天里静默开工。中栏以「小改动」精简卡呈现，用户点「直接改」后才开工；PROTECTED 模式下同样可用（仍在 Worktree 中施工）。下文的状态边（`DRAFT → PREPARING`）与越界熔断规则继续有效。
+>
+> **⚠️ Worktree 例外（Supervisor SSOT 第三部分 §16.11 · C-3 已拍板）**：免 Worktree 仅限非生产产物（Demo 展示代码、图标/素材、`.stagent/` 内方案文档）；会进入可执行工程的生产代码（`src/`、`daemon/`、工具链产物）必须走 Worktree。下文第 2 条的 Worktree 要求对生产代码有效。
 
 1. **自动准入与审批注入**：  
    当用户请求满足 Fast Path 判定准则时，Daemon 自动构建轻量合同并注入合法的系统审批实体：
@@ -810,9 +813,9 @@ User            IDE/Studio      Supervisor      Task Graph       Daemon/Gateway 
 
 | 编号 | 潜在死锁场景 | 触发根因 | 确定性出口与看门狗机制 (D-1 ~ D-6) |
 |---|---|---|---|
-| **D-1** | `CONFLICT` 死锁 | 外部持续提交导致目标分支持续漂移，重基死循环 | **重试上限 ≤ 3 次**。达到 3 次后强制停止重试，在 UI 弹出【强制二选一】弹窗：<br>1. `REBASE_AND_REVERIFY`：手动确认重基最新代码并全量重跑；<br>2. `ABORT_AND_KEEP_WORKTREE`：终止合并但保留当前 Worktree 供手动比对。 |
+| **D-1** | `CONFLICT` 死锁 | 外部持续提交导致目标分支持续漂移，重基死循环 | **重试上限 ≤ 3 次**（计数口径：仅计用户手动触发的重试；系统首次自动重试不计入）。达到 3 次后强制停止重试，在 UI 弹出【强制二选一】弹窗：<br>1. `REBASE_AND_REVERIFY`：手动确认重基最新代码并全量重跑；<br>2. `ABORT_AND_KEEP_WORKTREE`：终止合并但保留当前 Worktree 供手动比对。 |
 | **D-2** | `STOPPING` 挂死 | 进程死锁或文件锁被占用，`SIGKILL` 无法退出 | **15 秒硬超时看门狗 (`STOP_TIMEOUT = 15s`)**。<br>若 15s 内进程树未完全退出，Daemon 强制将合同跃迁至终态 `ABORTED`，记录错误码 `TERMINATION_FAILED`，释放内存锁并向用户展示需手动杀进程的诊断提示，坚决禁止无限期停留在 `STOPPING`。 |
-| **D-3** | `DISPUTED_INSPECTING` 挂死 | Supervisor 预算耗尽、模型断网或报告生成失败 | **60 秒质询看门狗**。<br>若 60s 内未生成自查报告，系统自动降级：在中栏直接呈现抓取到的原始三方事实文本（原始 Prompt、`requirements.md`、代码 Diff），由用户手动点击选择【按 Bug 修复】或【按新需求演进】。 |
+| **D-3** | `DISPUTED_INSPECTING` 挂死 | Supervisor 预算耗尽、模型断网或报告生成失败 | **60 秒质询看门狗**。<br>若 60s 内未生成自查报告，系统自动降级：在中栏直接呈现抓取到的原始三方事实文本（原始 Prompt、`requirements.md`、代码 Diff），由用户手动点击选择白话二选【这是 Bug，免费修】或【我想要新功能，下一轮做】（C-4 已拍板；分类由系统内部归，接 attributions 路由，不向用户暴露技术分类；按钮文案以 supervisor §16.7 为准，OP-19 已销项）。 |
 | **D-4** | 节点 `RUNNING` 挂死 | Worker 崩溃、会话断开或无进度事件推送 | **90 秒心跳与租约机制**。<br>Worker 派生后必须每 15s 发送一次心跳；若连续 90s 无心跳，Daemon 强制判定租约失效，将当前节点置为 `FAILED`（原因码 `WORKER_HEARTBEAT_LOST`），合同转入 `PAUSED` 态。 |
 | **D-5** | 无验证命令节点点亮死锁 | 文档、配置或设计类节点无可执行测试命令或空验证集合 | **支持 `verification_mode` 声明与零空集校验**：<br>节点声明为 `MANUAL_REVIEW` 时，由用户在 UI 显式点击【确认此项】人工点亮；声明为 `COMMAND` 时严禁空命令集（若为空报错 `E_EMPTY_VERIFICATION_BLOCKED`）；声明为 `NONE` 时文件写入成功后自动点亮。杜绝因缺少命令或空集导致拓扑死锁或虚假点亮。 |
 | **D-6** | `WORKSPACE_LOCK` 永久死锁 `[v1.6.0 新增]` | 前端或 Daemon 崩溃导致 `.stagent/task.lock` 孤儿残留 | **60 秒租约看门狗与进程活性自愈探测**。<br>若当前时间与锁中 `heartbeat_at` 差距超过 `ttl_seconds`（60s），且探测到 `holder_pid` 已无活跃系统进程（OS `kill(pid, 0)` 返回 `ESRCH`），新任务可安全执行 `RECLAIM_STALE_LOCK` 覆写并接管锁，消除人工删锁负担。 |

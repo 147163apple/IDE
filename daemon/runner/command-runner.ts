@@ -4,8 +4,8 @@ import { resolveEnvironment } from "../worker/policy-guard";
 import { type EnvSanitizerOptions } from "./env-filter";
 import { killProcessTree, type ProcessTreeKillResult } from "./process-tree";
 
-export const E_COMMAND_REJECTED = "COMMAND_REJECTED";
-export const E_COMMAND_TIMEOUT = "COMMAND_TIMEOUT";
+export const E_COMMAND_REJECTED = "E_COMMAND_REJECTED";
+export const E_COMMAND_TIMEOUT = "E_COMMAND_TIMEOUT";
 export const E_TASK_TIMEOUT = "E_TASK_TIMEOUT";
 export const E_UNAUTHORIZED_COMMAND = "E_UNAUTHORIZED_COMMAND";
 

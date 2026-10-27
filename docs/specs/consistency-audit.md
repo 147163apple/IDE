@@ -1,6 +1,7 @@
 # 规格一致性审计收尾记录（2026-10-28）
 
 > **性质**：审计收尾记录，只登记、不改任务状态。任务卡（`development-tasks.md`）状态未改动。
+> **2026-10-28 裁决落笔**：C-3、C-4、C-5 已拍板并移入「一之二」；OP-11 已销项（见「五」第 10 项）；新增 OP-19（C-4 按钮文案统一）。本次修改不改任务状态。
 > **基线**：`main` @ `e610016`。**PR #9 仍为 open、未合入**。本记录的机械修复与 PR #9 不重叠：PR #9 改动 supervisor §12 与 §20、dev-tasks 的 S.5 / J.10 / J.16 与状态回写 39→83、runtime §8 L3 行、README 附属段；本记录不触及这些位置。两者合并顺序互不影响。**本记录完成后更新**：PR #9（`e430193`）与本记录所在 PR #10（`99cfe51`）已先后合入 main；上文「open、未合入」为撰写时的历史状态。
 > **行号**：本文「行号」指 `e610016` 快照中的物理行，仅供审计定位；规格正文不引用行号。
 > **编号**：`C-` 待裁决矛盾；`M-` 本 PR 机械修复；`OP-` 挂账项。`C-1` 本轮无前次记录，留空位。
@@ -10,11 +11,17 @@
 | 编号 | 矛盾 | 双方位置 | 建议（待裁决，未采纳） | 裁决人 |
 | :--- | :--- | :--- | :--- | :--- |
 | C-1 | 留空：本轮未找到前次审计的 C-1 记录 | — | 若前次 C-1 存在，请告知后合并编号 | Tina |
-| C-3 | Fast Path 在 VIBE 模式下的施工载体不一致 | 架构 §0.2.3.1 第 2 条（行 160）要求无条件创建 Worktree；supervisor §16.11 J-11 段（行 1548）写 VIBE 下按 §5.2.2 Checkpoint 直改 | A：supervisor 注明「VIBE 直改仅适用于 `use_worktree=false`；§0.2.3.1 第 2 条的 Worktree 指 PROTECTED 口径」；B：Fast Path 一律 Worktree，取消 VIBE 直改 | Tina |
-| C-4 | 质询 60 秒超时降级仍请用户选「按 Bug 修复 / 按新需求演进」 | 架构 §6.4 D-3（行 815）；与 supervisor §16.7、D10（行 1561）及 §18 J-08（不得出现分类按钮）冲突。§6.5.2 的改判横幅只覆盖 confidence 分支，未覆盖 D-3 | 在架构 §6.4 D-3 单元格补改判横幅，指向 supervisor §16.7；或把 D-3 出口改为白话业务澄清卡 | Tina |
-| C-5 | 「三次上限」是否包含自动合并尝试 | 架构 §6.4 D-1（行 813）；supervisor 第三部分 §16.8（行 1518）写「先自动一次，仍冲突才出卡（沿用 D-1 三次上限）」，语义不清 | 明确「三次」含自动一次，或明确自动一次不计入 | Tina + 施工方 |
 
 **C-2 已修**（见 M-7、M-8）：`demoReady` 的「≥2 个业务模块」与 supervisor 第三部分 §14.10 的「≥1 个 `user_visible` 模块」冲突。已按 §14.10 裁决，相关位置改为指针，不再复述谓词。
+
+## 一之二、已拍板裁决（2026-10-28，Tina）
+
+| 编号 | 原矛盾 | 裁决 | 裁决依据 | 落点 |
+| :--- | :--- | :--- | :--- | :--- |
+| C-3 | Fast Path 的施工载体（Worktree / VIBE 直改）口径不一致 | 免 Worktree **仅限非生产产物**（Demo 展示代码、图标/素材、`.stagent/` 内方案文档）；会进入可执行工程的生产代码（`src/`、`daemon/`、工具链产物）**一律走 Worktree**。VIBE 直改仅适用于上述非生产产物。 | Tina 裁决（2026-10-28）。非生产产物无交付风险；生产代码须可审计、可撤销，故走 Worktree。 | supervisor §16.11「免 Worktree 边界」；架构 §0.2.3.1 加例外指针 |
+| C-4 | 超时卡（D-3）仍请用户选「按 Bug 修复 / 按新需求演进」 | 出口改为白话二选【这是 Bug，免费修】/【我想要新功能，下一轮做】；分类由系统内部归，接 attributions 路由，不向用户暴露技术分类。**按钮文案已统一为 supervisor §16.7 文案，OP-19 已销项。** | Tina 裁决（2026-10-28）。 | 架构 §6.4 D-3 单元格 |
+| C-5 | 「三次上限」是否包含自动重试 | 三次上限**仅计用户手动触发的重试**；系统首次自动重试不计入，计数器只在用户手动重试时递增。 | Tina 裁决（2026-10-28）。原审计所指的冲突自动重试位于 supervisor 第三部分 §16.8。 | 架构 §6.4 D-1 单元格；supervisor §16.8 |
+
 
 ## 二、机械修复清单（本 PR）
 
@@ -45,7 +52,7 @@
 | OP-8 | `E_CHECKPOINT_FAILED` 以字符串直接返回 409，未入码表 | J.18 闭集 | 同 OP-4 | `daemon/server.ts` 行 1767、1844；runtime §8 L3 脚注已注明 |
 | OP-9 | `E_WRITABLE_SCOPE_POLICY` 为类上的码，未入码表 | 签署链（J.3/J.5）；裁定 | 闭集建立时 | `daemon/supervisor/scope-gate.ts` 行 15；runtime §2.3 已注明与 `E_SCOPE_POLICY` 不同 |
 | OP-10 | `E_PREPARATION_FAILED` 孤儿码：表内有，`src/` 与 `daemon/` 无抛出点 | 码表维护（待指定） | 下次 error-codes 修订，二选一：删除，或补抛出点 | `src/lib/error-codes.ts` 行 33、194；仅测试手工构造 |
-| OP-11 | `E_COMMAND_TIMEOUT` 值分歧 | daemon/runner 维护者 | **高优先级待裁决**：统一常量值与产出值，二选一（改常量或改产出）；落地前以 `gateway.ts` 实际发出的 `E_COMMAND_TIMEOUT` 为事实源 | `daemon/runner/command-runner.ts` 行 8 导出常量值为 `"COMMAND_TIMEOUT"` 且除定义外无引用；`daemon/mcp/gateway.ts` 行 1575 实际发出 `"E_COMMAND_TIMEOUT"` |
+| OP-11 | ~~`E_COMMAND_TIMEOUT` 值分歧~~ | — | **已销项**（见「五」第 10 项） | 原依据见「五」第 10 项 |
 | OP-12 | S.5 已知 7 处局限 | J.16 实施 | J.16 实施时 | dev-tasks S.5 行注（PR #9） |
 | OP-13 | 第一印象窗口长度 | Tina | J.16 实施前 | supervisor §13.3 实施期待定项 |
 | OP-14 | `attributions` 回填方 | J.16 | J.16 实施前 | playtest-self-check §5 与 §7.10 |
@@ -53,6 +60,7 @@
 | OP-16 | M-9 代码注释是否进文档 PR | Tina | 本 PR 审核时 | M-9 为可选项 |
 | OP-17 | PR #9 合入 | Tina | 审核后 | PR #9 open，clean |
 | OP-18 | 审计未覆盖范围：架构 §1–§4、§9；state-machine-contract 其余章节；constants-and-paths | 下一轮审计 | 下一轮 | 本轮只核 §0.2.3.1、§5.2.2、§6.4、§6.5、§7.1 与 state-machine §4 |
+| ~~OP-19~~ | ~~按钮文案统一~~ | — | **已销项**：以 supervisor §16.7 与 §18 行为规范层文案为准，架构 §6.4 D-3 已同步为「这是 Bug，免费修 / 我想要新功能，下一轮做」（Tina 裁决，2026-10-28） | C-4 裁决落笔时发现 |
 
 ## 四、三层皮权威表
 
@@ -76,5 +84,9 @@
 | 7. `attributions` 的三处引用 | playtest、intent-compiler-prompt、supervisor 对 `trigger` 的描述一致，除 M-3（类型）与 M-4（措辞）外无需改 | TM-PK-11、TM-PK-12、SR-5 已按闭集写 |
 | 8. §18 撞号与统计 | 修复前 `V-10` 重复、统计 35（应为 39），已修为 M-1、M-2；修复后 V-01～V-14 无重复 | — |
 | 9. J.9 卡的 V-10～V-13 指针 | 核对正确，无需改（M-10） | — |
+| 10. OP-11 `E_COMMAND_TIMEOUT` / `E_COMMAND_REJECTED` 常量值对齐 | 销项。`daemon/runner/command-runner.ts` 两常量值改为 `E_` 前缀，与 gateway 实际产出一致。**纠正原记录**：`E_COMMAND_REJECTED` 并非无引用，它是 `CommandSecurityError` 的默认码（gateway 对该类统一映射为 `E_UNAUTHORIZED_COMMAND`，对外输出不变；内部 `.code` 与错误消息前缀随之变化）。`E_COMMAND_TIMEOUT` 确无引用。 | 仓库全文检索（克隆后 grep）；`tests/` 无字面量 `COMMAND_REJECTED` / `COMMAND_TIMEOUT` |
+| 11. C-3 | 销项（裁决已落笔） | 见「一之二」 |
+| 12. C-4 | 销项（口径已落笔；文案统一见 OP-19，已销项） | 见「一之二」 |
+| 13. C-5 | 销项（计数口径已写死） | 见「一之二」 |
 
 **未覆盖**：本轮未逐字核对的范围见 OP-18；`src/` 与 `daemon/` 的检查基于 `e610016` 快照的文本检索，未运行测试。
