@@ -1,7 +1,7 @@
 # 规格一致性审计收尾记录（2026-10-28）
 
 > **性质**：审计收尾记录，只登记、不改任务状态。任务卡（`development-tasks.md`）状态未改动。
-> **基线**：`main` @ `e610016`。**PR #9 仍为 open、未合入**。本记录的机械修复与 PR #9 不重叠：PR #9 改动 supervisor §12 与 §20、dev-tasks 的 S.5 / J.10 / J.16 与状态回写 39→83、runtime §8 L3 行、README 附属段；本记录不触及这些位置。两者合并顺序互不影响。
+> **基线**：`main` @ `e610016`。**PR #9 仍为 open、未合入**。本记录的机械修复与 PR #9 不重叠：PR #9 改动 supervisor §12 与 §20、dev-tasks 的 S.5 / J.10 / J.16 与状态回写 39→83、runtime §8 L3 行、README 附属段；本记录不触及这些位置。两者合并顺序互不影响。**本记录完成后更新**：PR #9（`e430193`）与本记录所在 PR #10（`99cfe51`）已先后合入 main；上文「open、未合入」为撰写时的历史状态。
 > **行号**：本文「行号」指 `e610016` 快照中的物理行，仅供审计定位；规格正文不引用行号。
 > **编号**：`C-` 待裁决矛盾；`M-` 本 PR 机械修复；`OP-` 挂账项。`C-1` 本轮无前次记录，留空位。
 
@@ -45,7 +45,7 @@
 | OP-8 | `E_CHECKPOINT_FAILED` 以字符串直接返回 409，未入码表 | J.18 闭集 | 同 OP-4 | `daemon/server.ts` 行 1767、1844；runtime §8 L3 脚注已注明 |
 | OP-9 | `E_WRITABLE_SCOPE_POLICY` 为类上的码，未入码表 | 签署链（J.3/J.5）；裁定 | 闭集建立时 | `daemon/supervisor/scope-gate.ts` 行 15；runtime §2.3 已注明与 `E_SCOPE_POLICY` 不同 |
 | OP-10 | `E_PREPARATION_FAILED` 孤儿码：表内有，`src/` 与 `daemon/` 无抛出点 | 码表维护（待指定） | 下次 error-codes 修订，二选一：删除，或补抛出点 | `src/lib/error-codes.ts` 行 33、194；仅测试手工构造 |
-| OP-11 | `E_COMMAND_TIMEOUT` 值分歧 | daemon/runner 维护者 | 下次修改 `command-runner.ts` 时 | `daemon/runner/command-runner.ts` 行 8 导出常量值为 `"COMMAND_TIMEOUT"` 且除定义外无引用；`daemon/mcp/gateway.ts` 行 1575 实际发出 `"E_COMMAND_TIMEOUT"` |
+| OP-11 | `E_COMMAND_TIMEOUT` 值分歧 | daemon/runner 维护者 | **高优先级待裁决**：统一常量值与产出值，二选一（改常量或改产出）；落地前以 `gateway.ts` 实际发出的 `E_COMMAND_TIMEOUT` 为事实源 | `daemon/runner/command-runner.ts` 行 8 导出常量值为 `"COMMAND_TIMEOUT"` 且除定义外无引用；`daemon/mcp/gateway.ts` 行 1575 实际发出 `"E_COMMAND_TIMEOUT"` |
 | OP-12 | S.5 已知 7 处局限 | J.16 实施 | J.16 实施时 | dev-tasks S.5 行注（PR #9） |
 | OP-13 | 第一印象窗口长度 | Tina | J.16 实施前 | supervisor §13.3 实施期待定项 |
 | OP-14 | `attributions` 回填方 | J.16 | J.16 实施前 | playtest-self-check §5 与 §7.10 |
