@@ -55,6 +55,7 @@
 | K-10 | §14.11 墓地命中判定（INV-LEDGER-03） | `matchesTombstone` 增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中；命中只进入复活判定，不直接 DROP（§4.2）。 | 复活判定认用户自己的说法，拦截原先只认指纹与 Dice，两者方向不一致，拦截比复活宽松。 |
 | K-11 | §14.3 `SchemeOp` 联合 | 新增 `reject_item` 操作（§2.3.2、§5.4）：聊天里的否决入墓；证据须为本批用户消息，锚定句含否定词且非问句（引擎词表判定）。 | 原先只有 UI 与卡片拒绝能入墓，聊天中「不要了」没有路径。 |
 | K-12 | §14.11 `TurnRef.occurrence`（编译器提示） | 复活判定路径忽略编译器 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`（§4.4）。**显式风险**：确认判定路径（`mark_user_confirmed`，§3.4）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定。 | 允许编译器挑出现处，即可把 ILLEGAL 洗成 LEGAL（R-18）。 |
+| K-13 | §2.3.2 P4 `reject_item` 目标已墓碑化 | 目标不在方案中、但存在 `rejected_by: "user"`、`disallow_revival: true` 且有效的墓碑，其 `item_ref` 等于 op `id`：记 **NOOP `W_NOOP_IDENTICAL`**，不改修订号、不新建墓碑；无此墓碑时仍为 `E_REJECT_TARGET_MISSING`。复用既有码，码数不变（51）。 | 重放或重复否决不应成为新的写入路径；同时保留「id 根本不存在」的 DROP。 |
 
 ---
 
@@ -184,7 +185,7 @@ flowchart TD
 | P4 | 钉选与受保护（§3.3） | 只决定「直接写」还是「先问」。 |
 | P5 | 写入 | — |
 
-**`reject_item` 的 op 级判定**（K-11）：P1 在通用溯源之外追加两条。其一，证据 turn 必须在 `compiled_from_turns` 内，否则 `E_REJECT_TURN_NOT_IN_BATCH`。其二，锚定句须含 `NEGATION_CUES` 中的否定词且不是问句，否则 `E_REJECT_NOT_NEGATED`；否定判定只看引擎词表，不采信 op 自报。P3 墓地不适用，与 `remove_item` 同理。P4 复用受保护规则：目标不存在 → `E_REJECT_TARGET_MISSING`；`user_pinned` → `SUGGEST S_OVERRIDE_PINNED`；`user_said` / `user_confirmed` 未钉选 → `SUGGEST S_OVERRIDE_PROTECTED`；其余 → APPLY（生效规则见 §5.4）。
+**`reject_item` 的 op 级判定**（K-11）：P1 在通用溯源之外追加两条。其一，证据 turn 必须在 `compiled_from_turns` 内，否则 `E_REJECT_TURN_NOT_IN_BATCH`。其二，锚定句须含 `NEGATION_CUES` 中的否定词且不是问句，否则 `E_REJECT_NOT_NEGATED`；否定判定只看引擎词表，不采信 op 自报。P3 墓地不适用，与 `remove_item` 同理。P4 复用受保护规则：目标不存在且无对应的有效用户墓碑 → `E_REJECT_TARGET_MISSING`；目标不存在但存在 `item_ref = op.id` 的有效用户墓碑（K-13）→ NOOP `W_NOOP_IDENTICAL`，不改修订号、不新建墓碑；`user_pinned` → `SUGGEST S_OVERRIDE_PINNED`；`user_said` / `user_confirmed` 未钉选 → `SUGGEST S_OVERRIDE_PROTECTED`；其余 → APPLY（生效规则见 §5.4）。
 
 #### 2.3.3 三方碰撞真值表：`user_pinned` × 墓地 × AI 覆盖
 
@@ -712,7 +713,7 @@ export const WARNING_CODES = [
   "W_SOURCE_DOWNGRADED_UNTETHERED", // quote 与条目主文本无共同词素 → ai_inferred
   "W_QUOTE_MULTI_MATCH",
   "W_SUGGESTION_DEDUPED",
-  "W_NOOP_IDENTICAL",
+  "W_NOOP_IDENTICAL",               // 内容与现状相同（TM-X-02）；亦用于 reject_item 指向已有效用户墓碑（K-13）
   "W_COMPILER_ANCHOR_IGNORED",      // 编译器提交了 anchor / introduced_after_turn_seq，已丢弃
   "W_REVIVAL_OCCURRENCE_IGNORED",   // 复活判定路径丢弃了编译器 occurrence（K-12，§4.4）
   "W_PARTNER_HINT_TRUNCATED",       // partner_hint > 200 字被截断
@@ -773,7 +774,7 @@ stageCommit(...)                               → applied | noop
 - 新建条目：`source` 取 P2 判定后的值；`user_pinned: false`；`introduced_after_turn_seq = watermark`；`evidence` = op 证据（含引擎锚点）包成 `{ kind:"turn" }`。
 - 更新条目：只覆盖 op 提供的业务字段；`evidence` 追加（按 `turn_id + raw_start` 去重）；`source` 永不降级（`user_*` 不会被写回 `ai_inferred`）。
 - `remove_item`：从集合移除；**不**自动入墓（AI 删掉的东西不是用户否决的东西）。
-- `reject_item`（K-11）：移除条目，经依赖闭包与后置审计（同 `remove_item`）；随后以该 op 调用 `rejectItemToGraveyard`，建墓碑 `rejected_by: "user"`、`disallow_revival: true`，`rejected_after_turn_seq` 取证据消息的 seq，`reason` 缺省为「用户在聊天中否决」。
+- `reject_item`（K-11）：移除条目，经依赖闭包与后置审计（同 `remove_item`）；随后以该 op 调用 `rejectItemToGraveyard`，建墓碑 `rejected_by: "user"`、`disallow_revival: true`，`rejected_after_turn_seq` 取证据消息的 seq，`reason` 缺省为「用户在聊天中否决」。 NOOP 分支（K-13）不进入本条写入规则。
 - 所有被触及条目 `updated_in_revision = 新修订号`。
 - `partner_hint` 不进入方案，原样（截断到 200 字）放在结果的 `journal` 里给调用方。
 
@@ -929,7 +930,7 @@ stageCommit(...)                               → applied | noop
 | TM-Y-31 | 墓碑「Excel 导出」活跃且 `disallow_revival: true`；新想法与其 Dice ≥ 0.75 但意图不同，用户无复活证据（误拦方向） | DROP `E_PROPOSAL_PREVIOUSLY_REJECTED`；`journal.verdicts` 留有该 verdict 且含命中的 `rejected_id`；卡片数为 0；随后用户以原话复活（同 TM-Y-25 路径）可成功 |
 | TM-Y-32 | R-18 复引用：复活判定中编译器给出显式 `occurrence` | ILLEGAL，`E_REVIVAL_NEGATED`；`occurrence` 被忽略并记 `W_REVIVAL_OCCURRENCE_IGNORED` |
 | TM-Y-33 | 墓碑「用 MongoDB 存数据」，`revival_keys` 含 `用mongodb存数据`（字素 ≥ 4）；AI 发 `upsert_module`，主文本 `matchNormalize` 包含该 key，Dice < 0.75；op 锚定句不含该 key | SUGGEST `S_REVIVAL_AMBIGUOUS`（R6 `NO_KEY`），不写入；卡片数为 1 |
-| TM-Y-34 | 对照：同一墓碑；AI 发 `upsert_module`「MongoDB 存储」，`matchNormalize` 不包含任何 key，Dice 0.33 | APPLY。**已知残余风险**：(d) 不覆盖模块名重叠的改写（§4.2 能力边界），此行记录现行口径 |
+| TM-Y-34 | 对照：同一墓碑；AI 发 `upsert_module`「MongoDB 存储」，`matchNormalize` 不包含任何 key，Dice 0.33 | APPLY。**已知残余风险**：(d) 不覆盖模块名重叠的改写（§4.2 能力边界），此行 fixture 的 `revival_keys` 只含 `用mongodb存数据`（若含 `mongodb` 则命中 (d)，见 intent-compiler-prompt.md §8.2 ADV-16）；此行记录现行口径 |
 | TM-Y-35 | 下限：墓碑 `revival_keys` 含字素数为 3 的 key（如 `excel`）；AI op 主文本包含该 key，Dice < 0.75 | APPLY（字素数 < 4，不触发 (d)） |
 | TM-Y-36 | `reject_item`：本批用户消息，锚定句「不要 Excel 导出」（含否定词，非问句），目标为未钉选的 `ai_inferred` 条目 | APPLY：条目移出方案；新墓碑 `rejected_by: "user"`、`disallow_revival: true`、`rejected_after_turn_seq` 为该消息 seq；修订号 +1 |
 | TM-Y-37 | `reject_item`：锚定句「加上 Excel 导出」（无否定词） | DROP `E_REJECT_NOT_NEGATED`；不建墓碑，方案不变 |
@@ -937,6 +938,8 @@ stageCommit(...)                               → applied | noop
 | TM-Y-39 | `reject_item`：证据为更早批次的用户消息（不在 `compiled_from_turns` 内） | DROP `E_REJECT_TURN_NOT_IN_BATCH` |
 | TM-Y-40 | `reject_item`：目标为 `user_pinned` 条目；另一组目标为未钉选的 `user_said` 条目 | pinned → SUGGEST `S_OVERRIDE_PINNED`；`user_said` → SUGGEST `S_OVERRIDE_PROTECTED`；两者均不删除、不入墓 |
 | TM-Y-41 | `reject_item`：目标 id 不存在 | DROP `E_REJECT_TARGET_MISSING` |
+| TM-Y-42 | `reject_item` 指向 `X`；方案中无 `X`，但存在 `item_ref = X`、`rejected_by: "user"`、`disallow_revival: true` 的有效墓碑（K-13） | NOOP `W_NOOP_IDENTICAL`；修订号不变；墓碑数不变；卡片数为 0 |
+| TM-Y-43 | 同一补丁两个 `reject_item`：A 的锚定句无否定词（DROP `E_REJECT_NOT_NEGATED`）；B 的锚定句含否定词、目标为未钉选 `ai_inferred`（APPLY） | A 单 op 丢弃；B 生效并入墓；两者互不影响（op 级原子，无依赖闭包级联） |
 
 ### 6.8 TM-Z 三方碰撞（对拍 §2.3.3）
 
