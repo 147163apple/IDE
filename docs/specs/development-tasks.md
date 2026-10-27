@@ -72,7 +72,7 @@
 > 46. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10j · 中栏 Markdown 预览阅读）**：Tina 授权（t666u）复刻 Cursor 式 Markdown 阅读。新增 **`TASK-C.10j`** 并收口为 **`[COMPLETED]`**（合入 tip `836ad6e`；四件套 **1311 passed / 6 skipped**）。交付：打开 `.md`/`.markdown`/`.mdx` 默认好看预览（标题/引用/GFM 表格/代码高亮）；顶栏「预览|源码」切换；源码仍走 Monaco + 既有保存门禁；非 Markdown 不出现切换。前置：`TASK-C.10i` COMPLETED。**不改**鉴权；**不抢** D.1e；不做分栏预览/完整面包屑/完整 VS Code。对照走查报告 §6.18。架构规范仅 §11 注记 9 轻量锚定延续。
 > 47. **状态回写（2026-10-24 · 打开文件无法关闭热修）**：文件 Tab 漏设 `closable`，× 不渲染；与 C.10j Markdown 预览无关。合入 tip `09fdcfd`；四件套 **1313 passed / 6 skipped**。对照走查 §6.19。
 > 48. **状态回写（2026-10-24 · 立卡并合入 TASK-C.10k · 右栏只留双方对话）**：Tina 授权（t669u）——Cursor 右栏能力记入 v0.2；同时打磨右栏删除多余信息。新增 **`TASK-C.10k`** 并收口为 **`[COMPLETED]`**（合入 tip `0da870c`；四件套 **1313 passed / 6 skipped**）。交付：去掉适配器下拉/历史会话/会话元信息/「当前对话使用」/空闲说明书条/工具 JSON 卡片；保留用户·助手消息与旅程卡及必要门禁提示；自动首选助手开会话。Cursor 右栏对齐项写入 **v0.2+ RFC 附录 B（锚定不实施）**。前置：`TASK-C.10j` COMPLETED。**不改**鉴权；**不抢** D.1e。对照走查报告 §6.20。架构规范仅 §11 注记 9 轻量锚定延续。
-> 39. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
+> 83. **状态回写（2026-10-24 · C.10f 漏接线热修）**：合入后肉眼见左栏仍混「需求（合同）」——`leftExtra` 未随 C.10f 迁出。热修停渲染左栏 `leftExtra`，列表进项目审阅 `requirementList`；四件套 **1275 passed / 6 skipped**。欢迎/切换项目文案属中栏欢迎页，非左栏回归。
 
 ## 1. 任务体系与研发全景矩阵 (Engineering Matrix)
 
@@ -140,7 +140,7 @@
 | **TASK-S.2** | 按需合同草案生成（L0 规则 / L1 强模型） | 建议中枢 | **[COMPLETED]**（按需触发、L0 规则引擎、L1 强模型补全、G-11 未决问题零丢失、脱敏均已落地） | P4 合同草案 | • 用户显式请求或事件触发时按需生成草案，L0 规则优先、L1 强模型按需；白话文案<br>• 草案全字段生成 (含必填 `worker_spec`)<br>• 断言未决问题 100% 保留至草案元数据供用户确认 (G-11)<br>• 保留脱敏模块 `src/lib/ipc/redaction.ts` |
 | **TASK-S.3** | Supervisor HUD 建议流与 WebSocket 广播 | 建议中枢 | **[DEFERRED → v0.2+]** | P4 HUD 广播 | • v0.2+：WebSocket 建议帧广播、ACCEPT/SNOOZE/DISMISS 上行 action<br>• v0.1 保留范围：仅脱敏模块并入 S.2 精简版移植 |
 | **TASK-S.4** | Demo 静态原型生成器与 Mock 预览服务 | 建议中枢 | **[COMPLETED]**（提交 `95ea2a3` + `07af0f2`，经 `d5ee448` 合入 main；19 项单测全绿、tsc 0 错 / eslint 0 错） | P4.5 原型先行 (v1.6.1) | • 单文件受控落盘上限 ≤2MB（超限抛 `E_DEMO_PAYLOAD_TOO_LARGE`）<br>• 独立 Origin 端口 (4100~4110) 与轻量预览服务<br>• 前端 `iframe sandbox="allow-scripts"` (严禁 `allow-same-origin`)<br>• 严格 CSP 策略阻断连接 Daemon 端口；Daemon 校验 Origin 阻断 Demo iframe 越权 RPC<br>• 增量演进快照归档与回退机制 |
-| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿） | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
+| **TASK-S.5** | Supervisor 质疑自查与根因分流归因引擎 | 建议中枢 | **[COMPLETED]**（`a1469b7` + `a83f18a`，经 `2bb1313`、`5748ad0` 合入 main；tsc 0 错；新增 19 用例 + main 回归 90 例全绿）<br>注：已知 7 处局限（右栏事实取空 diff、读旧 requirements.md、注释可伪造触及等）由 TASK-J.16 实施时一并修复，见 [`playtest-self-check.md`](./playtest-self-check.md)；本行 COMPLETED 判定不因此回改。 | P5.7 质疑自查 (v1.6.1) | • 第 0 步补齐 `.stagent/specs/requirements.md` 受控快照：合同意图初始化、`specs/revisions/req-v*.md` 冻结、执行期不可变（`E_SPEC_SNAPSHOT_IMMUTABLE`）<br>• `evidence-triad.ts`：会话原始意图/确认记录 + 规范快照命中条目 + Worktree Diff/终端/验证退出码三方抓取<br>• 60s 看门狗 `E_DISPUTE_TIMEOUT`；置信度 < 0.7 自动降级人工裁决<br>• 分流 `IMPLEMENTATION_BUG` / `REQUIREMENT_DRIFT`；返工严格取「变更文件 ∩ 合同 Scope」，越界进 `rejected_paths` 并提示 `EXPANDED_SCOPE_REQUIRED`，绝不扩权<br>• `POST /api/supervisor/dispute` + `DISPUTE_REPORT_READY` 广播（含三方证据链摘要）；`change_request_id` 贯通报告/提案 |
 | **TASK-S.6** | 非技术旅程串联（右侧分流 + 确认原型开工） | 建议中枢 / 编排粘合 | **[COMPLETED]**（2026-10-24 合入 main，merge `6415fbd`；功能 `bbab79e`；合后四件套 1155 passed / 6 skipped；**S.6b 已收口** merge `024d2b8` / `613ff51`，1165 passed / 6 skipped） | P4.5 / P5.7 串联（八步旅程最后一公里） | • 右侧唯一入口白话分流：质疑 → `POST /api/supervisor/dispute` + 白话卡；大事 → 草案；小事 → Fast Path（免强制 Demo）<br>• 吸收 C.2 残余：【确认原型并实施真实工程】真建全灰 TaskGraph 并进入审批/开工链（禁止只改 nonce）<br>• 聊完一段落后左侧需求说明可感知刷新；审批/开工后中栏图随真实 Evidence 点亮（复用既有 verify）<br>• **S.6b COMPLETED**：`REAL_PLAYTEST` 真预览 URL 挂中栏 iframe +「在浏览器打开」外链（4200–4210 stub/attach）<br>• 底座复用 S.4/C.7/S.5/C.2/S.2/W.5a，不重砌；对照 `docs/archive/non-technical-journey-acceptance.md` |
 | **TASK-W.1** | Coding Worker 适配器抽象与任务指令装配 | 编码内核 | **[COMPLETED]**（已合入 main，worker-adapter.interface / adapter-registry 在位） | P2 Worker 适配 | • 统一 `CodingWorkerAdapter` 接口，支持 Managed AI / CLI<br>• 补齐第 9 项 `known_limitations`<br>• 区分 `GATEWAY_ENFORCED` 与 `UNCONTROLLED_EXTERNAL`<br>• 合同上下文装配 + Worktree 隔离校验，专用用例 34 个 |
 | **TASK-W.2** | Scoped Gateway 强制工具注入与执行拦截 | 编码内核 | **[COMPLETED]**（2026-10-21 核验：`2e1290c` 已合入 main；仅含当时交付范围） | P2 工具管辖 | • 统一 `stagent_*` 命名空间 5 工具（含 `delete_file` / `list_directory`）<br>• `stagent_write_file` 的 `expected_hash?` 乐观锁（G-03），失配 `E_CONFLICT`<br>• 强制结构化 argv 且 `shell:false`，字面量拦截注入符号 (G-04)<br>• 越界/禁区阻断并标记 `BLOCKED`，专用用例 29 个 |
@@ -217,7 +217,7 @@
 | **TASK-J.7** | 交接三步进度与右栏解锁 | 工作台 UX | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.1`（硬）、`J.5`<br>• COMMIT 后解锁；冻结后消息只作只读问答<br>• 仅补偿失败保持锁定 |
 | **TASK-J.8** | `JourneyStage` 投影与广播 | 状态权威 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • SSOT §16.2 / J-01 / L-10<br>• Daemon 投影随 `STATE_CHANGED` 下发；表外组合告警<br>• `DELIVERED` 呈现为已合入（不删枚举） |
 | **TASK-J.9** | SchemePatch 零模型确定性合并引擎 | 意图编译器 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • SSOT §14.2 / §14.3 / §14.11；V-01～V-04、V-10～V-13<br>• 实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)<br>• 纯函数零模型；可用桩编译器 |
-| **TASK-J.10** | 意图编译器生成端与 Daemon 编译循环 | 意图编译器 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.9`；合并后触发预检依赖 `J.2`<br>• 实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)<br>• V-05、V-06、V-09；GAP-1/GAP-2 待 J.9 增补 |
+| **TASK-J.10** | 意图编译器生成端与 Daemon 编译循环 | 意图编译器 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.9`；合并后触发预检依赖 `J.2`<br>• 实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)<br>• V-05、V-06、V-09；GAP-1/GAP-2 已关闭，见 `supervisor.md` §14.11 K-10/K-11 |
 | **TASK-J.18** | Worker 派工墓地门禁（INV-LEDGER-03 工地侧） | 门禁 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.4`（硬）、`J.9`<br>• 实施口径 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md)；SSOT §14.11 第 5 小节 G-MATCH<br>• 端口段 3950–3959 |
 | **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
 | **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
@@ -2862,7 +2862,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
   5. `daemon/supervisor/intent-compiler/partner-hint-filter.ts`：零模型过滤内部词。
   6. `demoReady` 改判（§14.10）。
 * **非目标**：不改引擎；不做金标评测脚本（J.11）；不把搭档与编译器合并成一次调用（实施口径 §5.1 已否决）。
-* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）需 J.9 增补；增补前对应偷渡只靠生成端与 J.11 指标。
+* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）已由 J.9a 增补关闭，见 `supervisor.md` §14.11 K-10、K-11。
 * **验收（PASS）**：
   - `tests/unit/compiler-output-schema.test.ts`：S 类码在组装后不可能出现（逐码构造非法模型输出，断言组装期拒绝）；qid 展开、`new:` 替换、代填字段正确。
   - `tests/unit/compiler-render-input.test.ts`：同一状态两次渲染逐字节相同；AI 回复无别名；nonce 出现在边界标签；墓碑不含 `revival_keys`。
@@ -2910,7 +2910,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 | J.13 | 四幕外壳与施工幕（白话步骤、自动推进、等你确认卡） | §16.1、§16.4；J-06；L-06 | J.8、J.12 |
 | J.14 | 施工对话四类分流与中栏卡片 | §16.5；J-03、J-04、J-05 | J.7、J.13 |
 | J.15 | 三段式意外卡 | §16.6；J-07 | J.13 |
-| J.16 | 试玩幕、对话式验收、合入与「基于这次继续」 | §16.7、§16.8；J-08～J-10 | J.13、J.14 |
+| J.16 | 试玩幕、对话式验收、合入与「基于这次继续」 | §16.7、§16.8；J-08～J-10 | J.13、J.14；硬依赖 J.4（快照 `scope_plan`）、J.18 GAP-W1（`scheme_binding`） |
 | J.17 | 单页 Fast Path「直接改」 | §16.11；J-11 | J.5、J.13 |
 | ~~J.18~~ | **已立卡**（见上方【Task J.18】）：Worker 派工墓地门禁 | §14.11 INV-LEDGER-03、G-MATCH | J.4、J.9 |
 
