@@ -3,7 +3,7 @@ import type { ReasonCode } from "./evidence.schema";
 /**
  * 运行时错误码目录 (ErrorCode Catalog) —— 《Stagent 系统架构设计规范 v1.2.1》§9.3。
  *
- * 关系：14 个 `error_code`（触发点事实，由具体组件抛出）
+ * 关系：17 个 `error_code`（触发点事实，由具体组件抛出）
  *       → 9 个 `reason_code`（证据包结论归因，写入 EvidenceBundle.verdict.reason_code）。
  *
  * 多对一是规范刻意设计：同一个 reason_code 可由多个不同组件在不同阶段触发
