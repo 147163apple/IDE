@@ -1,7 +1,7 @@
 # Stagent 规范资产封版记录（Spec Freeze Record）
 
 > **Supervisor SSOT 升级（2026-10-26）**：体验与监理合流权威见 [`../specs/supervisor.md`](../specs/supervisor.md)（`TASK-C.19`）。本 Freeze 记录仍是**全局多主题封版索引**（保留在 `docs/reports/`，**未**整份归档）。  
-> **合流前五正文已归档**（Tina t908u · `TASK-C.20`）：[`../archive/supervisor-pre-ssot/`](../archive/supervisor-pre-ssot/)；本目录同名文件仅为 **stub**。**与 SSOT 冲突的体验旧词（五视口日常入口、≤2 轮问卷门控等）以 SSOT 为准**。
+> **合流前五正文已归档**（Tina t908u · `TASK-C.20`），原位于 `docs/archive/supervisor-pre-ssot/`；该目录已于 2026-10-27 文档治理整体移除，原文查 Git 历史（`git log --diff-filter=D -- docs/archive/`）。**与 SSOT 冲突的体验旧词（五视口日常入口、≤2 轮问卷门控等）以 SSOT 为准**。
 
 **日期**: 2026-10-26（Asia/Hong_Kong）  
 **定位**: 短锚点 / 索引 — **不**合并五份正文；正文继续分治。  
@@ -30,11 +30,11 @@
 
 | # | 文件 | 收口要点 | 关键 tip |
 | :--- | :--- | :--- | :--- |
-| 1 | [`Supervisor右栏…`](../archive/supervisor-pre-ssot/right-panel-conversation-design.md)（stub）/ [归档](../archive/supervisor-pre-ssot/right-panel-conversation-design.md) | **§0** 语义折叠；**§8～§13** 产品 CLOSED；**§14** DEC-01～06 + 四补钉 + **EO-01～10** CLOSED | `fa7f007`…`d610d0a` 等；交叉注记续至 `cbc0216` |
-| 2 | [`Clarification…`](../archive/supervisor-pre-ssot/clarification-and-authorization.md)（stub）/ [归档](../archive/supervisor-pre-ssot/clarification-and-authorization.md) | Top7 消歧；**§5** 过时待决核销；**§6 API Top5** 定案 | `fb6167d` → `836be2b` |
-| 3 | [`Interface Checklist`](../archive/supervisor-pre-ssot/interface-contract-checklist.md)（stub）/ [归档](../archive/supervisor-pre-ssot/interface-contract-checklist.md) | **§3** Top5 As-is→To-be 对账表重写；附录 Token Schema 草稿 | `836be2b` |
-| 4 | [`document-asset-governance-chapter.md`](../archive/document-asset-governance-chapter.md) | **DocumentAssetStatus** 与 EO-01 **分轨**；弃用旧交付词 | `cbc0216` |
-| 5 | [`E2E Workflow`](../archive/supervisor-pre-ssot/supervisor-end-to-end-workflow.md)（stub）/ [归档](../archive/supervisor-pre-ssot/supervisor-end-to-end-workflow.md) | 五阶段 ↔ EO-01；越界/沙盒交叉 EO-02/07 / Top5 | `cbc0216` |
+| 1 | `Supervisor右栏…`（原文已移除） | **§0** 语义折叠；**§8～§13** 产品 CLOSED；**§14** DEC-01～06 + 四补钉 + **EO-01～10** CLOSED | `fa7f007`…`d610d0a` 等；交叉注记续至 `cbc0216` |
+| 2 | `Clarification…`（原文已移除） | Top7 消歧；**§5** 过时待决核销；**§6 API Top5** 定案 | `fb6167d` → `836be2b` |
+| 3 | `Interface Checklist`（原文已移除） | **§3** Top5 As-is→To-be 对账表重写；附录 Token Schema 草稿 | `836be2b` |
+| 4 | `document-asset-governance-chapter.md` | **DocumentAssetStatus** 与 EO-01 **分轨**；弃用旧交付词 | `cbc0216` |
+| 5 | `E2E Workflow`（原文已移除） | 五阶段 ↔ EO-01；越界/沙盒交叉 EO-02/07 / Top5 | `cbc0216` |
 
 索引入口：本文件；阅读顺序仍见 [`README.md`](./README.md)。**不要**把五份正文揉成一篇。
 
@@ -139,7 +139,7 @@ Tina 显式「升格立卡」后，Top5 Delta **已写入**《任务规范》为
 
 ## 7. 已有项目基线档案（短锚 · 不并入五正文）
 
-- 权威讨论稿：[`baseline-archive-onboarding-design.md`](../archive/baseline-archive-onboarding-design.md)；产品名 **项目现状基线档案**；确认≠授权。  
+- 权威讨论稿：`baseline-archive-onboarding-design.md`（该归档文件已于 2026-10-27 移除，原文见 Git 历史）；产品名 **项目现状基线档案**；确认≠授权。  
 - 任务卡 **`TASK-C.14a`–`c`** 已 COMPLETED（tips `0417203` / `e01188f` / `dd14fa0`）。  
 - **`TASK-C.14d` / `C.14e`** 已 COMPLETED（Tina t854u；tip `fa69cb5`）：脏区→Scope 真链路；OS 沙盒证明。**Darwin**：`sandbox-exec`；写拒多为 **EPERM**（≠ Linux EROFS）；断网多为 **ENOTFOUND**。Linux：`unshare -n`，无 RO mount 则 `logical_fallback`。证明前不得升级硬承诺。  
 - **`TASK-C.14f`** + **`TASK-C.15a`–`d`** 已立卡（Tina t855u；WS 深度进度 + EO 余面；不再 backlog-only；**CLOSED/立卡 ≠ 已实现**直至合入）。**不**并入五正文。

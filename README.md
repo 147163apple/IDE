@@ -21,7 +21,7 @@ node scripts/verify-env.mjs            # 环境门槛 + typecheck + lint + 单�
 
 ### 打开一个业务项目（当前真实可用路径）
 
-生产级愿景与分层说明见：`docs/archive/open-project-vision-and-status.md`（过程稿归档；现行施工依据为 `docs/specs/development-tasks.md` 中 `TASK-D.1b`–`D.1d` 卡）。  
+生产级愿景与分层说明见 `docs/specs/development-tasks.md` 中的 `TASK-D.1b`–`D.1d` 卡（原过程稿 `docs/archive/open-project-vision-and-status.md` 已随 archive 目录移除）。  
 `TASK-D.1d` 已修复同源空白：先 `npm run build`，再用 `stagent open` 即可单窗口进入工作台（仍走 `#token=`；Demo 仍独立 Origin）。
 
 #### 推荐：一键 open（D.1b + D.1d 同源单窗口）
@@ -123,7 +123,7 @@ src/
   components/         工作台 / Studio / Diff / 编辑器等
   routes/             控制台路由（TanStack Start）
 tests/                unit / components / integration / e2e
-docs/                 specs/（规范四件套）· adr/ · rfc/ · reports/ · backlog/ · archive/ · templates/
+docs/                 specs/（规范四件套）· adr/ · rfc/ · reports/ · backlog/ · templates/
 ```
 
 ---

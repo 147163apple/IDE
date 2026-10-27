@@ -1,6 +1,6 @@
 # W.3 待办：已知缺口（C.5 验收后登记）
 
-> **位置变更（2026-10-27）**：本文件原在 `docs/archive/`，按裁决 **D-8** 移入 `docs/backlog/`。
+> **位置变更（2026-10-27）**：本文件原挂在 `docs/`（同批 archive 目录），按裁决 **D-8** 移入 `docs/backlog/`；archive 目录后续整体移除，不影响本文件。
 > **为什么不放 archive**：下列 **2 项仍为 `[ ]` 未修复**，且均属安全纵深、均附量化 PASS/FAIL 判据。归档等于假装它们不存在。
 > **当前状态**：7 项中 **5 项已修复**，**2 项待修**（§4.1 `tmpRoot` GC、§4.3 `splitShellSegments` 引号边界盲区）。
 > **相关规范**：[`../specs/runtime-contract-and-safety.md`](../specs/runtime-contract-and-safety.md) §5（执行凭证、越界熔断与隔离）。

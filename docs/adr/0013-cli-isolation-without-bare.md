@@ -5,7 +5,7 @@
 > **实测基线**: `verified_on = "Claude Code 2.1.296 (DeepSeek API 兼容模式) · 2026-10-21"`
 > **SUPERSEDES**: W.5a 早期方案「用 `--bare` 启动 Claude Code 以获得最小模式」
 > **强依赖代码**: `daemon/worker/cli-host/claude-code-adapter.ts`（该文件的隔离注释直接指向本 ADR）
-> **实测档案**: [`../archive/claude-code-isolation-design.md`](../archive/claude-code-isolation-design.md)
+> **实测档案**: 原 `../archive/claude-code-isolation-design.md`（该归档文件已于 2026-10-27 移除，原文见 Git 历史）
 
 ## 背景
 
@@ -55,5 +55,5 @@ claude
 **代价与约束（必须持续追踪）**：
 - `verified_on` 只覆盖 **DeepSeek 兼容模式 + CLI 2.1.296**。**用官方 Anthropic 原装模型 + 官方 CLI 重跑这组负例是未完成的回归项**（不阻塞 v0.1）。
 - `--setting-sources ""`（空字符串）是否属官方支持写法，文档只写了「逗号分隔的 user,project,local」，**未明确允许空值**。这是依赖实测行为，**每次升级 Claude Code CLI 都必须重跑 `STAGENT_REAL_CLAUDE=1` 的真实测试**。
-- **备选方案已实测但未采用**：`--restricted` 不会跳过我们的 hook，但自身不收窄工具（WebSearch/Task 仍在），仍需配 `--tools`。记录在 [`../archive/claude-code-isolation-design.md`](../archive/claude-code-isolation-design.md) §3.5，供 CLI 升级后 `--setting-sources ""` 行为改变时切换。
+- **备选方案已实测但未采用**：`--restricted` 不会跳过我们的 hook，但自身不收窄工具（WebSearch/Task 仍在），仍需配 `--tools`。记录在该实测档案 §3.5（归档文件已移除，原文见 Git 历史），供 CLI 升级后 `--setting-sources ""` 行为改变时切换。
 - 已知残余风险：模型仍可用 Read 工具主动读取 `CLAUDE.md` / `.mcp.json`（这是普通文件内容，等同提示词注入），缓解手段是把该类文件当不可信内容交由 Supervisor 规则层处理。

@@ -27,5 +27,5 @@ Host workspace 是宿主机上的真实项目目录。若允许两个进程（�
 **正面**：彻底消灭并发写造成的Git 元数据损坏与施工覆盖；依赖安装耗时被压缩到 symlink 级别（见 `deps-reuse` 测试）。
 
 **代价与约束**：
-- 互斥由 PID 锁 + 活进程健康检查实现，`TASK-C.10h` 曾出现「旧版 Daemon 被健康检查误判为可复用、路由未挂载导致 404」的生产缺陷（见 [`../archive/core-asset-governance-and-change-triage.md`](../archive/core-asset-governance-and-change-triage.md) 同类问题；修复见 `TASK-C.10h` 热修）。**锁的成功 ≠ 代码版本一致**，后续引入 `isDaemonCodeStale` 正是为此。
+- 互斥由 PID 锁 + 活进程健康检查实现，`TASK-C.10h` 曾出现「旧版 Daemon 被健康检查误判为可复用、路由未挂载导致 404」的生产缺陷（见原 `../archive/core-asset-governance-and-change-triage.md` 记录的同类问题，该归档文件已于 2026-10-27 移除；修复见 `TASK-C.10h` 热修）。**锁的成功 ≠ 代码版本一致**，后续引入 `isDaemonCodeStale` 正是为此。
 - 多仓并行施工被推到 v0.2+（见 [`../rfc/v0.2-multi-agent-pipeline.md`](../rfc/v0.2-multi-agent-pipeline.md) §5）。

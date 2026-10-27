@@ -9,7 +9,7 @@
 ## 0. 三条铁律（先看这里）
 
 1. **施工权威只有四份**：`specs/` 下的 `system-architecture.md`、`development-tasks.md`、`supervisor.md`、`runtime-contract-and-safety.md。写代码只认这四份 + 任务卡。
-2. **`archive/` 与 `backlog/` 不是权威**。归档件保留可追溯的历史与设计细节，但与现行规范冲突时一律以现行规范为准。
+2. **`backlog/` 不是权威**。`backlog/` 是仍要修的待办清单，与现行规范冲突时一律以现行规范为准。原 `archive/` 过程稿目录已移除，历史脉络查 Git 历史。
 3. **`rfc/` 不是规范**。RFC 是未批准/未实现的提案，其中条款**不具备**标记 `COMPLETED` 的资格。
 
 ---
@@ -55,15 +55,13 @@
 
 ## 5. 待修缺口（`backlog/`）
 
-[`backlog/w3-known-gaps.md`](./backlog/w3-known-gaps.md) — W.3 遗留的 **2 项未修复缺口**（`tmpRoot` GC、`splitShellSegments` 引号边界盲区），均附量化 PASS/FAIL 判据。**故意不埋进 `archive/`**：它们仍是待办，不是历史。
+[`backlog/w3-known-gaps.md`](./backlog/w3-known-gaps.md) — W.3 遗留的 **2 项未修复缺口**（`tmpRoot` GC、`splitShellSegments` 引号边界盲区），均附量化 PASS/FAIL 判据。**故意留在 backlog**：它们仍是待办，不是历史。
 
 ---
 
-## 6. 归档（`archive/`）· 过程稿与设计档案
+## 6. 归档（已移除）
 
-见 [`archive/README.md`](./archive/README.md)。**勿当施工依据**。其中若干文件含现行规范未收录的独特设计细节（阻断哈希字段约定、Impact Analysis 五步流水线、Claude Code 隔离实测、双图谱分离、provenance 白话标签等），v0.2 立项时须回查。
-
-Supervisor 合流前碎片另见 [`archive/supervisor-pre-ssot/`](./archive/supervisor-pre-ssot/)。
+原 `archive/` 目录（含 `supervisor-pre-ssot/` 下的过程稿碎片）已整体移除，不再作为查资料的入口：其中仍有价值的设计细节已分别并入 `specs/`、`adr/`、`rfc/`，历史原文查 Git 历史（`git log --diff-filter=D -- docs/archive/`）。
 
 ---
 
@@ -91,5 +89,5 @@ Supervisor 合流前碎片另见 [`archive/supervisor-pre-ssot/`](./archive/supe
 - `docs/reports/工作台交互走查-2026-10-24.md`
 - `docs/reports/W5a-真实CLI验证报告-2026-10-21.md`
 - `docs/reports/stagent-task-flow-and-comparison.md`
-- `docs/reports/` 下 5 份 Supervisor stub 短桩（2026-10-27 删除；正文在 `archive/supervisor-pre-ssot/`）
-- `docs/tasks/TASK-C.21-未闭环收尾-cursor-brief.md`（**从未落盘**，原为拟建路径）
+- `docs/reports/` 下 5 份 Supervisor stub 短桩（2026-10-27 删除）
+- `docs/tasks/TASK-C.21-未闭环收尾-cursor-brief.md`（一次性执行指令，收尾完成后已删除）

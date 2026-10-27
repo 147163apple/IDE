@@ -33,12 +33,12 @@
 **本文是 Stagent Supervisor 的单一事实源（Single Source of Truth）。**
 
 - 凡「右栏怎么聊、中栏怎么显、何时出 Demo、如何确认方案、施工门禁与异常怎么处置」——**只认本文**。
-- 下列合流前碎片若与本文冲突，**一律以本文为准**。Tina t908u「归档」（`TASK-C.20`）后正文在 `docs/archive/supervisor-pre-ssot/`；2026-10-27 文档治理已**删除** `docs/reports/` 下的同名 stub 短桩，不再保留跳转副本：
-  - [`../archive/supervisor-pre-ssot/right-panel-conversation-design.md`](../archive/supervisor-pre-ssot/right-panel-conversation-design.md)
-  - [`../archive/supervisor-pre-ssot/supervisor-end-to-end-workflow.md`](../archive/supervisor-pre-ssot/supervisor-end-to-end-workflow.md)
-  - [`../archive/supervisor-pre-ssot/clarification-and-authorization.md`](../archive/supervisor-pre-ssot/clarification-and-authorization.md)
-  - [`../archive/supervisor-pre-ssot/interface-contract-checklist.md`](../archive/supervisor-pre-ssot/interface-contract-checklist.md)
-  - [`../archive/supervisor-pre-ssot/supervisor-mechanism.md`](../archive/supervisor-pre-ssot/supervisor-mechanism.md)（机制定稿；与 C.18 体验冲突处以本文第 1～3 章为准，第 4～5 章硬防线与之对齐）
+- 下列合流前碎片若与本文冲突，**一律以本文为准**。Tina t908u「归档」（`TASK-C.20`）后正文曾置于 `docs/archive/supervisor-pre-ssot/`；该目录已于 2026-10-27 文档治理整体移除，原文查 Git 历史（`git log --diff-filter=D -- docs/archive/`）：
+  - `right-panel-conversation-design.md`
+  - `supervisor-end-to-end-workflow.md`
+  - `clarification-and-authorization.md`
+  - `interface-contract-checklist.md`
+  - `supervisor-mechanism.md`（机制定稿；与 C.18 体验冲突处以本文第 1～3 章为准，第 4～5 章硬防线与之对齐）
 - **造 Stagent 本体的施工权威**仍是 [`../specs/system-architecture.md`](../specs/system-architecture.md)（架构宪法）+ [`../specs/development-tasks.md`](../specs/development-tasks.md)（任务卡）+ [`../specs/runtime-contract-and-safety.md`](../specs/runtime-contract-and-safety.md)（运行时硬契约）。本文不替代这三份，只统合 **Supervisor 产品与监理灵魂**。
 - **不可逆决策**另见 [`../adr/`](../adr/)：ADR-0007（分权）、ADR-0010（Demo 可选门禁）、ADR-0011（审计侧车路径）、ADR-0012（`MERGED` 终态）、ADR-0013（Worker 隔离）。
 - **CLOSED ≠ 已全实现**：第 4 章「已验证硬防线」标明 v0.1 已验项；其余为目标契约时须注明。

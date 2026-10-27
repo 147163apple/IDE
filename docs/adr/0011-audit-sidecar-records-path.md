@@ -33,5 +33,5 @@
 **正面**：消灭双路径；位置与 `.stagent/records/` 的其余归档内容同构，`TASK-H.8`（records 脱敏 zip 导出 + 单项目清理）可统一处理。
 
 **代价与约束**：
-- Top7 已整体归档为 [`../archive/engineering-decisions-top7.md`](../archive/engineering-decisions-top7.md)，其 §7 条文须标注被本 ADR 取代（见该文件头部的「条文失效登记」表）；
+- Top7 曾整体归档为 `../archive/engineering-decisions-top7.md`（该归档文件已于 2026-10-27 移除，原文见 Git 历史），其 §7 条文须标注被本 ADR 取代（见该文件头部的「条文失效登记」表）；
 - 既有审计报告若引用旧路径，属历史记录，不做迁移，但不得作为新实现的依据。
