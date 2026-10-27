@@ -129,6 +129,8 @@
 
 **汇总**：S 类 24 个（补丁级 6 + op 级 14 + 告警 4）、P 类 17 个（补丁级 2 + op 级 11 + 告警 4；`E_PROPOSAL_PREVIOUSLY_REJECTED` 计 P + E）、E 类 5 个、非失败 5 个（4 卡片 + `E_PATCH_FROZEN`），合计 51。也就是说，**近一半的码在结构层就该归零**；提示词真正要打的仗只有十几个，其中头号敌人是 `E_QUOTE_NOT_FOUND`。
 
+**非码类写入边界（K-14）**：质疑归因账本 `attributions`（`supervisor.md` §14.11 子账本四）不是错误码，不计入上表 51 码，也不新增码。它属于**生成端不可写**：编译器补丁不得伪造或携带 `attributions` 条目，编译器提交的同名字段一律忽略，与 `EditRef`、`introduced_after_turn_seq` 同范式；生成端输出 Schema 不含该字段。
+
 ### 2.3 关于「Schema 强制」的诚实说明
 
 - 服务端结构化输出（OpenAI `strict` 模式等）对 `maxLength`、`pattern`、`maxItems` 等关键字的支持因供应商与版本而异，可能被**静默忽略**。因此所有 S 类结论的前提是：Daemon 在送进引擎前，用**同一个 zod Schema** 在本地重验（`assembleCompilerOutput`，§6）。本地重验失败 → `E_PATCH_SCHEMA_INVALID`。
