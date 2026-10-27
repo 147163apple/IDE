@@ -752,7 +752,7 @@ sequenceDiagram
 | :-- | :--- | :--- | :--- | :--- |
 | ADV-21 | **U10「导出先不要，等报表稳定了再导出」** | upsert 导出 `user_said`，quote「导出」 | DROP `E_QUOTE_TOO_SHORT_UNBOUNDED`（两处「导出」都不在整句边界） | 认定为否决：quote「导出先不要」，remove_item 或不写 |
 | ADV-22 | 同上，REJ-001 为「导出」 | upsert 导出 + revival REJ-001，quote「等报表稳定了再导出」 | 锚定句为整条消息（「，」不是句界）：含关键词；按最后一处关键词取否定窗口「等报表稳定了再」无否定；非问句；剔除「不要」后无肯定词 → SUGGEST `S_REVIVAL_AMBIGUOUS` | 不写复活 |
-| ADV-23 | **U10「先不要 Excel 导出。想了想还是加上 Excel 导出」**，REJ-001「Excel 导出」 | revival REJ-001，quote「Excel 导出」，`occurrence: 0`（指向否定句） | 经生成端组装：`occurrence` 不在生成 Schema → `E_PATCH_SCHEMA_INVALID`；直接喂引擎 → DROP `E_REVIVAL_NEGATED` | quote「想了想还是加上 Excel 导出」，合法复活 |
+| ADV-23 | **U10「先不要 Excel 导出。想了想还是加上 Excel 导出」**，REJ-001「Excel 导出」 | revival REJ-001，quote「Excel 导出」，`occurrence: 0`（编译器提示，复活路径忽略） | 经生成端组装：`occurrence` 不在生成 Schema → `E_PATCH_SCHEMA_INVALID`；直接喂引擎 → LEGAL（取最后一处肯定句，记 `W_REVIVAL_OCCURRENCE_IGNORED`，K-12） | quote「想了想还是加上 Excel 导出」，合法复活 |
 | ADV-24 | **U10「对比一下两个方案」** | confirm D3，quote「对」 | DROP `E_QUOTE_TOO_SHORT_UNBOUNDED` | 不 confirm |
 | ADV-25 | **U10「好的好的」** | confirm D3，quote「好的」 | DROP `E_QUOTE_TOO_SHORT_UNBOUNDED`（两处「好的」各有一侧紧贴另一个「好的」） | quote「好的好的」（4 字，不受短引用约束）→ APPLY |
 
