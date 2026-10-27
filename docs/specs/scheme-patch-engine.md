@@ -51,7 +51,7 @@
 | K-6 | §14.11 `disallow_revival: false` | 命中此类墓碑的 AI op 不拦截，**转成待决推荐卡**（`S_GRAVEYARD_SOFT`），不直接写入。 | 「允许 Agent 提请复活」的字面含义是「提请」，不是「直接复活」。 |
 | K-7 | §14.7「撤销这次整理，方案回到上一修订」 | 撤销产生**新修订**（`scheme_revision + 1`），内容等于上一修订。修订号永不回退。 | 修订号回退会产生 ABA：基于旧修订编译的补丁会被误判为新鲜。 |
 | K-8 | §14.2 `SchemeItemMeta` | 追加引擎自有的可选字段 `introduced_after_turn_seq`（条目首次出现时的水位）。编译器提交的同名字段一律忽略。 | 用于识别「拿用户很久以前的一句『对』确认新条目」的假冒确认。 |
-| K-9 | 引擎码 | 引擎产生的 `E_PATCH_* / E_OP_* / W_* / S_*` 是**编译日志码**，不面向用户，不进入 [`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §2.3 拒绝码闭集，也不进入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。唯一例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 与 §14.11 同名，语义一致。 | 拒绝码闭集是「用户可做什么」的表；编译日志码只给开发者与审计看。 |
+| K-9 | 引擎码 | 引擎码表中的 `E_* / W_* / S_*` 码是**编译日志码**，面向开发者与审计，不进入 [`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（§8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。 | 拒绝码闭集是「用户可做什么」的表；编译日志码只给开发者与审计看。 |
 
 ---
 
@@ -520,6 +520,7 @@ export interface EditRef {
 }
 export type EvidenceItem = { kind: "turn"; ref: TurnRef } | { kind: "edit"; ref: EditRef };
 
+// 与 supervisor.md §14.2 ItemSource 同形；权威定义以 SSOT 为准，此别名仅为本文档类型块自洽
 export type ItemSource = "user_said" | "user_confirmed" | "ai_inferred" | "user_edited";
 
 export interface SchemeItemMeta {
@@ -677,7 +678,7 @@ export const OP_CODES = [
   "E_CONFIRM_NEGATED",              // 确认句含否定词
   "E_CONFIRM_QUESTION",             // 确认句是问句
   // P3 墓地（INV-LEDGER-03）
-  "E_PROPOSAL_PREVIOUSLY_REJECTED",
+  "E_PROPOSAL_PREVIOUSLY_REJECTED",  // 门禁层码（runtime §8 L3），引擎以 DROP 裁决输出至 journal.verdicts，权威定义见 INV-LEDGER-03
   "E_REVIVAL_SECURITY_LOCKED",
   "E_REVIVAL_NOT_AFTER_REJECTION",
   "E_REVIVAL_TURN_NOT_IN_BATCH",
