@@ -82,10 +82,7 @@ export function StudioViewportShell(props: StudioViewportShellProps) {
   }
 
   return (
-    <div
-      data-testid="studio-with-rail"
-      className="flex h-full min-h-0 flex-1"
-    >
+    <div data-testid="studio-with-rail" className="flex h-full min-h-0 flex-1">
       <aside
         data-testid="studio-contract-rail"
         className="flex w-56 shrink-0 flex-col overflow-auto border-r border-border bg-muted/20"

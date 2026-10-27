@@ -6,13 +6,17 @@ import type { ContractStore } from "../../pipeline/contract-store";
 import type { ContractDraftGenerated } from "../draft-generator";
 import type { SoftwareContract } from "../../../src/lib/contract.schema";
 
-export const E_DRAFT_CONTRACT_ID_MISSING = "E_DRAFT_CONTRACT_ID_MISSING" as const;
-export const E_DRAFT_CONTRACT_ID_MISMATCH = "E_DRAFT_CONTRACT_ID_MISMATCH" as const;
+export const E_DRAFT_CONTRACT_ID_MISSING =
+  "E_DRAFT_CONTRACT_ID_MISSING" as const;
+export const E_DRAFT_CONTRACT_ID_MISMATCH =
+  "E_DRAFT_CONTRACT_ID_MISMATCH" as const;
 
 export class DraftContractIdError extends Error {
-  readonly code: typeof E_DRAFT_CONTRACT_ID_MISSING | typeof E_DRAFT_CONTRACT_ID_MISMATCH;
+  readonly code:
+    typeof E_DRAFT_CONTRACT_ID_MISSING | typeof E_DRAFT_CONTRACT_ID_MISMATCH;
   constructor(
-    code: typeof E_DRAFT_CONTRACT_ID_MISSING | typeof E_DRAFT_CONTRACT_ID_MISMATCH,
+    code:
+      typeof E_DRAFT_CONTRACT_ID_MISSING | typeof E_DRAFT_CONTRACT_ID_MISMATCH,
     message: string,
   ) {
     super(message);

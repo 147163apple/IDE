@@ -89,15 +89,15 @@ describe("PanoramaPane baseline (TASK-C.14b/c)", () => {
       "data-grants-construction",
       "false",
     );
-    expect(screen.getByTestId("panorama-baseline-progress").textContent).toMatch(
-      /现状整理完成|安全探查/,
-    );
+    expect(
+      screen.getByTestId("panorama-baseline-progress").textContent,
+    ).toMatch(/现状整理完成|安全探查/);
     expect(screen.getByTestId("panorama-baseline-dirty").textContent).toContain(
       "保护白名单",
     );
-    expect(screen.getByTestId("panorama-baseline-dirty").textContent).not.toMatch(
-      /损坏|中毒/,
-    );
+    expect(
+      screen.getByTestId("panorama-baseline-dirty").textContent,
+    ).not.toMatch(/损坏|中毒/);
     const node = screen.getAllByTestId("panorama-baseline-node")[0]!;
     expect(node.textContent).toMatch(/来源线索：/);
     expect(node.textContent).toMatch(/未经自动化测试验证/);
@@ -114,9 +114,9 @@ describe("PanoramaPane baseline (TASK-C.14b/c)", () => {
     payload.archive!.progress_copy =
       "正在为您安全探查项目结构（纯本地只读分析，不触碰线上业务）";
     render(<PanoramaPane baseline={payload} />);
-    expect(screen.getByTestId("panorama-baseline-progress").textContent).toContain(
-      "安全探查",
-    );
+    expect(
+      screen.getByTestId("panorama-baseline-progress").textContent,
+    ).toContain("安全探查");
   });
 
   it("scanning 占位且不露出合同空态", () => {
@@ -131,9 +131,9 @@ describe("PanoramaPane baseline (TASK-C.14b/c)", () => {
       />,
     );
     expect(screen.getByTestId("panorama-baseline")).toBeTruthy();
-    expect(screen.getByTestId("panorama-baseline-progress").textContent).toMatch(
-      /安全探查|整理现状/,
-    );
+    expect(
+      screen.getByTestId("panorama-baseline-progress").textContent,
+    ).toMatch(/安全探查|整理现状/);
     expect(screen.queryByTestId("panorama-empty")).toBeNull();
     expect(screen.getByTestId("panorama-v02-placeholders")).toBeTruthy();
   });

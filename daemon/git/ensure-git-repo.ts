@@ -57,11 +57,7 @@ export interface EnsureGitInitResult {
   ok: boolean;
   initialized: boolean;
   skipped: boolean;
-  reason:
-    | "already_git"
-    | "initialized"
-    | "unconfirmed"
-    | "failed";
+  reason: "already_git" | "initialized" | "unconfirmed" | "failed";
   message: string;
   error?: string;
   code?: typeof E_GIT_INIT_FAILED | typeof E_GIT_INIT_UNCONFIRMED;

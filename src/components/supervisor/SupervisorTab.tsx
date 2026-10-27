@@ -140,8 +140,9 @@ export function SupervisorTab({
       <header className="space-y-1">
         <h2 className="text-base font-semibold">项目全景</h2>
         <p className="text-xs opacity-70">
-          C.16：日常从「合同操作台」左侧选需求干活；本页是架构 / 保护 / 准入的深页，
-          不再占 ActivityBar 第二扇门。只呈现合同、保护清单与依赖拓扑里已有的字段。
+          C.16：日常从「合同操作台」左侧选需求干活；本页是架构 / 保护 /
+          准入的深页， 不再占 ActivityBar
+          第二扇门。只呈现合同、保护清单与依赖拓扑里已有的字段。
         </p>
       </header>
 
@@ -172,7 +173,8 @@ export function SupervisorTab({
           testId="supervisor-requirement-list"
         >
           <p className="opacity-70">
-            点一项打开合同操作台跟进。C.16 起日常列表在操作台左侧栏；此处仅作深页回显。
+            点一项打开合同操作台跟进。C.16
+            起日常列表在操作台左侧栏；此处仅作深页回显。
           </p>
           <div className="pt-1">{requirementList}</div>
         </Section>
@@ -185,7 +187,8 @@ export function SupervisorTab({
           testId="supervisor-specs"
         >
           <p className="opacity-70">
-            需求文档、执行合同与 Demo 原型跟合同能力走；日常在操作台左侧「规范与资产」。
+            需求文档、执行合同与 Demo
+            原型跟合同能力走；日常在操作台左侧「规范与资产」。
           </p>
           <div className="pt-1">{specsSection}</div>
         </Section>

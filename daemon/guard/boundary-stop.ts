@@ -89,11 +89,11 @@ export function forceClearIndexLocks(
   worktreePath?: string,
 ): string[] {
   const removed: string[] = [];
-  const candidates = [
-    path.join(path.resolve(repoRoot), ".git", "index.lock"),
-  ];
+  const candidates = [path.join(path.resolve(repoRoot), ".git", "index.lock")];
   if (worktreePath) {
-    candidates.push(path.join(path.resolve(worktreePath), ".git", "index.lock"));
+    candidates.push(
+      path.join(path.resolve(worktreePath), ".git", "index.lock"),
+    );
     // worktree 常见：主仓 .git/worktrees/<name>/index.lock
     const wtGit = path.join(path.resolve(worktreePath), ".git");
     try {

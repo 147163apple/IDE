@@ -43,9 +43,7 @@ export function mergeBaselineProtectIntoForbidden(
   return [...set];
 }
 
-export function dirtyProtectFromReport(
-  dirty: WorkspaceDirtyReport,
-): string[] {
+export function dirtyProtectFromReport(dirty: WorkspaceDirtyReport): string[] {
   const raw =
     dirty.dirty_exclusions?.length > 0
       ? dirty.dirty_exclusions
@@ -75,7 +73,5 @@ export function formatDirtyExclusionsPlain(
   const head = list.slice(0, limit);
   const more =
     list.length > limit ? `（另有 ${list.length - limit} 个未列出）` : "";
-  return (
-    `绝不触碰（本地未保存/未跟踪，已列入禁写）：${head.join("、")}${more}`
-  );
+  return `绝不触碰（本地未保存/未跟踪，已列入禁写）：${head.join("、")}${more}`;
 }

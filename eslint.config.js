@@ -40,4 +40,17 @@ export default tseslint.config(
     },
   },
   eslintPluginPrettier,
+  {
+    /**
+     * shadcn/ui 生成的原子组件把组件与变体表（`buttonVariants`、
+     * `useFormField`、`useSidebar` 等）放在同一文件导出，这是它们的分发形态。
+     * 拆文件不仅与上游模板冲突（下次 `shadcn add` 会覆盖），
+     * 也让「组件 + 变体」这组天然耦合的东西分居两处。
+     * 该目录只做展示，不承载业务状态，Fast Refresh 退化的代价可接受。
+     */
+    files: ["src/components/ui/**/*.{ts,tsx}"],
+    rules: {
+      "react-refresh/only-export-components": "off",
+    },
+  },
 );

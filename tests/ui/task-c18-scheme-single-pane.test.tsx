@@ -25,7 +25,9 @@ describe("TASK-C.18 单页方案审阅", () => {
     expect(screen.queryByRole("tab", { name: "质疑自查" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "合同审阅" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "真机试玩" })).toBeNull();
-    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("studio-viewport-panel-scheme"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("scheme-slot")).toBeInTheDocument();
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
       "data-single-pane",

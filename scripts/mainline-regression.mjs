@@ -38,7 +38,10 @@ const missing = REGRESSION_FINGERPRINT.filter(
   (rel) => !fs.existsSync(path.join(root, rel)),
 );
 if (missing.length) {
-  console.error("[mainline-regression] fingerprint missing:", missing.join(", "));
+  console.error(
+    "[mainline-regression] fingerprint missing:",
+    missing.join(", "),
+  );
   process.exit(2);
 }
 

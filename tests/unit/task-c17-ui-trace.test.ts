@@ -25,8 +25,8 @@ describe("TASK-C.17 ui-trace", () => {
     traceCtaDisabled("run-worker", "no_contract");
     await flushUiTrace();
     expect(postClientEvents).toHaveBeenCalled();
-    const events = (postClientEvents as unknown as ReturnType<typeof vi.fn>).mock
-      .calls[0]?.[0] as Array<Record<string, unknown>>;
+    const events = (postClientEvents as unknown as ReturnType<typeof vi.fn>)
+      .mock.calls[0]?.[0] as Array<Record<string, unknown>>;
     expect(events.map((e) => e["kind"])).toEqual([
       "cta_click",
       "viewport_change",

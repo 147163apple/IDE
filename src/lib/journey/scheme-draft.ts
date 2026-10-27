@@ -73,11 +73,7 @@ export interface SchemeDraft {
  * 是否与当前方案匹配由 `status + scheme_revision + decision_revision` 共同决定。
  */
 export type DemoGateStatus =
-  | "none"
-  | "building"
-  | "ready"
-  | "failed"
-  | "degraded_flowcard";
+  "none" | "building" | "ready" | "failed" | "degraded_flowcard";
 
 export interface DemoGate {
   status: DemoGateStatus;
@@ -175,7 +171,8 @@ function extractModules(text: string): string[] {
 }
 
 function buildMermaidArchitecture(title: string, modules: string[]): string {
-  const safe = (s: string) => s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_").slice(0, 24);
+  const safe = (s: string) =>
+    s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_").slice(0, 24);
   const lines = ["flowchart TB", `  UI["${safe(title || "应用")}"]`];
   modules.forEach((m, i) => {
     lines.push(`  M${i}["${safe(m)}"]`);
@@ -185,11 +182,15 @@ function buildMermaidArchitecture(title: string, modules: string[]): string {
 }
 
 function buildMermaidFlow(modules: string[]): string {
-  const safe = (s: string) => s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_").slice(0, 20);
+  const safe = (s: string) =>
+    s.replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, "_").slice(0, 20);
   if (modules.length === 0) {
-    return ["flowchart LR", "  A[说出需求] --> B[方案审阅]", "  B --> C[确认方案]", "  C --> D[写代码]"].join(
-      "\n",
-    );
+    return [
+      "flowchart LR",
+      "  A[说出需求] --> B[方案审阅]",
+      "  B --> C[确认方案]",
+      "  C --> D[写代码]",
+    ].join("\n");
   }
   const lines = ["flowchart LR"];
   modules.forEach((m, i) => {
@@ -200,7 +201,8 @@ function buildMermaidFlow(modules: string[]): string {
 }
 
 function buildMermaidMindmap(title: string, modules: string[]): string {
-  const safe = (s: string) => s.replace(/[^a-zA-Z0-9\u4e00-\u9fff ]+/g, "").slice(0, 24);
+  const safe = (s: string) =>
+    s.replace(/[^a-zA-Z0-9\u4e00-\u9fff ]+/g, "").slice(0, 24);
   const lines = ["mindmap", `  root((${safe(title || "方案")}))`];
   for (const m of modules) {
     lines.push(`    ${safe(m)}`);
@@ -280,14 +282,20 @@ export function scoreCompleteness(draft: SchemeDraft): number {
   if (confirmed > 0) score += Math.min(15, confirmed * 5);
   const openConflicts = draft.conflicts.filter((c) => !c.chosenId).length;
   if (draft.conflicts.length > 0 && openConflicts === 0) score += 15;
-  else if (draft.conflicts.length === 0 && draft.modules.length >= 2) score += 10;
+  else if (draft.conflicts.length === 0 && draft.modules.length >= 2)
+    score += 10;
   if (draft.notes.trim().length >= 8) score += 5;
   return Math.min(100, score);
 }
 
 /** 是否有可表达的主流程（≥1 条） */
-export function hasMainFlow(draft: Pick<SchemeDraft, "modules" | "mermaidFlow">): boolean {
-  if (draft.modules.length >= 1 && draft.mermaidFlow.trim().includes("flowchart")) {
+export function hasMainFlow(
+  draft: Pick<SchemeDraft, "modules" | "mermaidFlow">,
+): boolean {
+  if (
+    draft.modules.length >= 1 &&
+    draft.mermaidFlow.trim().includes("flowchart")
+  ) {
     return true;
   }
   return /-->/.test(draft.mermaidFlow);
@@ -298,7 +306,9 @@ export function hasMainFlow(draft: Pick<SchemeDraft, "modules" | "mermaidFlow">)
  * completeness 只在 UI 展示，绝不参与本函数——否则“辅助分”会变成隐藏硬门禁。
  */
 export function computeDemoReady(draft: SchemeDraft): boolean {
-  const openConflicts = draft.conflicts.filter((c) => c.chosenId === null).length;
+  const openConflicts = draft.conflicts.filter(
+    (c) => c.chosenId === null,
+  ).length;
   return (
     draft.modules.length >= 2 &&
     hasMainFlow(draft) &&
@@ -343,7 +353,9 @@ export function evaluateSchemeConfirmation(
     };
   }
 
-  const openConflicts = draft.conflicts.filter((c) => c.chosenId === null).length;
+  const openConflicts = draft.conflicts.filter(
+    (c) => c.chosenId === null,
+  ).length;
   if (openConflicts > 0) {
     reasons.push(`仍有 ${openConflicts} 条未决冲突`);
   }
@@ -392,7 +404,8 @@ export function evaluateSchemeConfirmation(
     };
   }
 
-  const demoMode = demo.status === "degraded_flowcard" ? "degraded" : "interactive";
+  const demoMode =
+    demo.status === "degraded_flowcard" ? "degraded" : "interactive";
   if (demo.scheme_revision !== draft.scheme_revision) {
     return {
       ok: false,
@@ -465,15 +478,17 @@ export function rebuildSchemeFromCorpus(
     opts?.titleHint?.trim() ||
     (text.length > 40 ? `${text.slice(0, 40)}…` : text) ||
     "未命名方案";
-  const title = pinned.includes("title") && previous?.title
-    ? previous.title
-    : previous?.title && previous.title.length > titleFromHint.length
+  const title =
+    pinned.includes("title") && previous?.title
       ? previous.title
-      : titleFromHint || previous?.title || "未命名方案";
+      : previous?.title && previous.title.length > titleFromHint.length
+        ? previous.title
+        : titleFromHint || previous?.title || "未命名方案";
 
-  const modules = pinned.includes("modules") && previous
-    ? previous.modules
-    : extractModules(text);
+  const modules =
+    pinned.includes("modules") && previous
+      ? previous.modules
+      : extractModules(text);
 
   const baseDecisions = defaultDecisions(modules);
   const prevDec = new Map((previous?.decisions ?? []).map((d) => [d.id, d]));
@@ -514,17 +529,23 @@ export function rebuildSchemeFromCorpus(
         ? `${text.slice(0, 280)}…`
         : text;
 
-  const mermaidArchitecture = pinned.includes("mermaidArchitecture") && previous
-    ? previous.mermaidArchitecture
-    : buildMermaidArchitecture(title, modules);
-  const mermaidFlow = pinned.includes("mermaidFlow") && previous
-    ? previous.mermaidFlow
-    : buildMermaidFlow(modules);
-  const mermaidMindmap = pinned.includes("mermaidMindmap") && previous
-    ? previous.mermaidMindmap
-    : buildMermaidMindmap(title, modules);
+  const mermaidArchitecture =
+    pinned.includes("mermaidArchitecture") && previous
+      ? previous.mermaidArchitecture
+      : buildMermaidArchitecture(title, modules);
+  const mermaidFlow =
+    pinned.includes("mermaidFlow") && previous
+      ? previous.mermaidFlow
+      : buildMermaidFlow(modules);
+  const mermaidMindmap =
+    pinned.includes("mermaidMindmap") && previous
+      ? previous.mermaidMindmap
+      : buildMermaidMindmap(title, modules);
 
-  const notes = pinned.includes("notes") && previous ? previous.notes : (previous?.notes ?? "");
+  const notes =
+    pinned.includes("notes") && previous
+      ? previous.notes
+      : (previous?.notes ?? "");
 
   let business_input_rounds = previous?.business_input_rounds ?? 0;
   if (opts?.incrementBusinessRound === true) {
@@ -610,9 +631,7 @@ export function resolveSchemeConflict(
 ): SchemeDraft {
   if (draft.frozen) return draft;
   const conflicts = draft.conflicts.map((c) =>
-    c.id === conflictId
-      ? { ...c, chosenId: optionId, user_pinned: true }
-      : c,
+    c.id === conflictId ? { ...c, chosenId: optionId, user_pinned: true } : c,
   );
   const next = withSchemeMutation(draft, { conflicts });
   const completeness = scoreCompleteness(next);
@@ -620,7 +639,10 @@ export function resolveSchemeConflict(
   return { ...withScore, demoReady: computeDemoReady(withScore) };
 }
 
-export function updateSchemeNotes(draft: SchemeDraft, notes: string): SchemeDraft {
+export function updateSchemeNotes(
+  draft: SchemeDraft,
+  notes: string,
+): SchemeDraft {
   if (draft.frozen) return draft;
   const pinned = draft.pinned_fields.includes("notes")
     ? draft.pinned_fields
@@ -655,7 +677,10 @@ export function formatSchemeAsIntent(draft: SchemeDraft): string {
     draft.modules.length ? `模块：${draft.modules.join("、")}` : "",
     ...draft.decisions
       .filter((d) => d.confirmed || d.source === "ai_default")
-      .map((d) => `${d.label}=${d.recommended}${d.confirmed ? "" : "（推荐待确认）"}`),
+      .map(
+        (d) =>
+          `${d.label}=${d.recommended}${d.confirmed ? "" : "（推荐待确认）"}`,
+      ),
     ...draft.conflicts
       .filter((c) => c.chosenId)
       .map((c) => {

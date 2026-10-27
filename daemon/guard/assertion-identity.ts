@@ -26,10 +26,7 @@ export function assertionIdFromText(
 ): string {
   const ns = uuidToBytes(namespace);
   const name = Buffer.from(assertionText.normalize("NFC"), "utf8");
-  const hash = createHash("sha1")
-    .update(ns)
-    .update(name)
-    .digest();
+  const hash = createHash("sha1").update(ns).update(name).digest();
   // RFC 4122 variant/version bits
   hash[6] = (hash[6]! & 0x0f) | 0x50; // version 5
   hash[8] = (hash[8]! & 0x3f) | 0x80; // variant

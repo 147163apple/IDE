@@ -67,7 +67,9 @@ function writeBaselineWithDirty(
     deep: null,
     dirty: {
       clean: dirtyExclusions.length === 0,
-      uncommitted: dirtyExclusions.filter((p) => !p.startsWith(".") || p === ".env.local"),
+      uncommitted: dirtyExclusions.filter(
+        (p) => !p.startsWith(".") || p === ".env.local",
+      ),
       untracked: dirtyExclusions,
       steward_message: buildStewardDirtyMessage(dirtyExclusions.length),
       protect_paths: dirtyExclusions,
@@ -97,7 +99,10 @@ describe("TASK-C.14d dirty_exclusions → forbidden_paths", () => {
 
   it("Dirty Check 产出 dirty_exclusions 物理清单", async () => {
     fs.writeFileSync(path.join(root, ".env.local"), "SECRET=keep-me\n");
-    fs.writeFileSync(path.join(root, "scratch-untracked.sh"), "#!/bin/sh\necho hi\n");
+    fs.writeFileSync(
+      path.join(root, "scratch-untracked.sh"),
+      "#!/bin/sh\necho hi\n",
+    );
     const report = await inspectWorkspaceDirty(root);
     expect(report.dirty_exclusions).toEqual(
       expect.arrayContaining([".env.local", "scratch-untracked.sh"]),
@@ -326,11 +331,11 @@ describe("TASK-C.14d dirty_exclusions → forbidden_paths", () => {
       "scripts/tmp.sh",
       "src/a.ts",
     ]);
-    expect(pathMatchesDirtyExclusion(".env.local", report.dirty_exclusions)).toBe(
-      true,
-    );
-    expect(pathMatchesDirtyExclusion("src/clean.ts", report.dirty_exclusions)).toBe(
-      false,
-    );
+    expect(
+      pathMatchesDirtyExclusion(".env.local", report.dirty_exclusions),
+    ).toBe(true);
+    expect(
+      pathMatchesDirtyExclusion("src/clean.ts", report.dirty_exclusions),
+    ).toBe(false);
   });
 });

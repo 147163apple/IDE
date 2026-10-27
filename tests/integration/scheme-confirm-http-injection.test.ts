@@ -197,10 +197,14 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     const created = await call("POST", "/api/contracts", { contract });
     expect(created.status).toBe(201);
 
-    const res = await call("POST", `/api/contracts/${contract.contract_id}/approve`, {
-      reviewer: "api-tester",
-      confirmation_id: "scheme-confirm-missing-0002",
-    });
+    const res = await call(
+      "POST",
+      `/api/contracts/${contract.contract_id}/approve`,
+      {
+        reviewer: "api-tester",
+        confirmation_id: "scheme-confirm-missing-0002",
+      },
+    );
 
     expect(res.status).toBe(409);
     // 关键：拒绝码必须是快照缺失，而不是"状态机不允许从 DRAFT 审批"
@@ -260,12 +264,13 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
 
     const readBack = await call<{
       snapshot: { status: string; scheme_revision: number; digest: string };
-    }>("GET", `/api/supervisor/scheme/freeze?confirmation_id=${confirmationId}`);
+    }>(
+      "GET",
+      `/api/supervisor/scheme/freeze?confirmation_id=${confirmationId}`,
+    );
     expect(readBack.status).toBe(200);
     expect(readBack.body.snapshot.status).toBe("FROZEN");
-    expect(readBack.body.snapshot.scheme_revision).toBe(
-      scheme.scheme_revision,
-    );
+    expect(readBack.body.snapshot.scheme_revision).toBe(scheme.scheme_revision);
     expect(readBack.body.snapshot.digest).toBe(frozen.body.digest);
   });
 
@@ -321,21 +326,24 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
       },
 
       // 阶段 3：真打 Daemon 的快照端点
-      persistSnapshot: async ({ confirmation_id, scheme: frozen, demo, decision }) => {
-        const res = await call<ErrBody & { snapshot_id: string; digest: string }>(
-          "POST",
-          "/api/supervisor/scheme/freeze",
-          {
-            confirmation_id,
-            scheme: frozen,
-            demo,
-            decision: {
-              code: decision.code,
-              message: decision.message,
-              demo_mode: decision.demo_mode,
-            },
+      persistSnapshot: async ({
+        confirmation_id,
+        scheme: frozen,
+        demo,
+        decision,
+      }) => {
+        const res = await call<
+          ErrBody & { snapshot_id: string; digest: string }
+        >("POST", "/api/supervisor/scheme/freeze", {
+          confirmation_id,
+          scheme: frozen,
+          demo,
+          decision: {
+            code: decision.code,
+            message: decision.message,
+            demo_mode: decision.demo_mode,
           },
-        );
+        });
         if (res.status >= 300) {
           throw new Error(`快照落盘失败 ${res.status} ${res.body.code ?? ""}`);
         }
@@ -356,7 +364,9 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
           },
         );
         if (created.status !== 201) {
-          throw new Error(`建合同失败 ${created.status} ${created.body.code ?? ""}`);
+          throw new Error(
+            `建合同失败 ${created.status} ${created.body.code ?? ""}`,
+          );
         }
         const contractId = created.body.contract.contract_id;
         createdContractId = contractId;
@@ -428,7 +438,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     expect(saved?.approval.rejection_reason).toContain("任务图创建失败");
 
     // 没有留下半张图
-    const graph = await call("GET", `/api/graph?contract_id=${createdContractId}`);
+    const graph = await call(
+      "GET",
+      `/api/graph?contract_id=${createdContractId}`,
+    );
     expect(graph.status).toBe(404);
     expect(graph.body.code).toBe("E_GRAPH_NOT_FOUND");
   });
@@ -447,7 +460,12 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
       expectedRevision: scheme.scheme_revision,
       quiesceRightChat: async () => {},
 
-      persistSnapshot: async ({ confirmation_id, scheme: frozen, demo, decision }) => {
+      persistSnapshot: async ({
+        confirmation_id,
+        scheme: frozen,
+        demo,
+        decision,
+      }) => {
         const res = await call<{ snapshot_id: string; digest: string }>(
           "POST",
           "/api/supervisor/scheme/freeze",
@@ -496,11 +514,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
 
       compensate: async ({ contract_id }) => {
         if (!contract_id) throw new Error("补偿缺少 contract_id");
-        const res = await call(
-          "POST",
-          `/api/contracts/${contract_id}/abort`,
-          { reviewer: "local-user", reason: "补偿重试" },
-        );
+        const res = await call("POST", `/api/contracts/${contract_id}/abort`, {
+          reviewer: "local-user",
+          reason: "补偿重试",
+        });
         aborts.push(res.status);
         if (res.status !== 200) {
           // ABORTED 是终态：重复中止被状态机拒绝，补偿无法完成

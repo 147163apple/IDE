@@ -155,10 +155,32 @@ export function projectDemoReadyEvent(event: string): DeliveryState | null {
 /**
  * 从现网 lifecycle + 可选瞬态提示，投影到 EO-01 DeliveryState。
  * 不替换 presentation 15 态；仅叠加在 STATE_CHANGED 上供 Top5 对账。
+ *
+ * 两个重载把「输入里没有瞬态 → 输出不可能是瞬态」写进类型：
+ * 调用方不传 `activity_transient` 时拿到的就是纯 `DeliveryState`，
+ * 不必为一个不可能出现的分支编一个兜底值（那才是真的谎报状态）。
  */
 export function projectDeliveryState(input: {
   lifecycle_state: string;
+  activity_transient?: undefined;
+  demo_confirmed?: boolean;
+  demo_mode?: DemoMode | null;
+  verifying?: boolean;
+  rework_required?: boolean;
+  escalated?: boolean;
+}): DeliveryState;
+export function projectDeliveryState(input: {
+  lifecycle_state: string;
   activity_transient?: ActivityTransient | null;
+  demo_confirmed?: boolean;
+  demo_mode?: DemoMode | null;
+  verifying?: boolean;
+  rework_required?: boolean;
+  escalated?: boolean;
+}): DeliveryState | ActivityTransient;
+export function projectDeliveryState(input: {
+  lifecycle_state: string;
+  activity_transient?: ActivityTransient | null | undefined;
   demo_confirmed?: boolean;
   demo_mode?: DemoMode | null;
   verifying?: boolean;

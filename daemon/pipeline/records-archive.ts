@@ -10,7 +10,10 @@ import {
   writeAuditManifest,
   type AuditManifest,
 } from "../guard/audit-manifest";
-import { prototypeRelativeRoot, readDemoConfirm } from "../supervisor/demo/prototypes";
+import {
+  prototypeRelativeRoot,
+  readDemoConfirm,
+} from "../supervisor/demo/prototypes";
 
 export interface RecordsArchiveResult {
   ok: boolean;
@@ -103,8 +106,13 @@ export function archiveContractRecords(input: {
         copied,
       },
       events: input.events ?? [{ type: "RECORDS_ARCHIVED", copied }],
-      assertion_ids: input.assertion_ids,
-      commit_sha: input.commit_sha,
+      // exactOptionalPropertyTypes：这两个可选字段省略而非传 undefined
+      ...(input.assertion_ids !== undefined
+        ? { assertion_ids: input.assertion_ids }
+        : {}),
+      ...(input.commit_sha !== undefined
+        ? { commit_sha: input.commit_sha }
+        : {}),
     });
     copied.push("audit-manifest.json");
 

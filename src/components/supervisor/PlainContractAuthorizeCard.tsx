@@ -23,7 +23,9 @@ export interface PlainContractAuthorizeCardProps {
   onRevise: () => void;
 }
 
-export function PlainContractAuthorizeCard(props: PlainContractAuthorizeCardProps) {
+export function PlainContractAuthorizeCard(
+  props: PlainContractAuthorizeCardProps,
+) {
   const { view, busy, onAuthorize, onReject, onRevise } = props;
   const canAuthorize = view.demo_confirmed && busy !== true;
   return (
@@ -41,10 +43,14 @@ export function PlainContractAuthorizeCard(props: PlainContractAuthorizeCardProp
           {view.draft_version}
         </span>
         {view.lifecycle_hint ? (
-          <span className="text-[10px] text-muted-foreground">{view.lifecycle_hint}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {view.lifecycle_hint}
+          </span>
         ) : null}
       </header>
-      <h3 className="text-[13px] font-semibold text-foreground">{view.title}</h3>
+      <h3 className="text-[13px] font-semibold text-foreground">
+        {view.title}
+      </h3>
       <dl className="mt-2 space-y-1.5">
         <div>
           <dt className="text-[10px] text-muted-foreground">要干什么</dt>
@@ -56,7 +62,9 @@ export function PlainContractAuthorizeCard(props: PlainContractAuthorizeCardProp
         </div>
         <div>
           <dt className="text-[10px] text-muted-foreground">怎么算验收</dt>
-          <dd data-testid="plain-contract-acceptance">{view.acceptance_summary}</dd>
+          <dd data-testid="plain-contract-acceptance">
+            {view.acceptance_summary}
+          </dd>
         </div>
       </dl>
       {!view.demo_confirmed ? (

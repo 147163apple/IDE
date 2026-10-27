@@ -64,14 +64,22 @@ describe("TASK-C.17 debug-log JSONL", () => {
     let written = fs.statSync(file).size;
     let guard = 0;
     while (written < target && guard < 500) {
-      appendDaemonLog(repo, { kind: "http", route: "GET /pad", detail: { big } });
+      appendDaemonLog(repo, {
+        kind: "http",
+        route: "GET /pad",
+        detail: { big },
+      });
       written = fs.statSync(file).size;
       guard += 1;
       if (fs.existsSync(`${file}.1`)) break;
     }
     // 越过阈值后再写一次，触发 rotate-before-append
     if (!fs.existsSync(`${file}.1`)) {
-      appendDaemonLog(repo, { kind: "http", route: "GET /pad", detail: { big } });
+      appendDaemonLog(repo, {
+        kind: "http",
+        route: "GET /pad",
+        detail: { big },
+      });
     }
     expect(fs.existsSync(`${file}.1`)).toBe(true);
     // 这条要写满轮转阈值（每次 64KB + stat），并发下实测会顶到 30s 默认超时；

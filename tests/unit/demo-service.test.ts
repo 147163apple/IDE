@@ -456,7 +456,11 @@ describe("DEMO_PREVIEW_STATUS 帧与生命周期广播", () => {
       expect(events[0]?.port).toBe(0);
       expect(events[0]?.message).toContain("no available port");
     } finally {
-      await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      // occupyPort 在端口已被他进程占用时返回 null（同样能达到「无可用端口」），
+      // 此时没有自己的 blocker 需要关
+      if (blocker) {
+        await new Promise<void>((resolve) => blocker.close(() => resolve()));
+      }
     }
   });
 });

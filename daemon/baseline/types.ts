@@ -86,7 +86,6 @@ export interface BaselineDeepPartial {
   incomplete: boolean;
 }
 
-
 export interface BaselineOsSandboxProof {
   platform: NodeJS.Platform;
   mode: "sandbox-exec" | "unshare-ro" | "logical_fallback";
@@ -123,8 +122,7 @@ export interface BaselineArchive {
 }
 
 export const SCAN_PROGRESS_COPY = {
-  scanning:
-    "正在为您安全探查项目结构（纯本地只读分析，不触碰线上业务）",
+  scanning: "正在为您安全探查项目结构（纯本地只读分析，不触碰线上业务）",
   organizing: "正在整理现状",
   deep: "正在结合深度分析评估影响面…",
   done: "现状整理完成（观察结果，未经运行验证）",

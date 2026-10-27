@@ -58,6 +58,8 @@ function fakeDraft(
       },
       protected_files: [],
       protected_entry_names: [],
+      // TASK-C.14d：基线脏区物理排除；此夹具无基线，故为空
+      dirty_exclusions: [],
       needs_protection_approval: false,
       unresolved_questions: [],
     },

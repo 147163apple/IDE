@@ -30,7 +30,11 @@ function sanitizeScanId(raw: string): string {
     .replace(/[^a-zA-Z0-9._-]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 128);
-  if (!cleaned || /^contract_?0+$/i.test(cleaned) || cleaned === "contract_000") {
+  if (
+    !cleaned ||
+    /^contract_?0+$/i.test(cleaned) ||
+    cleaned === "contract_000"
+  ) {
     return `baseline-${randomUUID().slice(0, 8)}`;
   }
   return cleaned;
@@ -61,8 +65,7 @@ export function writeBaselineArchive(
     if (safe.dirty.protect_paths?.length !== n) {
       safe.dirty.protect_paths = [...(safe.dirty.dirty_exclusions ?? [])];
     }
-    safe.dirty.steward_message =
-      n > 0 ? buildStewardDirtyMessage(n) : null;
+    safe.dirty.steward_message = n > 0 ? buildStewardDirtyMessage(n) : null;
     safe.dirty.clean = n === 0;
   }
 

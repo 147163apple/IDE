@@ -3,10 +3,7 @@
  * 产出 dirty_exclusions 物理清单；管家话术；首张微合同禁写注入。
  */
 import { execGit } from "../git/worktree-manager";
-import {
-  buildStewardDirtyMessage,
-  type WorkspaceDirtyReport,
-} from "./types";
+import { buildStewardDirtyMessage, type WorkspaceDirtyReport } from "./types";
 import { unquoteGitPath } from "../pipeline/untracked-scope-guard";
 
 function parsePorcelainPath(line: string): {
@@ -38,10 +35,7 @@ export async function inspectWorkspaceDirty(
 ): Promise<WorkspaceDirtyReport> {
   let stdout = "";
   try {
-    const result = await execGit(
-      ["status", "--porcelain", "-uall"],
-      repoRoot,
-    );
+    const result = await execGit(["status", "--porcelain", "-uall"], repoRoot);
     if (result.exitCode !== 0) {
       return {
         clean: true,

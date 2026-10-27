@@ -214,9 +214,9 @@ describe("L0 规则提取", () => {
     expect(scope).toContain("package.json");
     expect(scope).toContain("tsconfig.json");
     expect(scope).toContain("tests/**");
-    expect(green.contract.authorization.budget_limits.max_file_modifications).toBe(
-      40,
-    );
+    expect(
+      green.contract.authorization.budget_limits.max_file_modifications,
+    ).toBe(40);
 
     // 对照组：仓库已有 package.json（非绿野）→ 不注入种子、预算保持默认
     const normal = newRepo();

@@ -157,7 +157,9 @@ describe("Studio 高度链（走查回归）", () => {
     );
     // 切到合同：按钮所在面板激活且无 hidden
     // C.18：无多视口 Tab；单页方案审阅始终挂载
-    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("studio-viewport-panel-scheme"),
+    ).toBeInTheDocument();
     const panel = screen.getByTestId("studio-viewport-panel-scheme");
     expect(panel).toHaveAttribute("data-active", "true");
     expect(panel.hidden).toBe(false);

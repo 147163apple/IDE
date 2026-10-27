@@ -62,7 +62,10 @@ export function tokenFingerprint(token: string): string {
 }
 
 export function digestWritableScope(paths: readonly string[]): string {
-  const normalized = [...paths].map((p) => p.trim()).filter(Boolean).sort();
+  const normalized = [...paths]
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .sort();
   return createHash("sha256")
     .update(normalized.join("\n"))
     .digest("hex")
@@ -208,7 +211,9 @@ export class ExecTokenStore {
       contract_id: claims.contract_id,
       worktree: issue.worktree,
       writable_paths: issue.writable_paths,
-      now: issue.now,
+      // exactOptionalPropertyTypes：`now` 可能没传，直接传 `undefined` 不符合
+      // 「可选但不接受显式 undefined」的口径，省略键则由被调方回退默认时钟。
+      ...(issue.now ? { now: issue.now } : {}),
     });
   }
 

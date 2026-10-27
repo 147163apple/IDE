@@ -300,9 +300,7 @@ export async function runConfirmSchemeAtomic(
       input.confirmationId,
       "SIGN_AND_PREPARE",
       compensated ? "E_SIGN_AND_PREPARE_FAILED" : "E_COMPENSATION_FAILED",
-      compensated
-        ? reason
-        : `${reason}；补偿未完成，已保持锁定并需人工处理`,
+      compensated ? reason : `${reason}；补偿未完成，已保持锁定并需人工处理`,
       steps,
       frozen,
       {

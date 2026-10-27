@@ -1416,7 +1416,7 @@ ${trimmed}`
     } finally {
       setConfirmPrototypeBusy(false);
     }
-  }, [conn, selected, draft, activePrototypeId]);
+  }, [conn, selectedId, selected, draft, activePrototypeId]);
 
   const plainAuthorizeView = useMemo(() => {
     const src = selected ?? draft?.contract ?? null;
@@ -1821,19 +1821,24 @@ ${trimmed}`
   /**
    * 刷新后恢复真机试玩：Daemon 可能仍在跑（status API），但内存态丢了会空屏。
    * 已合入合同优先挂业务成品 URL，避免只显示签署前的白话桩。
+   *
+   * 依赖只取真正用到的两个原语（生命周期 / 标题），而不是整个 `selected`：
+   * 把对象塞进依赖会让任何字段变化都重启一次试玩进程。
    */
+  const selectedLifecycle = selected?.lifecycle_state;
+  const selectedTitle = selected?.intent.title ?? "";
   useEffect(() => {
-    if (!connected || !conn || !selectedId || !selected) return;
+    if (!connected || !conn || !selectedId || !selectedLifecycle) return;
     let cancelled = false;
     void (async () => {
-      const delivered = isDeliveredLifecycle(selected.lifecycle_state);
+      const delivered = isDeliveredLifecycle(selectedLifecycle);
       if (delivered) {
         try {
           const preview = await startRealPlaytest(conn, {
             contract_id: selectedId,
             attach_url: MERGED_PRODUCT_PREVIEW_URLS[0],
             stub: false,
-            title: selected.intent.title,
+            title: selectedTitle,
           });
           if (cancelled) return;
           setRealPlaytest({
@@ -1879,13 +1884,7 @@ ${trimmed}`
     return () => {
       cancelled = true;
     };
-  }, [
-    connected,
-    conn,
-    selectedId,
-    selected?.lifecycle_state,
-    selected?.intent.title,
-  ]);
+  }, [connected, conn, selectedId, selectedLifecycle, selectedTitle]);
 
   const loadBaseline = useCallback(
     async (opts?: { quiet?: boolean }) => {

@@ -24,7 +24,10 @@ function reworkDir(repoRoot: string, contractId: string): string {
   return dir;
 }
 
-export function reworkCounterPath(repoRoot: string, contractId: string): string {
+export function reworkCounterPath(
+  repoRoot: string,
+  contractId: string,
+): string {
   return path.join(reworkDir(repoRoot, contractId), REWORK_COUNTER_FILENAME);
 }
 

@@ -47,9 +47,9 @@ describe("TASK-H.6 dirty guidance", () => {
     expect(err.message).toContain("未提交");
     expect(err.message).not.toMatch(/stack|Confirm with the user/i);
     expect(err.guidance.exclusion_suggestions.length).toBeGreaterThanOrEqual(1);
-    expect(err.guidance.exclusion_suggestions.some((s) => s.action.length > 0)).toBe(
-      true,
-    );
+    expect(
+      err.guidance.exclusion_suggestions.some((s) => s.action.length > 0),
+    ).toBe(true);
     expect(classifyDirtyPath(".env.local").kind).toBe("secret");
     const g = buildDirtyAckGuidance([".env"]);
     expect(g.plain_message).toMatch(/凭证|密钥|登录/);

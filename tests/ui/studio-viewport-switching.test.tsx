@@ -48,7 +48,9 @@ describe("TASK-C.18 Studio 单页", () => {
     expect(screen.queryByTestId("studio-viewport-tab-dispute")).toBeNull();
     expect(screen.queryByTestId("studio-viewport-tab-contract")).toBeNull();
     expect(screen.queryByTestId("studio-viewport-tab-playtest")).toBeNull();
-    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("studio-viewport-panel-scheme"),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("only-scheme")).toBeInTheDocument();
     expect(screen.getByTestId("studio-viewport-shell")).toHaveAttribute(
       "data-single-pane",

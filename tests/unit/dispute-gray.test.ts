@@ -51,9 +51,9 @@ function graph(nodes: TaskNode[]): TaskGraph {
 
 describe("TASK-C.11e dispute gray", () => {
   it("shouldGrayAfterDispute for requirement change or failed report", () => {
-    expect(
-      shouldGrayAfterDispute({ userChoice: "REQUIREMENT_CHANGE" }),
-    ).toBe(true);
+    expect(shouldGrayAfterDispute({ userChoice: "REQUIREMENT_CHANGE" })).toBe(
+      true,
+    );
     expect(shouldGrayAfterDispute({ reportFailed: true })).toBe(true);
     expect(
       shouldGrayAfterDispute({ userChoice: "BUG_FIX", reportFailed: false }),

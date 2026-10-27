@@ -92,12 +92,14 @@ const LEGACY_ALLOWLIST: LegacyAllowance[] = [
   {
     file: "daemon/git/ensure-git-repo.ts",
     module: "daemon/git",
-    reason: "TASK-H.4：仅 execFileSync 调用 git init（固定 git 二进制，需用户确认）",
+    reason:
+      "TASK-H.4：仅 execFileSync 调用 git init（固定 git 二进制，需用户确认）",
   },
   {
     file: "daemon/pipeline/records-export-cleanup.ts",
     module: "daemon/pipeline",
-    reason: "TASK-H.8：仅 spawnSync zip 打包 .stagent/records/ 脱敏导出（不上云）",
+    reason:
+      "TASK-H.8：仅 spawnSync zip 打包 .stagent/records/ 脱敏导出（不上云）",
   },
 ];
 

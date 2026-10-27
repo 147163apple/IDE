@@ -18,10 +18,7 @@ export function ensureDraftsIsolated(repoRoot: string): string {
 }
 
 /** 断言路径落在 drafts 内；越界抛 E_DRAFT_ESCAPE */
-export function assertDraftPath(
-  repoRoot: string,
-  candidate: string,
-): string {
+export function assertDraftPath(repoRoot: string, candidate: string): string {
   const root = draftsDir(repoRoot);
   const resolved = path.resolve(root, candidate);
   if (!resolved.startsWith(root + path.sep) && resolved !== root) {

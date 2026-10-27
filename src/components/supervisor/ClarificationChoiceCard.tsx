@@ -53,7 +53,9 @@ export function ClarificationChoiceCard(props: ClarificationChoiceCardProps) {
                 }
               >
                 <span className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[12px] text-foreground">{opt.label}</span>
+                  <span className="text-[12px] text-foreground">
+                    {opt.label}
+                  </span>
                   {opt.recommended ? (
                     <span
                       data-testid="clarification-recommended-badge"

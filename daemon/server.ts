@@ -2555,6 +2555,10 @@ export class StagentDaemon {
       action?: unknown;
       title?: unknown;
       prototype_id?: unknown;
+      /** confirm 分支：期望的 Demo 呈现形态（非法值回落 INTERACTIVE_DEMO） */
+      demo_mode?: unknown;
+      /** confirm 分支：是否接受降级形态 */
+      accept_degraded?: unknown;
     };
     try {
       body = (await this.readJsonBody(req)) as typeof body;

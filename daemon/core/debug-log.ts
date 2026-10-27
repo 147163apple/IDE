@@ -312,9 +312,7 @@ export function appendClientTrace(
   appendDaemonLog(repoRoot, {
     kind: "client",
     ...(meta.requestId === undefined ? {} : { requestId: meta.requestId }),
-    ...(event.contractId === undefined
-      ? {}
-      : { contractId: event.contractId }),
+    ...(event.contractId === undefined ? {} : { contractId: event.contractId }),
     ...(event.sessionId === undefined ? {} : { sessionId: event.sessionId }),
     ...(event.viewport === undefined ? {} : { frame: event.viewport }),
     ...(event.disabled_reason === undefined

@@ -44,9 +44,7 @@ describe("TASK-C.15d AC-ISOL + EO-09 seal", () => {
     expect(dir.replace(/\\/g, "/")).toContain(".stagent/drafts");
     const ok = assertDraftPath(root, "plan.json");
     expect(ok.startsWith(dir)).toBe(true);
-    expect(() => assertDraftPath(root, "../../etc/passwd")).toThrow(
-      /越界/,
-    );
+    expect(() => assertDraftPath(root, "../../etc/passwd")).toThrow(/越界/);
   });
 
   it("本仓 .gitignore 含 .stagent/", () => {

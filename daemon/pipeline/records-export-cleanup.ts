@@ -48,7 +48,10 @@ function walkFiles(dir: string, base = dir): string[] {
 }
 
 /** 对 JSON 内容做 redactDeep 后写到 staging；其它文件原样拷贝（仍避免 .env 名） */
-function stageRedactedRecords(srcRoot: string, staging: string): {
+function stageRedactedRecords(
+  srcRoot: string,
+  staging: string,
+): {
   entries: string[];
   redacted_files: number;
 } {
@@ -108,8 +111,7 @@ export function exportRedactedRecordsZip(input: {
     .toISOString()
     .replace(/[:.]/g, "-");
   const outPath =
-    input.outPath ??
-    path.join(os.tmpdir(), `stagent-records-${stamp}.zip`);
+    input.outPath ?? path.join(os.tmpdir(), `stagent-records-${stamp}.zip`);
 
   if (!fs.existsSync(src)) {
     return {

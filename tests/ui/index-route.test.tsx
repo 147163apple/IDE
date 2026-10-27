@@ -152,7 +152,9 @@ describe("TASK-C.1 主页面接入三栏工作台", () => {
       "true",
     );
     // C.18：中间仅方案审阅；旧「运行 Worker / 执行验证 / 查看 Diff」不在日常单页
-    expect(screen.getByTestId("studio-viewport-panel-scheme")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("studio-viewport-panel-scheme"),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("studio-viewport-tabs")).toBeNull();
     expect(screen.getByTestId("scheme-review-pane")).toBeInTheDocument();
     // P.1 顺手修：顶栏分支改为显示主工作区真实分支（不再按合同拼 task/xxx）；

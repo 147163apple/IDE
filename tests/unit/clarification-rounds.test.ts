@@ -60,6 +60,8 @@ describe("TASK-C.11a clarification rounds", () => {
     const done = advanceClarificationSession(cur2, mid.nextRound!);
     expect(done.nextRound).toBeNull();
     expect(["completed", "capped"]).toContain(done.state.status);
-    expect(formatClarificationDefaultsSummary(done.state.answers).length).toBeGreaterThan(0);
+    expect(
+      formatClarificationDefaultsSummary(done.state.answers).length,
+    ).toBeGreaterThan(0);
   });
 });

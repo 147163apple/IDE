@@ -44,7 +44,11 @@ function makeRepo(): string {
   execFileSync("git", ["config", "user.name", "t"], { cwd: root });
   fs.writeFileSync(
     path.join(root, "package.json"),
-    JSON.stringify({ name: "demo-app", version: "1.2.3", main: "src/index.ts" }),
+    JSON.stringify({
+      name: "demo-app",
+      version: "1.2.3",
+      main: "src/index.ts",
+    }),
   );
   fs.mkdirSync(path.join(root, "src", "pages"), { recursive: true });
   fs.writeFileSync(
@@ -301,7 +305,10 @@ describe("TASK-C.14c dirty + guard + scope", () => {
         notes: [],
       };
       writeBaselineArchive(root, archive);
-      const merged = mergeBaselineProtectIntoForbidden(root, [".git/", ".stagent/"]);
+      const merged = mergeBaselineProtectIntoForbidden(root, [
+        ".git/",
+        ".stagent/",
+      ]);
       expect(merged).toContain(".env.local");
       expect(merged).toContain("src/dirty.ts");
       expect(merged).toContain(".git/");

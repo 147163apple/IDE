@@ -36,9 +36,9 @@ describe("TASK-C.15a EO-01 DeliveryState 完备", () => {
     expect(canTransitionDelivery("REWORK_REQUIRED", "ESCALATED_HUMAN")).toBe(
       true,
     );
-    expect(() =>
-      assertDeliveryTransition("DELIVERED", "ABORTED"),
-    ).toThrow(/非法 DeliveryState/);
+    expect(() => assertDeliveryTransition("DELIVERED", "ABORTED")).toThrow(
+      /非法 DeliveryState/,
+    );
   });
 
   it("Demo 就绪事件投影到 DEMO_READY", () => {
@@ -52,9 +52,9 @@ describe("TASK-C.15a EO-01 DeliveryState 完备", () => {
   });
 
   it("projectDeliveryState 识别 VERIFYING / escalated", () => {
-    expect(
-      projectDeliveryState({ lifecycle_state: "VERIFYING" }),
-    ).toBe("VERIFYING");
+    expect(projectDeliveryState({ lifecycle_state: "VERIFYING" })).toBe(
+      "VERIFYING",
+    );
     expect(
       projectDeliveryState({
         lifecycle_state: "EXECUTING",

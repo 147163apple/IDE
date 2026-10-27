@@ -1,10 +1,7 @@
 import type { DemoMode } from "../../../src/lib/state/delivery-state";
 import { canSign } from "../../../src/lib/state/delivery-state";
 import type { SchemeSnapshot } from "../../pipeline/scheme-snapshot-store";
-import {
-  readDemoConfirm,
-  type DemoConfirmRecord,
-} from "./prototypes";
+import { readDemoConfirm, type DemoConfirmRecord } from "./prototypes";
 
 /**
  * Daemon 权威签署门禁（SSOT v2.0.2 §3.5 / §4.6）。
@@ -84,9 +81,7 @@ function evaluateConfirmRecord(
 }
 
 /** 旧路径兜底：只认最新一条 Demo 记录；没有记录视为从未生成。 */
-export function evaluateLatestDemoGate(
-  repoRoot: string,
-): DemoSignGateDecision {
+export function evaluateLatestDemoGate(repoRoot: string): DemoSignGateDecision {
   const latest = readDemoConfirm(repoRoot);
   if (!latest) {
     return { ok: true, mode: "none", source: "never_generated" };
@@ -97,8 +92,7 @@ export function evaluateLatestDemoGate(
 /** 新主路径：按不可变确认快照判定，禁止用“没传 snapshot”绕过。 */
 export function evaluateSnapshotDemoGate(
   snapshot: SchemeSnapshot,
-  lookup: (prototypeId: string) => DemoConfirmRecord | null = () =>
-    null,
+  lookup: (prototypeId: string) => DemoConfirmRecord | null = () => null,
 ): DemoSignGateDecision {
   const { demo } = snapshot;
   if (demo.status === "none") {

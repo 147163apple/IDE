@@ -8,10 +8,7 @@ import {
   P0_TIMEOUT_MS,
 } from "./sandbox-scanner";
 import { inspectWorkspaceDirty } from "./dirty-check";
-import {
-  proveOsSandbox,
-  osSandboxFullyProven,
-} from "./os-sandbox";
+import { proveOsSandbox, osSandboxFullyProven } from "./os-sandbox";
 import {
   newBaselineScanId,
   writeBaselineArchive,
@@ -40,9 +37,7 @@ export interface ProgressiveScanOptions {
   dirtyOverride?: BaselineArchive["dirty"];
 }
 
-function capabilityNodesFromP0(
-  archive: BaselineArchive,
-): BaselineGraphNode[] {
+function capabilityNodesFromP0(archive: BaselineArchive): BaselineGraphNode[] {
   const nodes: BaselineGraphNode[] = [];
   const routes = archive.p0?.route_clues ?? [];
   for (const route of routes.slice(0, 24)) {
@@ -76,9 +71,7 @@ function capabilityNodesFromP0(
   return nodes;
 }
 
-function structureNodesFromDeep(
-  paths: string[],
-): BaselineGraphNode[] {
+function structureNodesFromDeep(paths: string[]): BaselineGraphNode[] {
   return paths.slice(0, 60).map((p) => ({
     id: `struct:${p}`,
     title: p,
@@ -104,8 +97,7 @@ export async function runProgressiveBaselineScan(
   const scanned_at = new Date().toISOString();
 
   const dirty =
-    options.dirtyOverride ??
-    (await inspectWorkspaceDirty(options.repoRoot));
+    options.dirtyOverride ?? (await inspectWorkspaceDirty(options.repoRoot));
 
   // TASK-C.14e：OS 沙盒反向证明（写+网）；失败则 logical_fallback，不得升级硬承诺
   const os_sandbox = proveOsSandbox(options.repoRoot);
@@ -179,8 +171,7 @@ export async function runProgressiveBaselineScan(
     structure_nodes: structureNodesFromDeep(deepRaw.structure_paths),
     capability_nodes: capabilityNodesFromP0(archive),
     test_file_count: deepRaw.test_file_count,
-    test_stat_note:
-      `静态发现 ${deepRaw.test_file_count} 个测试文件声明（不代表测试通过或覆盖良好）`,
+    test_stat_note: `静态发现 ${deepRaw.test_file_count} 个测试文件声明（不代表测试通过或覆盖良好）`,
     import_edge_count: deepRaw.import_edge_count,
     duration_ms: deepRaw.duration_ms,
     timed_out: deepRaw.timed_out,
@@ -208,7 +199,11 @@ export function isBaselineDeepIncomplete(
   archive: BaselineArchive | null,
 ): boolean {
   if (!archive) return true;
-  if (archive.phase === "p0" || archive.phase === "p1" || archive.phase === "p2") {
+  if (
+    archive.phase === "p0" ||
+    archive.phase === "p1" ||
+    archive.phase === "p2"
+  ) {
     return true;
   }
   return Boolean(archive.deep?.incomplete) && archive.phase !== "done";

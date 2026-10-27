@@ -271,7 +271,6 @@ export function WorkspaceLayout(props: WorkspaceLayoutProps) {
   useEffect(() => {
     if (!supervisorReq) return;
     focusSupervisor();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supervisorReq]);
   /**
    * C.10c/C.16：图谱入口已并入合同操作台单门；ActivityBar 不再单独挂图谱图标。

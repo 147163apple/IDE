@@ -101,7 +101,9 @@ export async function orchestrateJourney(
     return {
       intent,
       route: "CHAT",
-      plain_summary: withGuard(intent.reasons.join(" ") || "好的，我们慢慢聊。"),
+      plain_summary: withGuard(
+        intent.reasons.join(" ") || "好的，我们慢慢聊。",
+      ),
     };
   }
 

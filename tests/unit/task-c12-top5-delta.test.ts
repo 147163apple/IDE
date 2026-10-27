@@ -14,7 +14,10 @@ import {
   tokenFingerprint,
   resetExecTokenStoreForTests,
 } from "../../daemon/core/exec-token";
-import { SessionSeqTracker, shouldAcceptStateSeq } from "../../daemon/state/session-seq";
+import {
+  SessionSeqTracker,
+  shouldAcceptStateSeq,
+} from "../../daemon/state/session-seq";
 import { shouldApplyStateChanged } from "../../src/lib/state/state-seq-filter";
 import {
   assertNotMasqueradingAsDelivery,
@@ -72,7 +75,7 @@ function sampleContract(): SoftwareContract {
     schema_version: "1.2.0",
     contract_revision: 1,
     created_at: new Date().toISOString(),
-    creator: "tina",
+    creator: "user",
     worker_spec: {
       adapter_id: "stagent.builtin.ai-sdk",
       runtime_kind: "MANAGED_TOOL_CALLING",
@@ -141,7 +144,7 @@ describe("TASK-C.12a exec_token / resume_token", () => {
     const wt = tmp();
     fs.mkdirSync(path.join(wt, "src"), { recursive: true });
     const store = new ExecTokenStore();
-    let token: string | null = null;
+    const token: string | null = null;
     const gw = new ScopedWorktreeGateway(wt, sampleContract(), {
       execToken: { store, getToken: () => token },
     });
@@ -346,7 +349,13 @@ describe("TASK-C.12d demo_mode + can_sign + records", () => {
     expect(archive.ok).toBe(true);
     expect(
       fs.existsSync(
-        path.join(repo, ".stagent", "records", "c12-contract", "audit-manifest.json"),
+        path.join(
+          repo,
+          ".stagent",
+          "records",
+          "c12-contract",
+          "audit-manifest.json",
+        ),
       ),
     ).toBe(true);
     expect(archive.copied).toContain("audit-manifest.json");

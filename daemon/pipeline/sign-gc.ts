@@ -140,11 +140,17 @@ export function transitionMergedToDelivered(input: {
   const archive = archiveFn({
     repoRoot: input.repoRoot,
     contract_id: input.contract_id,
-    prototype_id: input.prototype_id,
     snapshot: input.snapshot ?? { contract_id: input.contract_id },
-    assertion_ids: input.assertion_ids,
-    commit_sha: input.commit_sha,
-    events: input.events,
+    // exactOptionalPropertyTypes：可选字段省略而非传 undefined，
+    // 让 archiveContractRecords 的「未提供」语义保持可区分
+    ...(input.prototype_id !== undefined
+      ? { prototype_id: input.prototype_id }
+      : {}),
+    ...(input.assertion_ids !== undefined
+      ? { assertion_ids: input.assertion_ids }
+      : {}),
+    ...(input.commit_sha !== undefined ? { commit_sha: input.commit_sha } : {}),
+    ...(input.events !== undefined ? { events: input.events } : {}),
   });
   if (!archive.ok) {
     return {

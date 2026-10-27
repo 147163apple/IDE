@@ -72,7 +72,9 @@ function collectRanges(): PortRange[] {
       });
     }
   }
-  return ranges.sort((a, b) => a.start - b.start || a.file.localeCompare(b.file));
+  return ranges.sort(
+    (a, b) => a.start - b.start || a.file.localeCompare(b.file),
+  );
 }
 
 function findOverlaps(ranges: PortRange[]): string[] {
@@ -96,7 +98,10 @@ function findOverlaps(ranges: PortRange[]): string[] {
 
 function formatMap(ranges: PortRange[]): string {
   return ranges
-    .map((r) => `  ${String(r.start).padStart(5)}–${String(r.end).padEnd(5)} ${r.file}:${r.line}`)
+    .map(
+      (r) =>
+        `  ${String(r.start).padStart(5)}–${String(r.end).padEnd(5)} ${r.file}:${r.line}`,
+    )
     .join("\n");
 }
 
@@ -106,7 +111,9 @@ describe("测试套件端口登记表", () => {
   it("声明了足够多的区间（防止正则失配后静默通过）", () => {
     expect(ranges.length).toBeGreaterThanOrEqual(20);
     for (const r of ranges) {
-      expect(r.end, `${r.file}:${r.line} 的区间反向`).toBeGreaterThanOrEqual(r.start);
+      expect(r.end, `${r.file}:${r.line} 的区间反向`).toBeGreaterThanOrEqual(
+        r.start,
+      );
     }
   });
 

@@ -6,7 +6,8 @@ import path from "node:path";
 import { normalizePath } from "../../src/lib/scope";
 
 export const E_WORKTREE_DIRTY = "E_WORKTREE_DIRTY" as const;
-export const DIRTY_ACK_EXCLUSIONS_REL = ".stagent/dirty-ack-exclusions.json" as const;
+export const DIRTY_ACK_EXCLUSIONS_REL =
+  ".stagent/dirty-ack-exclusions.json" as const;
 
 export interface DirtyExclusionSuggestion {
   path: string;
@@ -119,7 +120,9 @@ export function recordAcknowledgedDirtyExclusions(
   let prev: string[] = [];
   if (fs.existsSync(file)) {
     try {
-      const raw = JSON.parse(fs.readFileSync(file, "utf8")) as DirtyAckExclusionsFile;
+      const raw = JSON.parse(
+        fs.readFileSync(file, "utf8"),
+      ) as DirtyAckExclusionsFile;
       if (Array.isArray(raw.dirty_exclusions)) prev = raw.dirty_exclusions;
     } catch {
       prev = [];
@@ -139,9 +142,13 @@ export function loadAcknowledgedDirtyExclusions(repoRoot: string): string[] {
   const file = dirtyAckExclusionsPath(repoRoot);
   if (!fs.existsSync(file)) return [];
   try {
-    const raw = JSON.parse(fs.readFileSync(file, "utf8")) as DirtyAckExclusionsFile;
+    const raw = JSON.parse(
+      fs.readFileSync(file, "utf8"),
+    ) as DirtyAckExclusionsFile;
     if (!Array.isArray(raw.dirty_exclusions)) return [];
-    return [...new Set(raw.dirty_exclusions.map(normalizePath).filter(Boolean))].sort();
+    return [
+      ...new Set(raw.dirty_exclusions.map(normalizePath).filter(Boolean)),
+    ].sort();
   } catch {
     return [];
   }
@@ -153,7 +160,9 @@ export function mergeDirtyIntoForbidden(
 ): string[] {
   return [
     ...new Set(
-      [...existingForbidden, ...dirtyFiles].map((p) => normalizePath(p)).filter(Boolean),
+      [...existingForbidden, ...dirtyFiles]
+        .map((p) => normalizePath(p))
+        .filter(Boolean),
     ),
   ].sort();
 }

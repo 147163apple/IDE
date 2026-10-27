@@ -81,7 +81,10 @@ function closeOutcome(ws: WebSocket, timeoutMs = 5_000): Promise<CloseOutcome> {
           type?: string;
           payload?: { message?: unknown };
         };
-        if (frame.type === "ERROR" && typeof frame.payload?.message === "string") {
+        if (
+          frame.type === "ERROR" &&
+          typeof frame.payload?.message === "string"
+        ) {
           reason = frame.payload.message;
         }
       } catch {

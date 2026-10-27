@@ -154,8 +154,11 @@ export function toStateChangedPayload(
   const delivery_state = projectDeliveryState({
     lifecycle_state: record.lifecycle_state,
     activity_transient: extras?.activity_transient ?? null,
-    demo_confirmed: extras?.demo_confirmed,
-    demo_mode: extras?.demo_mode,
+    // exactOptionalPropertyTypes：这两个字段可能没传，省略键而不是显式传 undefined
+    ...(extras?.demo_confirmed !== undefined
+      ? { demo_confirmed: extras.demo_confirmed }
+      : {}),
+    ...(extras?.demo_mode !== undefined ? { demo_mode: extras.demo_mode } : {}),
   });
   return {
     contract_id: record.contract_id,

@@ -241,7 +241,6 @@ export interface RealPlaytestStatusPayload {
   message?: string;
 }
 
-
 /** TASK-C.14f：基线渐进扫进度（与 GET /api/baseline 同形，供 WS 覆盖） */
 export interface BaselineProgressPayload {
   phase: "stub" | "p0" | "deep" | "done" | "failed" | "accepted";
@@ -329,6 +328,7 @@ export type FrameDirection =
  * - requiresAuth：未通过首帧 AUTH 的连接是否可收发该帧（仅 AUTH/AUTH_OK/ERROR 豁免）
  * - maxPayloadBytes：默认 2MB 上限（TASK-D.1 G-12）
  * - spec：v1.2.1 = 规范 §6.1 原始帧；v1.6.1 = v1.6.1 §6.1 新增广播帧；
+ *   v1.6.2 = v1.6.2 开发任务规范新增帧（如 TASK-C.14f 的基线扫描进度）；
  *   extension = 历史扩展帧（仅兼容保留）
  */
 export interface FrameCatalogEntry {
@@ -336,7 +336,7 @@ export interface FrameCatalogEntry {
   direction: FrameDirection;
   requiresAuth: boolean;
   maxPayloadBytes: number;
-  spec: "v1.2.1" | "v1.6.1" | "extension";
+  spec: "v1.2.1" | "v1.6.1" | "v1.6.2" | "extension";
   description: string;
 }
 

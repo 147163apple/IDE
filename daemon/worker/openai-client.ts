@@ -102,8 +102,7 @@ export class OpenAiWorkerClient implements WorkerModelClient {
           ...(input.signal === undefined ? {} : { abortSignal: input.signal }),
         });
         const usage = result.usage as
-          | { inputTokens?: number; outputTokens?: number }
-          | undefined;
+          { inputTokens?: number; outputTokens?: number } | undefined;
         return {
           object: result.object,
           usage: {

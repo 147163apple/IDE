@@ -84,40 +84,42 @@ export function TaskGraphPane(props: TaskGraphPaneProps) {
               </div>
             ) : null}
             <TaskGraphPanel
-            graph={props.graph}
-            {...(props.loading === undefined ? {} : { loading: props.loading })}
-            {...(props.error === undefined ? {} : { error: props.error })}
-            {...(props.onRefresh === undefined
-              ? {}
-              : { onRefresh: props.onRefresh })}
-            {...(props.onConfirmPrototype === undefined
-              ? {}
-              : { onConfirmPrototype: props.onConfirmPrototype })}
-            {...(props.confirmPrototypeBusy === undefined
-              ? {}
-              : { confirmPrototypeBusy: props.confirmPrototypeBusy })}
-            {...(props.onStartNode === undefined
-              ? {}
-              : { onStartNode: props.onStartNode })}
-            {...(props.onVerifyNode === undefined
-              ? {}
-              : { onVerifyNode: props.onVerifyNode })}
-            {...(props.actionBusy === undefined
-              ? {}
-              : { actionBusy: props.actionBusy })}
-            {...(props.onRunWorker === undefined
-              ? {}
-              : { onRunWorker: props.onRunWorker })}
-            {...(props.canRunWorker === undefined
-              ? {}
-              : { canRunWorker: props.canRunWorker })}
-            {...(props.runWorkerBusy === undefined
-              ? {}
-              : { runWorkerBusy: props.runWorkerBusy })}
-            {...(props.runWorkerLabel === undefined
-              ? {}
-              : { runWorkerLabel: props.runWorkerLabel })}
-          />
+              graph={props.graph}
+              {...(props.loading === undefined
+                ? {}
+                : { loading: props.loading })}
+              {...(props.error === undefined ? {} : { error: props.error })}
+              {...(props.onRefresh === undefined
+                ? {}
+                : { onRefresh: props.onRefresh })}
+              {...(props.onConfirmPrototype === undefined
+                ? {}
+                : { onConfirmPrototype: props.onConfirmPrototype })}
+              {...(props.confirmPrototypeBusy === undefined
+                ? {}
+                : { confirmPrototypeBusy: props.confirmPrototypeBusy })}
+              {...(props.onStartNode === undefined
+                ? {}
+                : { onStartNode: props.onStartNode })}
+              {...(props.onVerifyNode === undefined
+                ? {}
+                : { onVerifyNode: props.onVerifyNode })}
+              {...(props.actionBusy === undefined
+                ? {}
+                : { actionBusy: props.actionBusy })}
+              {...(props.onRunWorker === undefined
+                ? {}
+                : { onRunWorker: props.onRunWorker })}
+              {...(props.canRunWorker === undefined
+                ? {}
+                : { canRunWorker: props.canRunWorker })}
+              {...(props.runWorkerBusy === undefined
+                ? {}
+                : { runWorkerBusy: props.runWorkerBusy })}
+              {...(props.runWorkerLabel === undefined
+                ? {}
+                : { runWorkerLabel: props.runWorkerLabel })}
+            />
           </>
         }
       />

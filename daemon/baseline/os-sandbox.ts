@@ -138,15 +138,11 @@ function runUnderDarwinSandbox(
   const profile = buildDarwinSeatbeltProfile(repoRoot);
   const profilePath = writeTempProfile(profile);
   try {
-    const r = spawnSync(
-      "/usr/bin/sandbox-exec",
-      ["-f", profilePath, ...argv],
-      {
-        encoding: "utf8",
-        timeout: opts?.timeoutMs ?? 15_000,
-        env: { ...process.env, STAGENT_OS_SANDBOX: "1" },
-      },
-    );
+    const r = spawnSync("/usr/bin/sandbox-exec", ["-f", profilePath, ...argv], {
+      encoding: "utf8",
+      timeout: opts?.timeoutMs ?? 15_000,
+      env: { ...process.env, STAGENT_OS_SANDBOX: "1" },
+    });
     return {
       ok: r.status === 0,
       stdout: r.stdout ?? "",
@@ -198,11 +194,7 @@ try {
   process.exit(2);
 }
 `;
-    const r = runUnderDarwinSandbox(root, [
-      process.execPath,
-      "-e",
-      script,
-    ]);
+    const r = runUnderDarwinSandbox(root, [process.execPath, "-e", script]);
     const code = (r.stdout || "").trim() || null;
     const denied = probeDeniedFromOutput(r.stdout, "WROTE");
     const stillMissing = !fs.existsSync(probeAbs);
@@ -233,7 +225,11 @@ try {
     );
     // unshare alone does not make FS read-only; try mount if root
     const code = (r.stdout || "").trim();
-    if (code && code !== "WROTE" && (DARWIN_WRITE_OK.has(code) || code === "EROFS")) {
+    if (
+      code &&
+      code !== "WROTE" &&
+      (DARWIN_WRITE_OK.has(code) || code === "EROFS")
+    ) {
       return {
         denied: !fs.existsSync(probeAbs),
         code,
@@ -365,10 +361,20 @@ export function proveOsSandbox(repoRoot: string): BaselineOsSandboxProof {
     );
   }
 
-  if (write.denied && write.code && !DARWIN_WRITE_OK.has(write.code) && write.code !== "EROFS") {
+  if (
+    write.denied &&
+    write.code &&
+    !DARWIN_WRITE_OK.has(write.code) &&
+    write.code !== "EROFS"
+  ) {
     notes.push(`写拒绝码 ${write.code} 非常见集合，已如实记录`);
   }
-  if (net.denied && net.code && !DARWIN_NET_OK.has(net.code) && net.code !== "TIMEOUT") {
+  if (
+    net.denied &&
+    net.code &&
+    !DARWIN_NET_OK.has(net.code) &&
+    net.code !== "TIMEOUT"
+  ) {
     notes.push(`断网码 ${net.code} 非常见集合，已如实记录`);
   }
 

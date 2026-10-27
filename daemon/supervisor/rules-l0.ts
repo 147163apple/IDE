@@ -296,8 +296,7 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
     ).filter(isSafeContractPath),
   );
   // 兜底：过滤后为空（例如用户只写了绝对路径）说明意图无法落到仓库内
-  const baseWritable =
-    writablePaths.length > 0 ? writablePaths : ["src/**"];
+  const baseWritable = writablePaths.length > 0 ? writablePaths : ["src/**"];
 
   const readonlyPaths = dedupe(
     (input.scope?.readonlyPaths ?? ["docs/**"]).filter(isSafeContractPath),
@@ -324,8 +323,7 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
   });
 
   const greenfieldNpm =
-    isGreenfieldRepo(input.repoRoot) &&
-    commandsNeedNpmVerification(commands);
+    isGreenfieldRepo(input.repoRoot) && commandsNeedNpmVerification(commands);
 
   const budget: BudgetLimits = {
     ...DEFAULT_DRAFT_BUDGET,
@@ -340,8 +338,8 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
   const dirtyPlain = formatDirtyExclusionsPlain(dirtyExclusions);
   if (dirtyPlain) {
     unresolved.push(
-      `本地脏区已列入禁写（施工绝不覆盖）：${dirtyExclusions.slice(0, 8).join("、")}`
-      + (dirtyExclusions.length > 8 ? ` 等 ${dirtyExclusions.length} 个` : ""),
+      `本地脏区已列入禁写（施工绝不覆盖）：${dirtyExclusions.slice(0, 8).join("、")}` +
+        (dirtyExclusions.length > 8 ? ` 等 ${dirtyExclusions.length} 个` : ""),
     );
   }
   if (protection.hit && protection.files.length > 0) {

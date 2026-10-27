@@ -35,7 +35,7 @@ function mkRepo(): string {
     JSON.stringify({ name: "c14e-fixture", version: "0.0.1" }),
   );
   fs.writeFileSync(path.join(root, "README.md"), "# c14e\n");
-  execSync('git add . && git -c user.email=t@t -c user.name=t commit -m init', {
+  execSync("git add . && git -c user.email=t@t -c user.name=t commit -m init", {
     cwd: root,
   });
   return root;
@@ -46,8 +46,7 @@ describe("TASK-C.14e OS sandbox", () => {
 
   /** 沙箱能否真正应用；不能时「真跑一次」的用例跳过，而不是报假红 */
   const SANDBOX_APPLICABLE = isOsSandboxApplicable();
-  const CAN_PROVE =
-    process.platform === "darwin" ? SANDBOX_APPLICABLE : true;
+  const CAN_PROVE = process.platform === "darwin" ? SANDBOX_APPLICABLE : true;
 
   beforeEach(() => {
     root = mkRepo();
@@ -78,65 +77,79 @@ describe("TASK-C.14e OS sandbox", () => {
     expect(profile).toContain('(subpath "/private/tmp")');
   });
 
-  it.skipIf(!CAN_PROVE)("test_scan_fails_on_write: sandbox write to repo is denied (EPERM/EROFS)", () => {
-    if (process.platform !== "darwin") {
+  it.skipIf(!CAN_PROVE)(
+    "test_scan_fails_on_write: sandbox write to repo is denied (EPERM/EROFS)",
+    () => {
+      if (process.platform !== "darwin") {
+        const r = proveScanWriteDenied(root);
+        expect(r).toHaveProperty("denied");
+        expect(r).toHaveProperty("mode");
+        return;
+      }
       const r = proveScanWriteDenied(root);
-      expect(r).toHaveProperty("denied");
-      expect(r).toHaveProperty("mode");
-      return;
-    }
-    const r = proveScanWriteDenied(root);
-    expect(r.denied).toBe(true);
-    expect(r.mode).toBe("sandbox-exec");
-    // Darwin 平台等价：EPERM（非 Linux EROFS）
-    expect(["EPERM", "EROFS", "EACCES"]).toContain(r.code);
-    const probe = path.join(
-      root,
-      `.stagent-c14e-write-probe-${process.pid}.tmp`,
-    );
-    expect(fs.existsSync(probe)).toBe(false);
-  });
+      expect(r.denied).toBe(true);
+      expect(r.mode).toBe("sandbox-exec");
+      // Darwin 平台等价：EPERM（非 Linux EROFS）
+      expect(["EPERM", "EROFS", "EACCES"]).toContain(r.code);
+      const probe = path.join(
+        root,
+        `.stagent-c14e-write-probe-${process.pid}.tmp`,
+      );
+      expect(fs.existsSync(probe)).toBe(false);
+    },
+  );
 
-  it.skipIf(!CAN_PROVE)("test_scan_fails_on_outbound_network: sandbox outbound fails", () => {
-    if (process.platform !== "darwin") {
+  it.skipIf(!CAN_PROVE)(
+    "test_scan_fails_on_outbound_network: sandbox outbound fails",
+    () => {
+      if (process.platform !== "darwin") {
+        const r = proveScanNetworkDenied(root);
+        expect(r).toHaveProperty("denied");
+        return;
+      }
       const r = proveScanNetworkDenied(root);
-      expect(r).toHaveProperty("denied");
-      return;
-    }
-    const r = proveScanNetworkDenied(root);
-    expect(r.denied).toBe(true);
-    expect(r.mode).toBe("sandbox-exec");
-    expect(r.code).not.toBe("CONNECTED");
-    expect(r.code).toBeTruthy();
-  });
+      expect(r.denied).toBe(true);
+      expect(r.mode).toBe("sandbox-exec");
+      expect(r.code).not.toBe("CONNECTED");
+      expect(r.code).toBeTruthy();
+    },
+  );
 
-  it.skipIf(!CAN_PROVE)("proveOsSandbox aggregates write+network on Darwin", () => {
-    if (process.platform !== "darwin") return;
-    const proof = proveOsSandbox(root);
-    expect(proof.platform).toBe("darwin");
-    expect(proof.write_denied).toBe(true);
-    expect(proof.network_denied).toBe(true);
-    expect(proof.mode).toBe("sandbox-exec");
-    expect(osSandboxFullyProven(proof)).toBe(true);
-    expect(proof.notes.some((n) => n.includes("EPERM"))).toBe(true);
-  });
+  it.skipIf(!CAN_PROVE)(
+    "proveOsSandbox aggregates write+network on Darwin",
+    () => {
+      if (process.platform !== "darwin") return;
+      const proof = proveOsSandbox(root);
+      expect(proof.platform).toBe("darwin");
+      expect(proof.write_denied).toBe(true);
+      expect(proof.network_denied).toBe(true);
+      expect(proof.mode).toBe("sandbox-exec");
+      expect(osSandboxFullyProven(proof)).toBe(true);
+      expect(proof.notes.some((n) => n.includes("EPERM"))).toBe(true);
+    },
+  );
 
-  it.skipIf(!CAN_PROVE)("progressive scan attaches os_sandbox proof to archive", async () => {
-    const archive = await runProgressiveBaselineScan({
-      repoRoot: root,
-      toolVersion: "0.1.0-c14e-test",
-      p0TimeoutMs: 5_000,
-      deepTimeoutMs: 5_000,
-    });
-    expect(archive.os_sandbox).toBeTruthy();
-    expect(archive.os_sandbox!.platform).toBe(process.platform);
-    if (process.platform === "darwin") {
-      expect(archive.os_sandbox!.write_denied).toBe(true);
-      expect(archive.os_sandbox!.network_denied).toBe(true);
-      expect(archive.os_sandbox!.mode).toBe("sandbox-exec");
-      expect(archive.notes.some((n) => n.includes("OS 沙盒已证明"))).toBe(true);
-    }
-  });
+  it.skipIf(!CAN_PROVE)(
+    "progressive scan attaches os_sandbox proof to archive",
+    async () => {
+      const archive = await runProgressiveBaselineScan({
+        repoRoot: root,
+        toolVersion: "0.1.0-c14e-test",
+        p0TimeoutMs: 5_000,
+        deepTimeoutMs: 5_000,
+      });
+      expect(archive.os_sandbox).toBeTruthy();
+      expect(archive.os_sandbox!.platform).toBe(process.platform);
+      if (process.platform === "darwin") {
+        expect(archive.os_sandbox!.write_denied).toBe(true);
+        expect(archive.os_sandbox!.network_denied).toBe(true);
+        expect(archive.os_sandbox!.mode).toBe("sandbox-exec");
+        expect(archive.notes.some((n) => n.includes("OS 沙盒已证明"))).toBe(
+          true,
+        );
+      }
+    },
+  );
 
   // ── 判定口径（纯函数，任何平台都跑）──────────────────────────────
   // 这组用例守的是一个真实缺陷：网络探针原先用 `code !== "CONNECTED"` 判定，

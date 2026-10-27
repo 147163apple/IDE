@@ -69,7 +69,12 @@ function makeDraft(overrides?: { wipeId?: boolean }): ContractDraftGenerated {
       strictly_forbidden_paths: [],
       dirty_exclusions: [],
       commands: [],
-      budget: {},
+      budget: {
+        max_file_modifications: 10,
+        max_total_diff_lines: 500,
+        max_duration_seconds: 600,
+        max_verification_retries: 3,
+      },
       protected_files: [],
       protected_entry_names: [],
       needs_protection_approval: false,
@@ -103,7 +108,9 @@ describe("TASK-H.5 draft contract_id", () => {
     expect(journeyDraftSuccessFields(result.contract_id!).contract_id).toBe(
       result.contract_id,
     );
-    expect(store.get(result.contract_id!)?.contract_id).toBe(result.contract_id);
+    expect(store.get(result.contract_id!)?.contract_id).toBe(
+      result.contract_id,
+    );
   });
 
   it("故意打断创建（空 id）→ 不得出现无 id 却可签署的成功态", async () => {

@@ -13,9 +13,7 @@ export const DEMO_CONFIRM_STATE_FILE =
   ".stagent/metadata/demo-confirm.json" as const;
 
 export type DemoMode =
-  | "INTERACTIVE_DEMO"
-  | "NATIVE_FLOW_CARD"
-  | "DEGRADED_FLOW_CARD";
+  "INTERACTIVE_DEMO" | "NATIVE_FLOW_CARD" | "DEGRADED_FLOW_CARD";
 
 export interface DemoConfirmRecord {
   prototype_id: string;
@@ -153,9 +151,9 @@ export function assertDemoConfirmedForWrite(
   }
   const rec = readDemoConfirm(repoRoot, prototypeId);
   if (!rec?.confirmed) {
-    const err = new Error(
-      "未确认 Demo：请先感官对齐后再写真码",
-    ) as Error & { code: string };
+    const err = new Error("未确认 Demo：请先感官对齐后再写真码") as Error & {
+      code: string;
+    };
     err.code = "E_DEMO_NOT_CONFIRMED";
     throw err;
   }
@@ -215,7 +213,6 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
-
 
 /** TASK-C.12d：基于确认记录评估 can_sign（委托 EO-06 硬谓词） */
 export function evaluateCanSign(

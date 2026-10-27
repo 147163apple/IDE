@@ -85,10 +85,7 @@ export function sealWorktree(input: {
   now?: () => Date;
 }): SealResult {
   const dir = worktreeDir(input.repoRoot, input.contract_id);
-  const manifestPath = worktreeManifestPath(
-    input.repoRoot,
-    input.contract_id,
-  );
+  const manifestPath = worktreeManifestPath(input.repoRoot, input.contract_id);
   try {
     fs.mkdirSync(dir, { recursive: true });
     const now = (input.now ?? (() => new Date()))().toISOString();

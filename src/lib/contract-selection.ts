@@ -32,7 +32,8 @@ export function pickDefaultContractId(
   if (contracts.length === 1) return contracts[0]!.contract_id;
 
   const sorted = [...contracts].sort((a, b) => {
-    const rd = rankLifecycle(a.lifecycle_state) - rankLifecycle(b.lifecycle_state);
+    const rd =
+      rankLifecycle(a.lifecycle_state) - rankLifecycle(b.lifecycle_state);
     if (rd !== 0) return rd;
     return stamp(b).localeCompare(stamp(a));
   });
@@ -48,6 +49,8 @@ export const MERGED_PRODUCT_PREVIEW_URLS = [
   "http://127.0.0.1:5173/",
 ] as const;
 
-export function isDeliveredLifecycle(state: string | null | undefined): boolean {
+export function isDeliveredLifecycle(
+  state: string | null | undefined,
+): boolean {
   return state === "MERGED" || state === "AUDITED";
 }

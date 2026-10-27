@@ -8,15 +8,12 @@ import type { PresentationState } from "@/lib/state/presentation-state";
  */
 export const STUDIO_VIEWPORT_IDS = ["scheme"] as const;
 
-export type StudioViewportId = (typeof STUDIO_VIEWPORT_IDS)[number] | LegacyStudioViewportId;
+export type StudioViewportId =
+  (typeof STUDIO_VIEWPORT_IDS)[number] | LegacyStudioViewportId;
 
 /** @deprecated C.18 起 UI 不再切换；仅兼容旧调用 */
 export type LegacyStudioViewportId =
-  | "demo"
-  | "graph"
-  | "dispute"
-  | "contract"
-  | "playtest";
+  "demo" | "graph" | "dispute" | "contract" | "playtest";
 
 export const STUDIO_VIEWPORT_LABEL: Readonly<Record<string, string>> = {
   scheme: "方案审阅",
@@ -44,8 +41,6 @@ export function resolveActiveViewport(input: {
 }
 
 /** 旧 suggest_viewport → 一律 scheme（单页） */
-export function mapLegacyViewportToScheme(
-  _legacy?: string | null,
-): "scheme" {
+export function mapLegacyViewportToScheme(_legacy?: string | null): "scheme" {
   return "scheme";
 }

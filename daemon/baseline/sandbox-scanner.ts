@@ -54,9 +54,7 @@ export function assertBaselineNetworkDenied(_url?: string): never {
  * 扫描实现不得 `require`/`import` 用户项目内的 vite/webpack/config。
  */
 export function assertNoDynamicProjectExec(relPath: string): never {
-  throw new Error(
-    `基线扫描禁止动态执行项目脚本: ${relPath}`,
-  );
+  throw new Error(`基线扫描禁止动态执行项目脚本: ${relPath}`);
 }
 
 function safeReadText(abs: string, maxBytes = 256_000): string | null {
@@ -147,11 +145,7 @@ function extractModuleEntries(repoRoot: string): string[] {
   return out.slice(0, 20);
 }
 
-export type ScanTruncateReason =
-  | "max_files"
-  | "max_depth"
-  | "timeout"
-  | null;
+export type ScanTruncateReason = "max_files" | "max_depth" | "timeout" | null;
 
 export interface WalkCapState {
   filesSeen: number;
@@ -227,7 +221,9 @@ function walkFiles(
   }
 }
 
-export function truncatePlainMessage(reason: ScanTruncateReason): string | null {
+export function truncatePlainMessage(
+  reason: ScanTruncateReason,
+): string | null {
   if (reason === "max_files") {
     return "扫描已截断：文件数达到上限，仅保留已探查部分（项目过大时属正常保护）。";
   }
@@ -253,7 +249,9 @@ export interface RunP0ScanOptions {
 /**
  * 同步跑 P0 骨架。绝不动态执行项目脚本、不触网。
  */
-export function runP0SkeletonScan(options: RunP0ScanOptions): BaselineP0Skeleton {
+export function runP0SkeletonScan(
+  options: RunP0ScanOptions,
+): BaselineP0Skeleton {
   const now = options.now ?? Date.now;
   const started = now();
   const timeoutMs = options.timeoutMs ?? P0_TIMEOUT_MS;
@@ -273,8 +271,7 @@ export function runP0SkeletonScan(options: RunP0ScanOptions): BaselineP0Skeleton
     try {
       const pkg = JSON.parse(pkgRaw) as { name?: string; version?: string };
       package_name = typeof pkg.name === "string" ? pkg.name : null;
-      package_version =
-        typeof pkg.version === "string" ? pkg.version : null;
+      package_version = typeof pkg.version === "string" ? pkg.version : null;
     } catch {
       package_name = null;
     }
@@ -386,7 +383,10 @@ export function runDeepStaticScan(options: {
     (file) => {
       const rel = path.relative(repoRoot, file).split(path.sep).join("/");
       if (structure_paths.length < 200) structure_paths.push(rel);
-      if (/\.(test|spec)\.(tsx?|jsx?)$/.test(rel) || /\/__tests__\//.test(rel)) {
+      if (
+        /\.(test|spec)\.(tsx?|jsx?)$/.test(rel) ||
+        /\/__tests__\//.test(rel)
+      ) {
         test_file_count += 1;
       }
       if (/\.(tsx?|jsx?|mjs|cjs)$/.test(rel)) {

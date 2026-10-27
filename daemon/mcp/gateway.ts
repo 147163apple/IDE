@@ -49,11 +49,7 @@ import {
   scopeExplicitlyIncludesTests,
 } from "../guard/test-integrity";
 import { guardAgentFileOperation } from "../protection/protection-list";
-import {
-  ExecTokenError,
-  type ExecTokenStore,
-} from "../core/exec-token";
-
+import { ExecTokenError, type ExecTokenStore } from "../core/exec-token";
 
 /**
  * TASK-D.3 / D-5：命令超时分层。
@@ -291,19 +287,14 @@ export class ScopedWorktreeGateway {
   }
 
   /** Scope 拒绝时的错误码：脏区优先升格为 E_OUT_OF_SCOPE_UNTRACKED */
-  private scopeBlockCode(
-    reason: string | undefined,
-    relPath: string,
-  ): string {
+  private scopeBlockCode(reason: string | undefined, relPath: string): string {
     return scopeErrorCode(reason, {
       dirtyExclusionHit: this.isDirtyExclusion(relPath),
     });
   }
 
   /** TASK-C.12a：写路径 exec_token 校验；未配置 execToken 时跳过（兼容旧测） */
-  private assertExecTokenOrDeny(
-    tool: string,
-  ): MCPToolCallResult | null {
+  private assertExecTokenOrDeny(tool: string): MCPToolCallResult | null {
     if (!this.execToken) return null;
     try {
       this.execToken.store.assertExecTokenForWrite({
@@ -1061,7 +1052,7 @@ export class ScopedWorktreeGateway {
       const dirtyHit = this.isDirtyExclusion(safe.relativePath);
       const msg = dirtyHit
         ? `[E_OUT_OF_SCOPE_UNTRACKED] 拒绝覆盖本地脏区「${safe.relativePath}」（基线排除，施工绝不触碰）`
-        : (access.message || "Write permission denied");
+        : access.message || "Write permission denied";
       this.logAudit({
         tool: "stagent_write_file",
         input: { path: rawPath },
@@ -1077,9 +1068,7 @@ export class ScopedWorktreeGateway {
       });
       return {
         isError: true,
-        content: [
-          { type: "text", text: msg },
-        ],
+        content: [{ type: "text", text: msg }],
         error: {
           code,
           message: access.message || "Write permission denied",
@@ -1708,7 +1697,7 @@ export class ScopedWorktreeGateway {
       const dirtyHit = this.isDirtyExclusion(safe.relativePath);
       const msg = dirtyHit
         ? `[E_OUT_OF_SCOPE_UNTRACKED] 拒绝删除本地脏区「${safe.relativePath}」（基线排除，施工绝不触碰）`
-        : (access.message || "Delete permission denied");
+        : access.message || "Delete permission denied";
       this.logAudit({
         tool: "stagent_delete_file",
         input: { path: rawPath },
@@ -1724,9 +1713,7 @@ export class ScopedWorktreeGateway {
       });
       return {
         isError: true,
-        content: [
-          { type: "text", text: msg },
-        ],
+        content: [{ type: "text", text: msg }],
         error: {
           code,
           message: msg,

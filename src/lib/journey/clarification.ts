@@ -70,8 +70,7 @@ export function buildClarificationRound(
 ): ClarificationRound {
   assertClarificationRoundAllowed(roundIndex);
   const text = intentText.trim() || "新功能";
-  const short =
-    text.length > 24 ? `${text.slice(0, 24)}…` : text;
+  const short = text.length > 24 ? `${text.slice(0, 24)}…` : text;
 
   if (roundIndex === 0) {
     return {
@@ -240,10 +239,7 @@ export function advanceClarificationSession(
   }
 
   const nextIndex = currentRound.round_index + 1;
-  if (
-    !currentRound.may_follow_up ||
-    nextIndex >= CLARIFICATION_MAX_ROUNDS
-  ) {
+  if (!currentRound.may_follow_up || nextIndex >= CLARIFICATION_MAX_ROUNDS) {
     return {
       state: {
         ...state,
@@ -284,9 +280,7 @@ export function advanceClarificationSession(
   }
 }
 
-export function startClarificationSession(
-  intentText: string,
-): {
+export function startClarificationSession(intentText: string): {
   state: ClarificationSessionState;
   round: ClarificationRound;
 } {

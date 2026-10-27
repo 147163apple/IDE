@@ -44,7 +44,10 @@ export function recordsDir(repoRoot: string, contractId: string): string {
   );
 }
 
-export function auditManifestPath(repoRoot: string, contractId: string): string {
+export function auditManifestPath(
+  repoRoot: string,
+  contractId: string,
+): string {
   return path.join(recordsDir(repoRoot, contractId), AUDIT_MANIFEST_FILENAME);
 }
 
@@ -59,7 +62,9 @@ function sanitizeContractId(raw: string): string {
 
 function sha256Stable(value: unknown): string {
   const json = JSON.stringify(value, (_k, v) => v);
-  return createHash("sha256").update(json ?? "null").digest("hex");
+  return createHash("sha256")
+    .update(json ?? "null")
+    .digest("hex");
 }
 
 /**

@@ -23,7 +23,10 @@ describe("TASK-C.11a ClarificationChoiceCard", () => {
       .getAllByTestId("clarification-option")
       .find((el) => el.getAttribute("data-recommended") === "true")!;
     fireEvent.click(recommended);
-    expect(onSelect).toHaveBeenCalledWith(q.id, recommended.getAttribute("data-option-id"));
+    expect(onSelect).toHaveBeenCalledWith(
+      q.id,
+      recommended.getAttribute("data-option-id"),
+    );
   });
 });
 

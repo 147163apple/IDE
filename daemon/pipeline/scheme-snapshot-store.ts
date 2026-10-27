@@ -73,10 +73,9 @@ function stableStringify(value: unknown): string {
  * （含 scheme_id / scheme_revision / 模块 / 链路 / 抉择）全部参与，
  * 任何实质改动都必须改变 digest。
  */
-function decisionBearingScheme(scheme: SchemeDraft): Omit<
-  SchemeDraft,
-  "updatedAt"
-> {
+function decisionBearingScheme(
+  scheme: SchemeDraft,
+): Omit<SchemeDraft, "updatedAt"> {
   const { updatedAt: _ignored, ...rest } = scheme;
   return rest;
 }
@@ -99,11 +98,7 @@ export function schemeSnapshotPath(
   confirmationId: string,
 ): string {
   const id = assertConfirmationId(confirmationId);
-  return path.join(
-    path.resolve(repoRoot),
-    SCHEME_SNAPSHOT_DIR,
-    `${id}.json`,
-  );
+  return path.join(path.resolve(repoRoot), SCHEME_SNAPSHOT_DIR, `${id}.json`);
 }
 
 export function readSchemeSnapshot(

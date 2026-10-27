@@ -66,9 +66,9 @@ describe("approve + acknowledgeDirty", () => {
 
   it("rejects approve on dirty main without acknowledgeDirty", async () => {
     const c = savePending();
-    await expect(orchestrator.approve(c.contract_id, "tina")).rejects.toBeInstanceOf(
-      DirtyWorktreeConfirmationRequiredError,
-    );
+    await expect(
+      orchestrator.approve(c.contract_id, "tina"),
+    ).rejects.toBeInstanceOf(DirtyWorktreeConfirmationRequiredError);
     const after = store.get(c.contract_id);
     expect(after?.lifecycle_state).toBe("PENDING_APPROVAL");
   });

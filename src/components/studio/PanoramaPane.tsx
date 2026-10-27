@@ -46,11 +46,10 @@ export function PanoramaPane(props: PanoramaPaneProps) {
   const scanning =
     Boolean(props.baselineBusy) ||
     Boolean(props.baseline?.scanning) ||
-    (archive?.phase === "p0" ||
-      archive?.phase === "p1" ||
-      archive?.phase === "p2");
-  const acceptLabel =
-    props.baseline?.accept_label ?? "认可此基线作为后续参考";
+    archive?.phase === "p0" ||
+    archive?.phase === "p1" ||
+    archive?.phase === "p2";
+  const acceptLabel = props.baseline?.accept_label ?? "认可此基线作为后续参考";
 
   return (
     <div
@@ -201,8 +200,7 @@ function BaselineSection(props: {
   if (!archive && !props.scanning) return null;
 
   const dirty = archive?.dirty;
-  const showDirty =
-    dirty && !dirty.clean && Boolean(dirty.steward_message);
+  const showDirty = dirty && !dirty.clean && Boolean(dirty.steward_message);
   const nodes = [
     ...(archive?.deep?.capability_nodes ?? []),
     ...(archive?.deep?.structure_nodes ?? []).slice(0, 12),
@@ -226,7 +224,8 @@ function BaselineSection(props: {
           {props.scanning
             ? archive?.progress_copy ||
               "正在为您安全探查项目结构（纯本地只读分析，不触碰线上业务）"
-            : archive?.progress_copy || "现状整理完成（观察结果，未经运行验证）"}
+            : archive?.progress_copy ||
+              "现状整理完成（观察结果，未经运行验证）"}
         </span>
       </div>
 
@@ -260,7 +259,9 @@ function BaselineSection(props: {
             </p>
           ) : null}
           <p className="text-[11px] text-muted-foreground">
-            顶层：{(archive.p0.top_level_entries ?? []).slice(0, 12).join(" · ") || "—"}
+            顶层：
+            {(archive.p0.top_level_entries ?? []).slice(0, 12).join(" · ") ||
+              "—"}
           </p>
           {(archive.p0.route_clues ?? []).length > 0 ? (
             <p className="text-[11px] text-muted-foreground">
@@ -312,9 +313,7 @@ function BaselineSection(props: {
       ) : null}
 
       <div className="mt-2 flex flex-wrap gap-2">
-        {props.onAccept &&
-        archive &&
-        archive.review_status !== "accepted" ? (
+        {props.onAccept && archive && archive.review_status !== "accepted" ? (
           <button
             type="button"
             data-testid="panorama-baseline-accept"
