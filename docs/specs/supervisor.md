@@ -1380,10 +1380,10 @@ interface ScopePlan {
 | V-07 | 三张图由 `renderSchemeDiagrams` 从结构渲染，与模块/流程一一对应 | `tests/unit/scheme-diagrams.test.ts` | ⏳ |
 | V-08 | 金标对话集：模块召回 ≥ 80%，凭空捏造 = 0 | `tests/eval/intent-compiler-golden.test.ts` | ⏳ |
 | V-09 | 单个有界面模块 + 主流程 + 无冲突 + 有业务输入 → `demoReady = true` | `tests/unit/scheme-confirmation-gate.test.ts` | ⏳ |
-| S2-01 | `ScopePlan` 修订号与方案不一致 → `E_SCOPE_NOT_READY` | `tests/unit/scope-plan-gate.test.ts` | ⏳ |
-| S2-02 | 分级拒绝的范围先自动收敛；仍不合规 → `E_SCOPE_POLICY` 且有白话说明 | 同上 | ⏳ |
-| S2-03 | 有未表态的敏感项 → `E_SCOPE_APPROVAL_REQUIRED` | 同上 | ⏳ |
-| S2-04 | 预检与合同创建对同一输入产生相同 `plan_digest` | `tests/unit/scope-plan-single-source.test.ts` | ⏳ |
+| S2-01 | `ScopePlan` 修订号与方案不一致 → `E_SCOPE_NOT_READY` | `tests/unit/scheme-confirmation-gate.test.ts`（`TASK-J.3`） | ⏳ |
+| S2-02 | 分级拒绝的范围先自动收敛；仍不合规 → `E_SCOPE_POLICY` 且有白话说明 | `tests/unit/scope-plan.test.ts`（收敛，`TASK-J.2`）+ `tests/unit/scheme-confirmation-gate.test.ts`（谓词，`TASK-J.3`） | ⏳ |
+| S2-03 | 有未表态的敏感项 → `E_SCOPE_APPROVAL_REQUIRED` | `tests/unit/scheme-confirmation-gate.test.ts`（`TASK-J.3`） | ⏳ |
+| S2-04 | 预检与合同创建对同一输入产生相同 `plan_digest` | `tests/unit/scope-plan.test.ts`（`TASK-J.2`） | ⏳ |
 | S2-05 | 冻结后项目变为非绿野 → `E_SCOPE_PLAN_DRIFT`（409），冻结前中止、右栏解锁 | `tests/integration/scheme-confirm-scope-drift.test.ts` | ⏳ |
 | S2-06 | 带 `confirmation_id` 的合同范围与快照不一致 → `409 E_SCHEME_SNAPSHOT_MISMATCH` | 同上 | ⏳ |
 | S2-07 | 带 `confirmation_id` 的签署链从不返回 `E_WRITABLE_SCOPE_POLICY`（覆盖老项目、绿野、非 npm 三类夹具） | 同上 | ⏳ |
