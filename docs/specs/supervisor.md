@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 合并引擎增补（J.9a）** | 2026-10-28 | 引擎规格增补 K-10～K-12：墓地命中 (d) 关键词通道、聊天否决 `reject_item`、复活判定忽略 `occurrence`；新增码 `E_REJECT_NOT_NEGATED` / `E_REJECT_TURN_NOT_IN_BATCH` / `E_REJECT_TARGET_MISSING` 与 `W_REVIVAL_OCCURRENCE_IGNORED`；§14.3 `SchemeOp` 同步 `reject_item`。 |
 | **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
 | **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 第 4 小节登记收紧项 K-1、K-2、K-3（指向 §14.3 实施口径）、K-4、K-5/K-6、K-7、K-8（§14.2、§14.11 字段）、K-9；`runtime-contract-and-safety.md` §8 L3 行补登 `E_PROPOSAL_PREVIOUSLY_REJECTED` 并修正 `E_BUDGET_EXCEEDED` 码名；§18 增 V-10～V-13。 |
 | **v2.1 证据台账契约** | 2026-10-28 | §14 增补 §14.11 证据台账（Evidence Ledger）契约与不可变式（INV-LEDGER-01～04）：条目级 Schema、EditRef 手改证据、原话子串确定性校验、代选择阻断、墓地不可复活与逃生口、Delta 回写与快照继承权威方向、与 docs/templates/ REQ/ADR/EVID 主键映射表。 |
@@ -969,6 +970,7 @@ type SchemeOp =
   | { op: "upsert_module" | "upsert_flow" | "upsert_entity" | "upsert_goal"
         | "upsert_out_of_scope" | "upsert_acceptance"; item: object; evidence: TurnRef[] }
   | { op: "remove_item"; id: string; reason: string; evidence: TurnRef[] }
+  | { op: "reject_item"; id: string; reason?: string; evidence: TurnRef[] }   // K-11：用户在聊天中否决，见 scheme-patch-engine.md §2.3.2
   | { op: "propose_decision"; item: object; evidence: TurnRef[] }
   | { op: "raise_conflict"; item: object; evidence: TurnRef[] }
   | { op: "mark_user_confirmed"; id: string; evidence: TurnRef[] }   // 用户在聊天里同意了某推荐
@@ -985,6 +987,7 @@ type SchemeOp =
 | op 要改 `user_pinned: true` 的条目 | 转成决议区的「覆盖建议」卡（§3.3），等用户同意 |
 | op 要把 `ai_inferred` 写成 `user_said` | 拒绝；只有 `mark_user_confirmed` 且证据是用户原话时才可升级 |
 | `remove_item` 指向已确认或已 pin 的条目 | 转成「覆盖建议」卡 |
+| `reject_item`（K-11）证据不在本批，或锚定句不含否定词 / 为问句 | 该 op 丢弃；指向已 pin 或已确认条目 → 覆盖建议卡 |
 | `base_revision` 落后于当前修订 | 不直接合并；以最新方案为基础**重新编译一次**（最多重试 1 次，仍落后则等下一轮） |
 | 方案已冻结 | 补丁一律丢弃（冻结后的新意图走 §16.5 分流） |
 
@@ -1171,6 +1174,9 @@ export interface EvidenceLedger {
 - **K-3**：§14.3 的两级原子性——结构类错误整补丁丢弃；溯源类错误单 op 丢弃；幸存 op 作为一个修订整体提交或整体回滚（见 `scheme-patch-engine.md` §2.4）。口径正文见 §14.3 下方的实施口径段落，此处仅作编号登记。
 - **K-8**：`SchemeItemMeta` 追加引擎自有的可选字段 `introduced_after_turn_seq`（条目首次出现时的用户消息水位），用于识别「拿用户很久以前的一句『对』确认新条目」的假冒确认（`E_CONFIRM_PREDATES_TARGET`）。编译器提交的同名字段一律忽略（记 `W_COMPILER_ANCHOR_IGNORED`）。
 - **K-9**：引擎码表中的 `E_* / W_* / S_*` 码是编译日志码，面向开发者与审计，不进入 `runtime-contract-and-safety.md` §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（runtime §8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。
+- **K-10**：墓地命中判定增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中，但只进入复活判定，不直接 DROP。
+- **K-11**：新增 `reject_item` 操作：用户在聊天中否决某条目；本批用户消息须含否定词且非问句，生效后入墓（`rejected_by: "user"`、`disallow_revival: true`）；受保护目标走覆盖建议卡。
+- **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。确认判定路径待定。
 
 ---
 
