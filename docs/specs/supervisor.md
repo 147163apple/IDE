@@ -19,7 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
-| **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 末尾登记 K-1～K-9 收紧项；§18 增 V-10～V-13。 |
+| **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 第 4 小节登记收紧项 K-1、K-2、K-3（指向 §14.3 实施口径）、K-4、K-5/K-6、K-7、K-8（§14.2、§14.11 字段）、K-9；`runtime-contract-and-safety.md` §8 L3 行补登 `E_PROPOSAL_PREVIOUSLY_REJECTED` 并修正 `E_BUDGET_EXCEEDED` 码名；§18 增 V-10～V-13。 |
 | **v2.1 证据台账契约** | 2026-10-28 | §14 增补 §14.11 证据台账（Evidence Ledger）契约与不可变式（INV-LEDGER-01～04）：条目级 Schema、EditRef 手改证据、原话子串确定性校验、代选择阻断、墓地不可复活与逃生口、Delta 回写与快照继承权威方向、与 docs/templates/ REQ/ADR/EVID 主键映射表。 |
 | **v2.1 增补** | 2026-10-27 | 交互温度层增补：点击溯源双向联动、白话合同三层折叠与单向投影不变式、质询台三栏并排规格与双白话按钮、重试非警报呈现与交付仪式卡、低置信度分流保守默认（不变式 C-1）；§18 验收矩阵增补 6 条（V-10, S2-09, J-12～J-15，全部 `⏳`），总计 35 条（`✅ 0 / ⏳ 35`）。 |
 | **v2.1** | 2026-10-27 | 新增第三部分（§13～§20）：意图编译器（增量补丁、模型出结构代码出图、只认用户原话）；中栏《改动范围与验收方式》与 `ScopePlan` 单一事实源，确认谓词纳入范围，杜绝确认后 403；确认后单页四幕旅程（`JourneyStage` 映射表、交接、施工对话四类分流、三段式意外卡、对话式验收、单页 Fast Path）；决策 D6–D10；验收矩阵增补 29 条（全部 `⏳`）；实现落差登记 L-01～L-10。 |
@@ -891,9 +891,10 @@ type ItemSource = "user_said" | "user_confirmed" | "ai_inferred" | "user_edited"
 interface SchemeItemMeta {
   id: string;                     // 稳定 id，跨补丁不变
   source: ItemSource;
-  evidence: TurnRef[];            // ai_inferred 也必须给出它依据的用户原话
+  evidence: TurnRef[];            // ai_inferred 也必须给出它依据的用户原话；台账投影条目级化为 EvidenceItem[]，见 K-1
   user_pinned: boolean;           // 用户手改过即 true（§3.3）
   updated_in_revision: number;
+  introduced_after_turn_seq?: number; // K-8，引擎自有：条目首次出现时的用户消息水位；编译器提交的同名字段一律忽略（记 W_COMPILER_ANCHOR_IGNORED）
 }
 
 interface SchemeDraftV2 {
@@ -1092,13 +1093,14 @@ export type EvidenceItem =
   | { kind: "turn"; ref: TurnRef }
   | { kind: "edit"; ref: EditRef };
 
-// 条目级元数据（与 §14.2 严格对齐）
+// 条目级元数据（台账投影面；字段语义与 §14.2 一致，ItemSource 定义见 §14.2，evidence 按 K-1 由 TurnRef[] 投影为 EvidenceItem[]）
 export interface SchemeItemMeta {
   id: string;
-  source: "user_said" | "user_confirmed" | "ai_inferred" | "user_edited";
+  source: ItemSource;
   evidence: EvidenceItem[];
-  user_pinned?: boolean;
+  user_pinned: boolean;            // 与 §14.2 对齐为必填
   updated_in_revision: number;
+  introduced_after_turn_seq?: number; // K-8，引擎自有：条目首次出现时的用户消息水位；编译器提交的同名字段一律忽略（记 W_COMPILER_ANCHOR_IGNORED）
 }
 
 // 墓地账本条目（记录被枪毙或否决的方案，防止 Agent 金鱼记忆）
@@ -1163,6 +1165,9 @@ export interface EvidenceLedger {
 - **K-4**：`RejectedAlternative` 追加可选字段 `item_ref`、`fingerprint`、`revival_keys`、`rejected_after_turn_seq`、`status`、`revived`；墓碑只标记复活，不删除。
 - **K-5 / K-6**：`rejected_by: "security_gate"` 的墓碑不能经补丁复活；`disallow_revival: false` 命中时转待决推荐卡，不直接写入。
 - **K-7**：§14.7「撤销这次整理」产生新修订，修订号永不回退。
+- **K-3**：§14.3 的两级原子性——结构类错误整补丁丢弃；溯源类错误单 op 丢弃；幸存 op 作为一个修订整体提交或整体回滚（见 `scheme-patch-engine.md` §2.4）。口径正文见 §14.3 下方的实施口径段落，此处仅作编号登记。
+- **K-8**：`SchemeItemMeta` 追加引擎自有的可选字段 `introduced_after_turn_seq`（条目首次出现时的用户消息水位），用于识别「拿用户很久以前的一句『对』确认新条目」的假冒确认（`E_CONFIRM_PREDATES_TARGET`）。编译器提交的同名字段一律忽略（记 `W_COMPILER_ANCHOR_IGNORED`）。
+- **K-9**：引擎码表中的 `E_* / W_* / S_*` 码是编译日志码，面向开发者与审计，不进入 `runtime-contract-and-safety.md` §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（runtime §8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。
 
 ---
 
