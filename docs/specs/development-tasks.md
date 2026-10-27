@@ -111,6 +111,7 @@
 > 79. **状态回写（2026-10-28 · PR #4 J.9a 增补 · 确认路径 occurrence 风险登记）**：J.9a 增补（K-10～K-12）已合入后，`scheme-patch-engine.md` §1.3 K-12 登记：复活路径忽略编译器 `occurrence`。**待定风险**：确认路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`）。修法待定，在 J.9 备注与 J.11 金标中显式挂账；J.11 金标须含此类对抗样本与「模块名重叠但意图不同」的正反两向样本。
 > 80. **状态回写（2026-10-28 · J.10 口径：开放 reject_item）**：生成端 Schema 开放 `reject_item`（K-13），发射条件硬规定见 `intent-compiler-prompt.md` §4.5；引擎对已有效用户墓碑的重复否决记 no-op（复用 `W_NOOP_IDENTICAL`）；码表 51 码。任务状态未改（仍 `[NEW_TASK]`）。
 > 81. **状态回写（2026-10-28 · 规格增补落地 · 沉默损耗三项）**：`supervisor.md` 增补 ①§14.11 第 3 条墓地跨旅程继承（冻结快照 + 墓地子账本随迁，`disallow_revival` 与证据整体保留）；②§14.11 子账本四 `attributions` 质疑归因账本与收紧项 **K-14**（K-13 已由 `reject_item` 占用，故顺延；只写台账，不改 `requirements-store.ts` 的 `source` 枚举）；③§13.3 第一反应速记前置说明（不新增决定类型）。`intent-compiler-prompt.md` §2.2 补归因字段的生成端不可写边界（非码类，不改 51 码）。全部为 ⏳ 规格态，未实现；验收归 J.11 / 实施期。任务状态未改。
+> 82. **状态回写（2026-10-28 · 立卡 TASK-J.18 · Worker 派工墓地门禁）**：依 SSOT §14.11 INV-LEDGER-03 第 1 款立 **`TASK-J.18`**。实施口径见新文件 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md)：判定单元分强弱两类（依赖 / 安装命令 / 导入为强，路径 / 标识符 / 文字为弱），新增内容用行多重集差；派工检查点复核快照绑定；执行期优先级格（保护路径 > 安全墓碑 > 用户墓碑 > 越界）；SSOT §14.11 新增第 5 小节 G-MATCH 作为墓地匹配单一语义源，引擎与门禁共用夹具。登记缺口 GAP-W1～W6 与待拍板项 DEC-1（K-9 对 `ERROR_CODES` 的解释）。**本条仅文档立卡**。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/spec-freeze-record.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -217,6 +218,7 @@
 | **TASK-J.8** | `JourneyStage` 投影与广播 | 状态权威 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • SSOT §16.2 / J-01 / L-10<br>• Daemon 投影随 `STATE_CHANGED` 下发；表外组合告警<br>• `DELIVERED` 呈现为已合入（不删枚举） |
 | **TASK-J.9** | SchemePatch 零模型确定性合并引擎 | 意图编译器 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • SSOT §14.2 / §14.3 / §14.11；V-01～V-04、V-10～V-13<br>• 实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)<br>• 纯函数零模型；可用桩编译器 |
 | **TASK-J.10** | 意图编译器生成端与 Daemon 编译循环 | 意图编译器 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.9`；合并后触发预检依赖 `J.2`<br>• 实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)<br>• V-05、V-06、V-09；GAP-1/GAP-2 待 J.9 增补 |
+| **TASK-J.18** | Worker 派工墓地门禁（INV-LEDGER-03 工地侧） | 门禁 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.4`（硬）、`J.9`<br>• 实施口径 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md)；SSOT §14.11 第 5 小节 G-MATCH<br>• 端口段 3950–3959 |
 | **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
 | **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
 | **TASK-H.3** | 基线扫描硬上限与超时熔断 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.14a` COMPLETED<br>• 文件数/深度硬上限 + 超时中断；防 Daemon 假死<br>• 沿用 OS 只读证明；禁 AST/Impact |
@@ -2842,7 +2844,6 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **估算**：M
 * **备注**：`runtime-contract-and-safety.md` §8 L3 行的门禁层拒绝码无 §2.3 式闭集。`E_CHECKPOINT_FAILED`（`daemon/server.ts` 两处 catch，Daemon HTTP 层以 409 直接返回）与 `E_WRITABLE_SCOPE_POLICY`（类 `WritableScopePolicyError` 定义于 `daemon/supervisor/scope-gate.ts`）均未登记入 `ERROR_CODES`；待派工门禁产出证据归因时统一补登，不在本卡范围。注意 `E_SCOPE_POLICY`（§2.3 表内，v2.1）与 `E_WRITABLE_SCOPE_POLICY` 是两个不同的码，仅名字相近。
 * **待定风险（K-12）**：确认路径（`mark_user_confirmed`，§3.4 / §5.3）同样接受编译器 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`）。复活路径已由 K-12 修复；确认路径修法待定，落地前不得把「待定」读成「无问题」。J.11 金标须含此类对抗样本。
-* **reject_item 生成端口径（K-13）**：生成 Schema 含 `reject_item`，`id` 只取现有条目枚举；发射条件见 `intent-compiler-prompt.md` §4.5（硬规定，非 few-shot）。J.11 必测 G 组（ADV-30～32）与 ADV-29d 假否决方向；ADV-16 期望已改为 (d) 命中。
 
 #### 【Task J.10】意图编译器生成端与 Daemon 编译循环 `[NEW_TASK]`
 
@@ -2852,7 +2853,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **前置依赖**：`TASK-J.9`（硬：引擎）；合并成功后触发范围预检依赖 `TASK-J.2`
 * **优先级**：P1
 * **状态**：`[NEW_TASK]`
-* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（24/51）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
+* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（21/47）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
 * **范围**：
   1. `src/lib/journey/compiler-output-schema.ts`：按消息别名、本批别名、现有 id、墓碑 id 动态构造 zod Schema；`assembleCompilerOutput`（别名 → `turn_id`、摘录 qid 展开、`new:` id 替换、代填 `base_revision` 与 `compiled_from_turns`；失败映射 `E_PATCH_SCHEMA_INVALID` 并记子原因）。
   2. `daemon/supervisor/intent-compiler/system-prompt.ts`：实施口径 §6.2 骨架 + §6.5 八条 few-shot；`COMPILER_PROMPT_VERSION`。
@@ -2861,7 +2862,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
   5. `daemon/supervisor/intent-compiler/partner-hint-filter.ts`：零模型过滤内部词。
   6. `demoReady` 改判（§14.10）。
 * **非目标**：不改引擎；不做金标评测脚本（J.11）；不把搭档与编译器合并成一次调用（实施口径 §5.1 已否决）。
-* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）已由 J.9a 增补（K-10 / K-11，PR #4）；增补前对应偷渡只靠生成端与 J.11 指标。
+* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）需 J.9 增补；增补前对应偷渡只靠生成端与 J.11 指标。
 * **验收（PASS）**：
   - `tests/unit/compiler-output-schema.test.ts`：S 类码在组装后不可能出现（逐码构造非法模型输出，断言组装期拒绝）；qid 展开、`new:` 替换、代填字段正确。
   - `tests/unit/compiler-render-input.test.ts`：同一状态两次渲染逐字节相同；AI 回复无别名；nonce 出现在边界标签；墓碑不含 `revival_keys`。
@@ -2873,6 +2874,30 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **关键文件**：见范围 1～5
 * **估算**：M
 
+#### 【Task J.18】Worker 派工墓地门禁（INV-LEDGER-03 工地侧） `[NEW_TASK]`
+
+* **任务编号**：`TASK-J.18`
+* **任务名称**：派工检查点、执行期墓地拦截、全量扫描与 CLI hook gate pack
+* **对应规格**：SSOT §14.11 `INV-LEDGER-03` 第 1 款与第 5 小节 G-MATCH；§15.6；§16.6；`runtime-contract-and-safety.md` §1、§5.2、§8。**实施口径**：[`worker-graveyard-gate.md`](./worker-graveyard-gate.md)
+* **前置依赖**：`TASK-J.4`（硬：`plan_digest`、`E_SCHEME_SNAPSHOT_MISMATCH` 落地）；`TASK-J.9`（硬：`graveyard-revival.ts` 与墓碑结构）
+* **优先级**：P1
+* **状态**：`[NEW_TASK]`
+* **对照痛点（代码事实）**：派工提示 `buildWorkerTaskInstruction` 不注入墓地；`confirmation_id` 不写入合同；快照不含墓地；CLI hook 只看路径不看内容；L3 没有闭集表。
+* **一句话目标**：Worker 引入被用户否决的方案时（新增依赖、导入、安装命令），施工在写盘前或合并前被拦下，用户看到一张白话卡；弱证据只进审阅，不停工。
+* **范围**：
+  1. `src/lib/journey/graveyard-match.ts`：G-MATCH 唯一实现；`evidence-anchor.ts` 再导出 `matchNormalize` / `lexemes` / `dice`。
+  2. `src/lib/journey/artifact-alias-lexicon.ts`、`src/lib/journey/artifact-projection.ts`。
+  3. `daemon/guard/worker-graveyard-gate.ts`（`evaluateGraveyardGate`、`pickPrimaryVerdict`、`buildGatePack`）、`daemon/guard/dispatch-binding.ts`（`verifyDispatchBinding`）。
+  4. 接线：`ai-worker.ts::validateChanges`、`gateway.ts::handleWriteFile`、`orchestrator.ts`（派工前、`POST_VERIFICATION`）、`merger.ts`（`PRE_MERGE`）、`pretool-hook.mjs`。
+  5. 修缺口：合同 `scheme_binding`（GAP-W1）；快照 `1.2` 含 `graveyard`（GAP-W2）；派工提示注入墓地（GAP-W3）；blockers 用映射后的 `E_*` 码（GAP-W6）。
+  6. runtime §8.1 L3 闭集表（GAP-W5，候选表见实施口径 §5.3）。
+  7. 共享夹具 `tests/fixtures/graveyard-match/cases.json`，引擎 TM-Y 同时消费。
+* **非目标**：不做语义判定；不做 AST；不在施工期提供复活通道；不改 `E_SCOPE_PLAN_DRIFT` 语义（只属签署期）。
+* **已拍板**：DEC-1 按建议登记（`supervisor.md` §14.11 K-15）：工地侧 `E_PROPOSAL_PREVIOUSLY_REJECTED` 作为 L3 运行时码登记入 `ERROR_CODES`，映射 `SCOPE_VIOLATION`。代码登记随本卡实施 PR 完成；在该 PR 合入前，门禁只写日志与 `forbiddenViolations`，不写 `reason_code`。
+* **验收（PASS）**：实施口径 §7 全部用例通过：TM-GM（共享夹具一致性）、TM-GU、TM-GS、TM-GA（含 ⚠ 残余风险的现行口径断言）、TM-GP（120 组笛卡尔积对拍）、TM-GB、TM-GH、TM-GE、TM-GI（端口段 3950–3959）；`npm run typecheck` 相对基线无新增；`npm run lint` 0 error。
+* **FAIL**：弱证据导致停工；软墓碑（`disallow_revival: false`）导致停工；执行期出现 `E_SCOPE_PLAN_DRIFT`；越界与墓地同时命中时主码为越界；引擎与门禁对同一自然语言文本的匹配结果不同；`graveyard-match.ts` 之外出现墓地匹配逻辑。
+* **估算**：L
+
 #### 第二批预告（本批合入后再细化立卡，**本条不立卡**）
 
 | 预定编号 | 内容 | 规格 | 依赖 |
@@ -2880,13 +2905,14 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 | ~~J.9~~ | **已立卡**（见上方【Task J.9】）：补丁协议与确定性合并。`renderSchemeDiagrams` 拆出为 J.9b | §14.2、§14.3、§14.11；V-01～V-04、V-10～V-13 | — |
 | J.9b | `renderSchemeDiagrams`：三张图由结构确定性渲染 | §14.1 原则 1、§14.2 注；V-07 | J.9 |
 | ~~J.10~~ | **已立卡**（见上方【Task J.10】） | §14.4～§14.8、§14.10 | J.9 |
-| J.11 | 金标对话集与评测脚本。**种子**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md) §8 的 32 组对抗样例（含 G 组假否决方向）与 3 条生成端专项、生成端指标 | §14.9；V-08；**必含**「模块名重叠但意图不同」正反两向样本（§4.2 残余风险兜底）、确认路径 `occurrence` 洗白对抗样本（待定风险） | J.10 |
+| J.11 | 金标对话集与评测脚本。**种子**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md) §8 的 29 组对抗样例与生成端指标 | §14.9；V-08；**必含**「模块名重叠但意图不同」正反两向样本（§4.2 残余风险兜底）、确认路径 `occurrence` 洗白对抗样本（待定风险） | J.10 |
 | J.12 | 用户主动暂停接口 `POST /api/contracts/:id/pause` | §16.4；L-09 | — |
 | J.13 | 四幕外壳与施工幕（白话步骤、自动推进、等你确认卡） | §16.1、§16.4；J-06；L-06 | J.8、J.12 |
 | J.14 | 施工对话四类分流与中栏卡片 | §16.5；J-03、J-04、J-05 | J.7、J.13 |
 | J.15 | 三段式意外卡 | §16.6；J-07 | J.13 |
 | J.16 | 试玩幕、对话式验收、合入与「基于这次继续」 | §16.7、§16.8；J-08～J-10 | J.13、J.14 |
 | J.17 | 单页 Fast Path「直接改」 | §16.11；J-11 | J.5、J.13 |
+| ~~J.18~~ | **已立卡**（见上方【Task J.18】）：Worker 派工墓地门禁 | §14.11 INV-LEDGER-03、G-MATCH | J.4、J.9 |
 
 
 ### 3.5 架构感知、监听与差异审阅（C.5 落 Sprint 2；B.1/B.2/C.4 推迟至 v0.2+）
