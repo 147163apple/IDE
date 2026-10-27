@@ -107,6 +107,7 @@
 > 75. **状态回写（2026-10-26 · 立卡并完成 TASK-C.21 / DOC-SSOT-Supervisor-Patch）**：Tina t910u「补丁」。新增 **`TASK-C.21`** 并由同授权收口为 **`[COMPLETED]`**。交付：SSOT 升 **v2.0.1**——钉死 Demo 可选门禁（覆盖 EO-06 硬卡误读）、通配符分级与落盘收敛、「确认方案」五步原子时序、`user_pinned` 字段级脏检查、Demo 失败双按钮降级与风险标记、`demoReady` 硬性布尔底线。**仅文档**；不改产品代码；不抢 D.1e；不扩 v0.2。
 > 76. **状态回写（2026-10-27 · 立卡 TASK-J.1–J.8 · 闭环旅程 v2.1 第一批）**：按 [`supervisor.md`](./supervisor.md) 第三部分 §19 落差 L-01～L-10 与 §20 施工顺序拆出第一批八张卡（§3.4c）。主链：**`TASK-J.2`**（`ScopePlan` 单一来源）→ **`TASK-J.3`**（唯一谓词纳入范围）∥ **`TASK-J.4`**（Daemon 预检接口与快照绑定）→ **`TASK-J.5`**（确认接线改造）→ **`TASK-J.6`**（中栏范围区块）∥ **`TASK-J.7`**（交接进度与右栏解锁）。并行：**`TASK-J.1`**（右栏搭档只读，**P0**：现网 Claude Code 右栏以 `acceptEdits` + Edit/Write 在仓库根运行）、**`TASK-J.8`**（`JourneyStage` 投影）。**当前首要**→ **J.1**（并行）与 **J.2**。**本条仅文档立卡**；意图编译器、施工对话、试玩合入留第二批（§3.4c 末预告）。
 > 77. **状态回写（2026-10-27 · 立卡 TASK-J.9 · 闭环旅程 v2.1 第二批首卡）**：依 [`supervisor.md`](./supervisor.md) §14.2、§14.3、§14.11 立 **`TASK-J.9`**（SchemePatch 零模型确定性合并引擎）。实施口径与测试矩阵见新文件 [`scheme-patch-engine.md`](./scheme-patch-engine.md)：补丁级闸门「冻结 → 基线审计 → 结构 → 修订号」、op 级「溯源 → 来源 → 墓地 → 钉选 → 写入」拒绝优先；引用锚定算法；墓地复活三值判定。原第二批预告中的 `renderSchemeDiagrams`（V-07）拆为 **J.9b**，不在本卡。**本条仅文档立卡**，代码由本地团队施工。
+> 78. **状态回写（2026-10-27 · 立卡 TASK-J.10 · 意图编译器生成端）**：依 [`supervisor.md`](./supervisor.md) §14.4～§14.9 与 [`scheme-patch-engine.md`](./scheme-patch-engine.md) 立 **`TASK-J.10`**。实施口径见新文件 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)：47 码「生成端 × 引擎」责任表、摘录区与消息别名、墓碑注入丙案、搭档与编译器双调用、System Prompt 骨架、生成 Schema、8 条 few-shot、29 组对抗性金标种子（J.11）。同时登记两处需 J.9 增补的缺口：GAP-1 聊天否决不入墓、GAP-2 墓碑命中不看复活关键词。**本条仅文档立卡**。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/spec-freeze-record.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -212,6 +213,7 @@
 | **TASK-J.7** | 交接三步进度与右栏解锁 | 工作台 UX | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.1`（硬）、`J.5`<br>• COMMIT 后解锁；冻结后消息只作只读问答<br>• 仅补偿失败保持锁定 |
 | **TASK-J.8** | `JourneyStage` 投影与广播 | 状态权威 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • SSOT §16.2 / J-01 / L-10<br>• Daemon 投影随 `STATE_CHANGED` 下发；表外组合告警<br>• `DELIVERED` 呈现为已合入（不删枚举） |
 | **TASK-J.9** | SchemePatch 零模型确定性合并引擎 | 意图编译器 / 证据台账 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • SSOT §14.2 / §14.3 / §14.11；V-01～V-04、V-10～V-13<br>• 实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)<br>• 纯函数零模型；可用桩编译器 |
+| **TASK-J.10** | 意图编译器生成端与 Daemon 编译循环 | 意图编译器 | **[NEW_TASK]** | P1 闭环 v2.1 第二批 | • 前置 `J.9`；合并后触发预检依赖 `J.2`<br>• 实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)<br>• V-05、V-06、V-09；GAP-1/GAP-2 待 J.9 增补 |
 | **TASK-H.1** | Worker JSON/Patch 解析校验与轻量重试 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `W.5a` COMPLETED<br>• 格式校验拦截 + ≤1 次本地重试；异常平稳退回非挂起<br>• 纪要 §4#2；禁扩容器/W.5b/c |
 | **TASK-H.2** | MERGED/DELIVERED 终态收口消歧 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.15a`+`C.15c` COMPLETED<br>• 统一枚举或正式注记 MERGED=终态；消除规范/代码两层皮<br>• 纪要 §4#1；禁云归档 |
 | **TASK-H.3** | 基线扫描硬上限与超时熔断 | v0.1 硬化 | **[COMPLETED]** | Hardening | • 前置 `C.14a` COMPLETED<br>• 文件数/深度硬上限 + 超时中断；防 Daemon 假死<br>• 沿用 OS 只读证明；禁 AST/Impact |
@@ -2837,14 +2839,43 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **估算**：M
 * **备注**：`runtime-contract-and-safety.md` §8 L3 行的门禁层拒绝码无 §2.3 式闭集。`E_CHECKPOINT_FAILED`（`daemon/server.ts` 两处 catch，Daemon HTTP 层以 409 直接返回）与 `E_WRITABLE_SCOPE_POLICY`（类 `WritableScopePolicyError` 定义于 `daemon/supervisor/scope-gate.ts`）均未登记入 `ERROR_CODES`；待派工门禁产出证据归因时统一补登，不在本卡范围。注意 `E_SCOPE_POLICY`（§2.3 表内，v2.1）与 `E_WRITABLE_SCOPE_POLICY` 是两个不同的码，仅名字相近。
 
+#### 【Task J.10】意图编译器生成端与 Daemon 编译循环 `[NEW_TASK]`
+
+* **任务编号**：`TASK-J.10`
+* **任务名称**：编译器 System Prompt、生成 Schema、输出组装与编译循环
+* **对应规格**：SSOT 第三部分 §14.4～§14.8、§14.10；§18 `V-05`、`V-06`、`V-09`；§19 `L-01`、`L-07`。**实施口径**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（与引擎 [`scheme-patch-engine.md`](./scheme-patch-engine.md) 冲突时以引擎为准）
+* **前置依赖**：`TASK-J.9`（硬：引擎）；合并成功后触发范围预检依赖 `TASK-J.2`
+* **优先级**：P1
+* **状态**：`[NEW_TASK]`
+* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（21/47）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
+* **范围**：
+  1. `src/lib/journey/compiler-output-schema.ts`：按消息别名、本批别名、现有 id、墓碑 id 动态构造 zod Schema；`assembleCompilerOutput`（别名 → `turn_id`、摘录 qid 展开、`new:` id 替换、代填 `base_revision` 与 `compiled_from_turns`；失败映射 `E_PATCH_SCHEMA_INVALID` 并记子原因）。
+  2. `daemon/supervisor/intent-compiler/system-prompt.ts`：实施口径 §6.2 骨架 + §6.5 八条 few-shot；`COMPILER_PROMPT_VERSION`。
+  3. `daemon/supervisor/intent-compiler/render-input.ts`：实施口径 §6.3（nonce 标签、N1～N3 预规范化、AI 回复无别名、墓碑只注入是什么与为什么）。
+  4. `daemon/supervisor/intent-compiler/compile-loop.ts`：实施口径 §7（防抖、单在途、只重试 STALE 一次、CAS 落盘、三次失败提示、预算账本、离线兜底）。
+  5. `daemon/supervisor/intent-compiler/partner-hint-filter.ts`：零模型过滤内部词。
+  6. `demoReady` 改判（§14.10）。
+* **非目标**：不改引擎；不做金标评测脚本（J.11）；不把搭档与编译器合并成一次调用（实施口径 §5.1 已否决）。
+* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）需 J.9 增补；增补前对应偷渡只靠生成端与 J.11 指标。
+* **验收（PASS）**：
+  - `tests/unit/compiler-output-schema.test.ts`：S 类码在组装后不可能出现（逐码构造非法模型输出，断言组装期拒绝）；qid 展开、`new:` 替换、代填字段正确。
+  - `tests/unit/compiler-render-input.test.ts`：同一状态两次渲染逐字节相同；AI 回复无别名；nonce 出现在边界标签；墓碑不含 `revival_keys`。
+  - `tests/unit/intent-compiler-trigger.test.ts`（`V-05`）：空闲计时与 AI 回复完毕触发模型调用计数为 0。
+  - `tests/unit/compile-loop.test.ts`：桩模型重放实施口径 §8.2 ADV-26～28，断言重试次数、批次游标与失败计数。
+  - `tests/eval/intent-compiler-adversarial.test.ts`：以对抗补丁回放 ADV-01～29 喂引擎，断言 `expected_engine`（确定性，可进 CI）。
+  - `tests/ui/intent-compiler-offline.test.tsx`（`V-06`）。
+* **FAIL**：生成 Schema 允许 `occurrence`、`anchor`、`user_confirmed`、`edit` 证据任一出现；模型输出 `base_revision` 或 `compiled_from_turns` 并被采信；op 级丢弃触发重试；提示词出现引擎词表或阈值。
+* **关键文件**：见范围 1～5
+* **估算**：M
+
 #### 第二批预告（本批合入后再细化立卡，**本条不立卡**）
 
 | 预定编号 | 内容 | 规格 | 依赖 |
 | :--- | :--- | :--- | :--- |
 | ~~J.9~~ | **已立卡**（见上方【Task J.9】）：补丁协议与确定性合并。`renderSchemeDiagrams` 拆出为 J.9b | §14.2、§14.3、§14.11；V-01～V-04、V-10～V-13 | — |
 | J.9b | `renderSchemeDiagrams`：三张图由结构确定性渲染 | §14.1 原则 1、§14.2 注；V-07 | J.9 |
-| J.10 | 意图编译器接真模型：触发节拍、输入裁剪、独立账本、离线兜底；`demoReady` 改判 | §14.4～§14.8、§14.10；V-05、V-06、V-09；L-01、L-07 | J.9 |
-| J.11 | 金标对话集与评测脚本 | §14.9；V-08 | J.10 |
+| ~~J.10~~ | **已立卡**（见上方【Task J.10】） | §14.4～§14.8、§14.10 | J.9 |
+| J.11 | 金标对话集与评测脚本。**种子**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md) §8 的 29 组对抗样例与生成端指标 | §14.9；V-08 | J.10 |
 | J.12 | 用户主动暂停接口 `POST /api/contracts/:id/pause` | §16.4；L-09 | — |
 | J.13 | 四幕外壳与施工幕（白话步骤、自动推进、等你确认卡） | §16.1、§16.4；J-06；L-06 | J.8、J.12 |
 | J.14 | 施工对话四类分流与中栏卡片 | §16.5；J-03、J-04、J-05 | J.7、J.13 |
