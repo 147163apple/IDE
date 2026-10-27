@@ -23,7 +23,7 @@
 | [`specs/supervisor.md`](./specs/supervisor.md) | Supervisor 单一事实源（SSOT）：产品与监理语义；由 v2.0 正文 + v2.0.2 裁定层**物理合流**而成；**第三部分（v2.1）**定义意图编译器、《改动范围与验收方式》与确认后单页四幕旅程。**用户旅程以本文为准**，架构规范 §0.2 / §7.1 的旧旅程已加取代标注 | v2.1 |
 | [`specs/runtime-contract-and-safety.md`](./specs/runtime-contract-and-safety.md) | 运行时硬契约：合同护照、Scope/通配分级、P.1 保护清单、Token/越界熔断、审计侧车、终态与清理、错误码分层 | 2026-10-27 新建（收口自 6 处散落条文） |
 
-> **附属实施口径**（不是第五份权威，从属于所指的上位规格，冲突时以上位规格为准）：[`specs/scheme-patch-engine.md`](./specs/scheme-patch-engine.md)——`supervisor.md` §14.2 / §14.3 / §14.11 的 SchemePatch 零模型合并引擎判定树、引用锚定、墓地复活与测试矩阵（`TASK-J.9`）。
+> **附属实施口径**（不是第五份权威，从属于所指的上位规格，冲突时以上位规格为准）：[`specs/scheme-patch-engine.md`](./specs/scheme-patch-engine.md)——`supervisor.md` §14.2 / §14.3 / §14.11 的 SchemePatch 零模型合并引擎判定树、引用锚定、墓地复活与测试矩阵（`TASK-J.9`）。[`specs/intent-compiler-prompt.md`](./specs/intent-compiler-prompt.md)——`supervisor.md` §14.4～§14.9 的意图编译器 System Prompt、生成 Schema、原话摘录协议与对抗性金标种子（`TASK-J.10` / J.11）。
 
 ---
 
