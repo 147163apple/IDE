@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 证据台账契约** | 2026-10-28 | §14 增补 §14.11 证据台账（Evidence Ledger）契约与不可变式（INV-LEDGER-01～04）：条目级 Schema、EditRef 手改证据、原话子串确定性校验、代选择阻断、墓地不可复活与逃生口、Delta 回写与快照继承权威方向、与 docs/templates/ REQ/ADR/EVID 主键映射表。 |
 | **v2.1 增补** | 2026-10-27 | 交互温度层增补：点击溯源双向联动、白话合同三层折叠与单向投影不变式、质询台三栏并排规格与双白话按钮、重试非警报呈现与交付仪式卡、低置信度分流保守默认（不变式 C-1）；§18 验收矩阵增补 6 条（V-10, S2-09, J-12～J-15，全部 `⏳`），总计 35 条（`✅ 0 / ⏳ 35`）。 |
 | **v2.1** | 2026-10-27 | 新增第三部分（§13～§20）：意图编译器（增量补丁、模型出结构代码出图、只认用户原话）；中栏《改动范围与验收方式》与 `ScopePlan` 单一事实源，确认谓词纳入范围，杜绝确认后 403；确认后单页四幕旅程（`JourneyStage` 映射表、交接、施工对话四类分流、三段式意外卡、对话式验收、单页 Fast Path）；决策 D6–D10；验收矩阵增补 29 条（全部 `⏳`）；实现落差登记 L-01～L-10。 |
 | **v2.0.3（草案）** | 2026-10-27 | **未并入本文。** 判别联合数据模型 / 三元哈希绑定 / 终态清理协议等条款代码 0 命中，已抽为独立 RFC：[`../rfc/scheme-snapshot-and-attestation-model.md`](../rfc/scheme-snapshot-and-attestation-model.md)。 |
@@ -1050,6 +1051,105 @@ type SchemeOp =
 `demoReady = 至少 1 个 user_visible 模块 && 至少 1 条主流程 && 无未选冲突 && 至少 1 轮有效业务输入`。
 
 原条件「≥ 2 个业务模块」作废：它让「只做一个功能」的需求永远看不到 Demo 按钮。纯逻辑任务（没有 `user_visible` 模块）不出现「生成 Demo」，这是预期行为——它们本来就不需要原型。
+
+---
+
+
+### 14.11 证据台账（Evidence Ledger）契约与不可变式
+
+> **定位**：证据台账是 `SchemeDraftV2` 的持久化投影与幕后决策记录，是人类主观气态意图向机器确定性相变的唯一合法中间相。
+> **权威方向**：
+> 1. **冻结前**：台账为单一事实源（SSOT），所有对话与编辑的增量补丁必须先在台账确权记账；
+> 2. **冻结后（`freeze()` 之后）**：以冻结快照（Snapshot）为唯一执行与验收权威源，台账转为只追加（append-only）的只读审计流；
+> 3. **后续继承**：§16.8「基于这次继续」以最终通过的冻结快照及其回写记录为继承基线，新台账直接基于此快照初始化，不得从空白状态从头脑补。
+
+#### 1. 数据结构与子账本划分 (Schema)
+
+条目级元数据严格复用 `SchemeItemMeta`（保持单一条目颗粒度，不做字段级过度包装），`ItemSource` 维持既定枚举 `"user_said" | "user_confirmed" | "ai_inferred" | "user_edited"`。AI 兜底默认值统一由 `decisions[]` 条目中 `status: "pending"` 派生，不新增枚举。
+
+为支持用户在 UI 手动修改且不破坏 `INV-LEDGER-01` 的确权约束，新增 `EditRef` 证据类型，与 `TurnRef` 构成判别联合：
+
+```typescript
+// 对话原话引用（仅指向用户发言）
+export interface TurnRef {
+  turn_id: string;          // 必须为用户消息 turn_id（禁止指向 AI 回复）
+  quote?: string;           // 用户原话切片（用于高亮溯源与子串核验）
+}
+
+// UI 手动编辑事件引用（解决手改场景无 turn_id 锚点的问题）
+export interface EditRef {
+  edit_event_id: string;    // UI 手动修改事件唯一 ID
+  edited_at: number;        // 编辑时间戳
+  field_name?: string;      // 改动的字段标识
+  previous_value?: string;  // 编辑前旧值快照
+}
+
+// 统一证据单元
+export type EvidenceItem =
+  | { kind: "turn"; ref: TurnRef }
+  | { kind: "edit"; ref: EditRef };
+
+// 条目级元数据（与 §14.2 严格对齐）
+export interface SchemeItemMeta {
+  id: string;
+  source: "user_said" | "user_confirmed" | "ai_inferred" | "user_edited";
+  evidence: EvidenceItem[];
+  user_pinned?: boolean;
+  updated_in_revision: number;
+}
+
+// 墓地账本条目（记录被枪毙或否决的方案，防止 Agent 金鱼记忆）
+export interface RejectedAlternative {
+  rejected_id: string;              // 唯一标识（例如 REJ-001）
+  proposal: string;                 // 被枪毙的方案或路径描述
+  rejected_by: "user" | "security_gate"; // 否决发起方
+  rejection_reason: string;         // 否决理由（保住 why 与取舍原由）
+  evidence: EvidenceItem[];         // 驳回依据（用户原话切片或门禁拦截日志）
+  disallow_revival: boolean;        // 是否禁止 Agent 自行提请复活
+  updated_in_revision: number;      // 产生否决时的方案修订号
+}
+
+// 证据台账持久化聚合结构
+export interface EvidenceLedger {
+  // 子账本一：事实与需求台账（Claim Ledger）
+  claims: {
+    goals: (SchemeItemMeta & { text: string })[];
+    boundaries: (SchemeItemMeta & { text: string })[];
+    acceptance: (SchemeItemMeta & { text: string })[];
+  };
+  // 子账本二：决策与代选择台账（Decision Ledger）
+  decisions: (SchemeItemMeta & {
+    topic: string;
+    chosen: string;
+    status: "pending" | "confirmed"; // pending 状态即表达 AI 默认推荐
+  })[];
+  // 子账本三：否决与墓地台账（Graveyard Ledger）
+  graveyard: RejectedAlternative[];
+}
+```
+
+#### 2. 不变式 (Invariants)
+
+为杜绝模型幻觉与偷跑，以下不变式由 Daemon 确定性规则执行（零模型解释权）：
+
+| 不变式 ID | 名称 | 规则约束 | 违反处置 |
+| :--- | :--- | :--- | :--- |
+| **INV-LEDGER-01** | 用户原话确权律 | 当条目 `source === "user_said" \| "user_confirmed"` 时，`evidence` 必须非空且必须包含有效 `kind: "turn"`；其 `turn_id` 必须对应用户消息（指向 AI 自身回复直接判定非法）。若携带 `quote`，Daemon 执行**确定性子串比对（substring check）**，严禁模型释义引用。<br>当条目 `source === "user_edited"` 时，`evidence` 必须非空且包含有效 `kind: "edit"`。 | 整个 op 丢弃，记编译告警；严禁部分应用。 |
+| **INV-LEDGER-02** | 代选择阻断律 | `source === "ai_inferred"` 的条目升级为 `user_confirmed` 时，仅允许由 `mark_user_confirmed` op 携带用户明确肯定原话的 `TurnRef` 触发；严禁编译器或 Worker 静默升级。<br>所有未获用户明确批准的 AI 默认值，必须作为 `status: "pending"` 的 decision 停留在决议区。 | 阻止无凭据确权，保留 ai_inferred 标记与待决状态。 |
+| **INV-LEDGER-03** | 墓地不可复活律与逃生口 | 组装派工上下文（Worker Dispatch Prompt）时，强制自动注入 `graveyard` 活跃条目。<br>1. **机器侧拦截**：Worker 或 Agent 产出物命中 `disallow_revival === true` 的方案时，门禁直接拦截（`E_PROPOSAL_PREVIOUSLY_REJECTED`）。<br>2. **逃生口**：若用户后续改主意明确重提（Daemon 原话精准匹配），允许复活并作为新的 `user_said` 证据入账；用户模糊暗示一律走决议区追问，禁止模型自行推测复活。 | 拦截 Agent 自行重提已枪毙方案；保障用户主动撤销与变更权。 |
+| **INV-LEDGER-04** | 回写防脱钩律 | 施工完成与体验验收后，系统必须产生 Delta 回写补丁（包含实测证据与验证结果），将 Claim 状态与最终 Diff 固化回快照；下一轮启动时以当前快照为基线继承，禁止绕过账本直接改码导致真相脱钩。 | 阻断会话无痕退出。 |
+
+#### 3. 与 `docs/templates/` 核心主键映射表
+
+证据台账与仓库传统文档模板包（`00-filling-guide.md`）保持严格的语义映射：
+
+| 传统模板主键 | 证据台账映射模块 | 说明与语义区别 |
+| :--- | :--- | :--- |
+| `REQ-###` | **Claim Ledger** (`claims.goals`, `claims.boundaries`) | 传统模板为静态填空；台账条目为携带原话归属与因果修订号的动态意图契约。 |
+| `AC-###` | **Claim Ledger** (`claims.acceptance`) | Given-When-Then 验收断言，逐条绑定 `TurnRef` 证明其来自用户需求。 |
+| `ADR-####` | **Decision Ledger** (`decisions`) | 记录架构选型与行为决策；通过 `pending` 状态消除静默代选择。 |
+| `EVID-###` | **EvidenceItem** (`TurnRef` / `EditRef`) | 细化到对话原话定位高亮或手动修改事件，提供确定性审计链路。 |
+| *(传统模板无对应)* | **Graveyard Ledger** (`graveyard`) | 传统文档中否决分支随会话丢失；台账中永久留存被否决方案与理由，斩断金鱼记忆。 |
 
 ---
 
