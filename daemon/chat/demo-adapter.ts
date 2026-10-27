@@ -15,6 +15,8 @@ export class DemoChatAdapter implements ChatAdapter {
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: true,
+      // 演示：不发真实工具调用（TASK-J.1）
+      tool_mode: "read_only",
     };
   }
 
