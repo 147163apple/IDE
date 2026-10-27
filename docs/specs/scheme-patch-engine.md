@@ -462,6 +462,7 @@ export const AFFIRMATION_CUES = [
 | R-15 | 同 R-14，`occurrence: 0` | 第一处所在句 | ILLEGAL | `E_REVIVAL_NEGATED` |
 | R-16 | 14 / 是，op 未声明 `revival`（隐式） | `还是把 Excel 导出加上吧` | LEGAL（自动识别） | — |
 | R-17 | 14 / 是，op 未声明 `revival`，evidence 是 `我想要报表` | — | ILLEGAL | `E_PROPOSAL_PREVIOUSLY_REJECTED` |
+| R-18 | 14 / 是，消息 `还是加上 Excel 导出。算了，不要 Excel 导出`，op 声明复活，`occurrence: 0` | 第一处所在句 | ILLEGAL | `E_REVIVAL_NEGATED`（**当前红灯**：按现行口径判 LEGAL，见 TM-Y-32） |
 
 ### 4.6 复活生效
 
@@ -909,6 +910,8 @@ stageCommit(...)                               → applied | noop
 | TM-Y-28 | 两个活跃墓碑同时命中 | 主墓碑取 `rejected_id` 字典序最小者，另一个在 `reasons` / `tombstone_ids` 中 |
 | TM-Y-29 | `migrateGraveyardEntry` 补全旧数据（无 fingerprint 等字段） | 输出字段与 `buildTombstone` 对同一输入的结果相等 |
 | TM-Y-30 | `remove_item` 的目标恰好与某墓碑相似 | 墓地检查不适用于删除，按 P4 处理 |
+| TM-Y-31 | 墓碑「Excel 导出」活跃且 `disallow_revival: true`；新想法与其 Dice ≥ 0.75 但意图不同，用户无复活证据（误拦方向） | DROP `E_PROPOSAL_PREVIOUSLY_REJECTED`；`journal.verdicts` 留有该 verdict 且含命中的 `rejected_id`；卡片数为 0；随后用户以原话复活（同 TM-Y-25 路径）可成功 |
+| TM-Y-32 | R-18 复引用：复活判定中编译器给出显式 `occurrence` | ILLEGAL，`E_REVIVAL_NEGATED`。复活路径忽略编译器 `occurrence` 并记 `W_*` 警告（码名待定：沿用 `W_COMPILER_ANCHOR_IGNORED` 则需扩写其注释，否则新增 `W_REVIVAL_OCCURRENCE_IGNORED`）。**当前红灯**：修复前此行必然失败 |
 
 ### 6.8 TM-Z 三方碰撞（对拍 §2.3.3）
 
