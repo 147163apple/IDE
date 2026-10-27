@@ -1176,7 +1176,7 @@ export interface EvidenceLedger {
 - **K-9**：引擎码表中的 `E_* / W_* / S_*` 码是编译日志码，面向开发者与审计，不进入 `runtime-contract-and-safety.md` §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（runtime §8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。
 - **K-10**：墓地命中判定增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中，但只进入复活判定，不直接 DROP。
 - **K-11**：新增 `reject_item` 操作：用户在聊天中否决某条目；本批用户消息须含否定词且非问句，生效后入墓（`rejected_by: "user"`、`disallow_revival: true`）；受保护目标走覆盖建议卡。
-- **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。确认判定路径待定。
+- **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。**显式风险**：确认判定路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定，落地前不得视为无问题。
 
 ---
 
