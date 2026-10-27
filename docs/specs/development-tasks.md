@@ -109,6 +109,7 @@
 > 77. **状态回写（2026-10-27 · 立卡 TASK-J.9 · 闭环旅程 v2.1 第二批首卡）**：依 [`supervisor.md`](./supervisor.md) §14.2、§14.3、§14.11 立 **`TASK-J.9`**（SchemePatch 零模型确定性合并引擎）。实施口径与测试矩阵见新文件 [`scheme-patch-engine.md`](./scheme-patch-engine.md)：补丁级闸门「冻结 → 基线审计 → 结构 → 修订号」、op 级「溯源 → 来源 → 墓地 → 钉选 → 写入」拒绝优先；引用锚定算法；墓地复活三值判定。原第二批预告中的 `renderSchemeDiagrams`（V-07）拆为 **J.9b**，不在本卡。**本条仅文档立卡**，代码由本地团队施工。
 > 78. **状态回写（2026-10-27 · 立卡 TASK-J.10 · 意图编译器生成端）**：依 [`supervisor.md`](./supervisor.md) §14.4～§14.9 与 [`scheme-patch-engine.md`](./scheme-patch-engine.md) 立 **`TASK-J.10`**。实施口径见新文件 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)：47 码「生成端 × 引擎」责任表、摘录区与消息别名、墓碑注入丙案、搭档与编译器双调用、System Prompt 骨架、生成 Schema、8 条 few-shot、29 组对抗性金标种子（J.11）。同时登记两处需 J.9 增补的缺口：GAP-1 聊天否决不入墓、GAP-2 墓碑命中不看复活关键词。**本条仅文档立卡**。
 > 79. **状态回写（2026-10-28 · PR #4 J.9a 增补 · 确认路径 occurrence 风险登记）**：J.9a 增补（K-10～K-12）已合入后，`scheme-patch-engine.md` §1.3 K-12 登记：复活路径忽略编译器 `occurrence`。**待定风险**：确认路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`）。修法待定，在 J.9 备注与 J.11 金标中显式挂账；J.11 金标须含此类对抗样本与「模块名重叠但意图不同」的正反两向样本。
+> 80. **状态回写（2026-10-28 · J.10 口径：开放 reject_item）**：生成端 Schema 开放 `reject_item`（K-13），发射条件硬规定见 `intent-compiler-prompt.md` §4.5；引擎对已有效用户墓碑的重复否决记 no-op（复用 `W_NOOP_IDENTICAL`）；码表 51 码。任务状态未改（仍 `[NEW_TASK]`）。
 > 65. **状态回写（2026-10-26 · 实现完成 TASK-C.14f + TASK-C.15a–d）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。已落地：`BASELINE_PROGRESS` WS（停 2s 轮询）；EO-01 完备+转移 DAG；EO-08 UUIDv5/返工计数；EO-05 签署白名单 GC + MERGED→DELIVERED 失败停 MERGED；P0 drafts 隔离 + EO-09 worktree seal。单测 `task-c14f-*` / `task-c15a–d-*` + C.12 回归绿。**不**扩 Spec Freeze 五正文；P1–P3 仍 backlog。
 > 64. **状态回写（2026-10-26 · 立卡 TASK-C.14f + TASK-C.15a–d · WS 深度进度 + EO 余面 Delta）**：Tina t855u「继续项 2（WS）与项 4（EO 余面 Delta）的立卡实现」。按此前安全闭环后暂缓的 backlog 升格为薄卡：**`TASK-C.14f`**（基线深度进度真 WS/流式：Daemon 推 `BASELINE_PROGRESS`，替换前端 2s 轮询；P0 仍秒级解锁右栏）；**`TASK-C.15a`**（EO-01 DeliveryState 完备：补齐 C.12b 简化缺口与合法转移）；**`TASK-C.15b`**（EO-08 断言身份与返工计数：UUIDv5 `assertion_id` + Daemon 权威计数 + 超限 `ESCALATED_HUMAN` + 返工期禁追加）；**`TASK-C.15c`**（EO-05 两阶段归档/GC：签署期白名单 GC；`MERGED`→`DELIVERED` 事务硬化，失败停 `MERGED`）；**`TASK-C.15d`**（P0 AC-ISOL 草稿隔离 + EO-09 Worktree seal 轻量；P1 sufficiency / P2 确认分级 / P3 视口防抖仍 backlog）。建议序 **C.14f → C.15a → C.15b → C.15c → C.15d**；**当前首要**→ **C.14f**。**本条仅文档立卡**；**不写**产品码直至同授权「立卡实现」开工；**不**扩 Spec Freeze 五正文；不抢 D.1e；不改 D.1 鉴权。权威：基线讨论稿 §5/§7 流式 OPEN；右栏 §14.11 EO-01/05/08/09 + §13 P0；C.12 Top5 已覆盖部分不重复。
 > 58. **状态回写（2026-10-26 · 立卡 TASK-C.12a–e · Spec Freeze → Top5 Delta 升级卡）**：Tina 授权（t817u「升格立卡」）。按封版记录 `docs/reports/spec-freeze-record.md`（tip `e4779ad`）与澄清 §6 / Checklist §3，将 API Top5 As-is→To-be 映射为五张 **Delta 升级卡**（**不推翻**现网 session / STATE / prototypes / PAUSED 弹窗骨架）：**`TASK-C.12a`**（双层 Token：`exec_token` + `resume_token`+`jti`；PAUSED 吊销；EO-07）、**`TASK-C.12b`**（`session_epoch`+`state_seq` + EO-01 `DeliveryState` 广播；含 `CONTRACT_SIGNING` 瞬态）、**`TASK-C.12c`**（越界原子拦截：SIGINT 3s→SIGKILL→吊销→清锁→PAUSED；EO-02/07）、**`TASK-C.12d`**（Demo 三态 + `can_sign` + records 轻量拷贝；EO-05/06）、**`TASK-C.12e`**（`.stagent/records/{contract_id}/audit-manifest.json`；EO-03/04/05）。建议序 **C.12a→C.12b→C.12c→C.12d→C.12e**；**当前首要**→ **C.12a**。**本条仅文档立卡**；**CLOSED ≠ 已实现**；**不写** daemon/src 产品码直至 Tina 点名开发；**不抢** D.1e；Impact/Mode/AST/云归档仍 **v0.2+**；不改 D.1 loopback+#token 通道原则。
@@ -2840,6 +2841,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **估算**：M
 * **备注**：`runtime-contract-and-safety.md` §8 L3 行的门禁层拒绝码无 §2.3 式闭集。`E_CHECKPOINT_FAILED`（`daemon/server.ts` 两处 catch，Daemon HTTP 层以 409 直接返回）与 `E_WRITABLE_SCOPE_POLICY`（类 `WritableScopePolicyError` 定义于 `daemon/supervisor/scope-gate.ts`）均未登记入 `ERROR_CODES`；待派工门禁产出证据归因时统一补登，不在本卡范围。注意 `E_SCOPE_POLICY`（§2.3 表内，v2.1）与 `E_WRITABLE_SCOPE_POLICY` 是两个不同的码，仅名字相近。
 * **待定风险（K-12）**：确认路径（`mark_user_confirmed`，§3.4 / §5.3）同样接受编译器 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`）。复活路径已由 K-12 修复；确认路径修法待定，落地前不得把「待定」读成「无问题」。J.11 金标须含此类对抗样本。
+* **reject_item 生成端口径（K-13）**：生成 Schema 含 `reject_item`，`id` 只取现有条目枚举；发射条件见 `intent-compiler-prompt.md` §4.5（硬规定，非 few-shot）。J.11 必测 G 组（ADV-30～32）与 ADV-29d 假否决方向；ADV-16 期望已改为 (d) 命中。
 
 #### 【Task J.10】意图编译器生成端与 Daemon 编译循环 `[NEW_TASK]`
 
@@ -2849,7 +2851,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **前置依赖**：`TASK-J.9`（硬：引擎）；合并成功后触发范围预检依赖 `TASK-J.2`
 * **优先级**：P1
 * **状态**：`[NEW_TASK]`
-* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（21/47）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
+* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（24/51）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
 * **范围**：
   1. `src/lib/journey/compiler-output-schema.ts`：按消息别名、本批别名、现有 id、墓碑 id 动态构造 zod Schema；`assembleCompilerOutput`（别名 → `turn_id`、摘录 qid 展开、`new:` id 替换、代填 `base_revision` 与 `compiled_from_turns`；失败映射 `E_PATCH_SCHEMA_INVALID` 并记子原因）。
   2. `daemon/supervisor/intent-compiler/system-prompt.ts`：实施口径 §6.2 骨架 + §6.5 八条 few-shot；`COMPILER_PROMPT_VERSION`。
@@ -2858,7 +2860,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
   5. `daemon/supervisor/intent-compiler/partner-hint-filter.ts`：零模型过滤内部词。
   6. `demoReady` 改判（§14.10）。
 * **非目标**：不改引擎；不做金标评测脚本（J.11）；不把搭档与编译器合并成一次调用（实施口径 §5.1 已否决）。
-* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）需 J.9 增补；增补前对应偷渡只靠生成端与 J.11 指标。
+* **依赖与风险**：GAP-1（聊天否决不入墓）、GAP-2（墓碑命中不看 `revival_keys`）已由 J.9a 增补（K-10 / K-11，PR #4）；增补前对应偷渡只靠生成端与 J.11 指标。
 * **验收（PASS）**：
   - `tests/unit/compiler-output-schema.test.ts`：S 类码在组装后不可能出现（逐码构造非法模型输出，断言组装期拒绝）；qid 展开、`new:` 替换、代填字段正确。
   - `tests/unit/compiler-render-input.test.ts`：同一状态两次渲染逐字节相同；AI 回复无别名；nonce 出现在边界标签；墓碑不含 `revival_keys`。
@@ -2877,7 +2879,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 | ~~J.9~~ | **已立卡**（见上方【Task J.9】）：补丁协议与确定性合并。`renderSchemeDiagrams` 拆出为 J.9b | §14.2、§14.3、§14.11；V-01～V-04、V-10～V-13 | — |
 | J.9b | `renderSchemeDiagrams`：三张图由结构确定性渲染 | §14.1 原则 1、§14.2 注；V-07 | J.9 |
 | ~~J.10~~ | **已立卡**（见上方【Task J.10】） | §14.4～§14.8、§14.10 | J.9 |
-| J.11 | 金标对话集与评测脚本。**种子**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md) §8 的 29 组对抗样例与生成端指标 | §14.9；V-08；**必含**「模块名重叠但意图不同」正反两向样本（§4.2 残余风险兜底）、确认路径 `occurrence` 洗白对抗样本（待定风险） | J.10 |
+| J.11 | 金标对话集与评测脚本。**种子**：[`intent-compiler-prompt.md`](./intent-compiler-prompt.md) §8 的 32 组对抗样例（含 G 组假否决方向）与 3 条生成端专项、生成端指标 | §14.9；V-08；**必含**「模块名重叠但意图不同」正反两向样本（§4.2 残余风险兜底）、确认路径 `occurrence` 洗白对抗样本（待定风险） | J.10 |
 | J.12 | 用户主动暂停接口 `POST /api/contracts/:id/pause` | §16.4；L-09 | — |
 | J.13 | 四幕外壳与施工幕（白话步骤、自动推进、等你确认卡） | §16.1、§16.4；J-06；L-06 | J.8、J.12 |
 | J.14 | 施工对话四类分流与中栏卡片 | §16.5；J-03、J-04、J-05 | J.7、J.13 |
