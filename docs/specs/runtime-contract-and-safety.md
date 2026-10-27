@@ -233,7 +233,7 @@
 | :--- | :--- | :--- | :--- |
 | **L1 前端提前告知** | `evaluateSchemeConfirmation` | 决定按钮 `disabled` 与提示文案，可被用户直接修正 | §2.3 主表（7 码 + v2.1 三个范围码） |
 | **L2 Daemon 签署拦截** | `signing-gate.ts` | 真正放行判定；快照缺失即拒 | §2.3 主表 + 「Daemon 专属码」表 |
-| **L3 执行期运行时** | Gateway / Orchestrator | 越界、预算、锁、越权 | `E_OUT_OF_SCOPE` / `E_OUT_OF_SCOPE_UNTRACKED` / `BUDGET_EXCEEDED` / `E_WORKSPACE_LOCKED` / `E_CHECKPOINT_FAILED` |
+| **L3 执行期运行时** | Gateway / Orchestrator / Daemon HTTP 层 / 派工门禁 | 越界、预算、锁、越权、墓地命中 | `E_OUT_OF_SCOPE` / `E_OUT_OF_SCOPE_UNTRACKED` / `E_BUDGET_EXCEEDED` / `E_WORKSPACE_LOCKED` / `E_CHECKPOINT_FAILED` / `E_PROPOSAL_PREVIOUSLY_REJECTED`（v2.1，INV-LEDGER-03） |
 
 **纪律**：凡前端能检出的情形，L1 与 L2 必须使用**同一组拒绝码**；L2 只可额外使用 §2.3「Daemon 专属码」表中登记的码，不得自造未登记的码。两者结论不一致时以 L2 为准并记一条告警。
 
