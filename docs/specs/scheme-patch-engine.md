@@ -52,6 +52,9 @@
 | K-7 | §14.7「撤销这次整理，方案回到上一修订」 | 撤销产生**新修订**（`scheme_revision + 1`），内容等于上一修订。修订号永不回退。 | 修订号回退会产生 ABA：基于旧修订编译的补丁会被误判为新鲜。 |
 | K-8 | §14.2 `SchemeItemMeta` | 追加引擎自有的可选字段 `introduced_after_turn_seq`（条目首次出现时的水位）。编译器提交的同名字段一律忽略。 | 用于识别「拿用户很久以前的一句『对』确认新条目」的假冒确认。 |
 | K-9 | 引擎码 | 引擎码表中的 `E_* / W_* / S_*` 码是**编译日志码**，面向开发者与审计，不进入 [`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（§8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。 | 拒绝码闭集是「用户可做什么」的表；编译日志码只给开发者与审计看。 |
+| K-10 | §14.11 墓地命中判定（INV-LEDGER-03） | `matchesTombstone` 增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中；命中只进入复活判定，不直接 DROP（§4.2）。 | 复活判定认用户自己的说法，拦截原先只认指纹与 Dice，两者方向不一致，拦截比复活宽松。 |
+| K-11 | §14.3 `SchemeOp` 联合 | 新增 `reject_item` 操作（§2.3.2、§5.4）：聊天里的否决入墓；证据须为本批用户消息，锚定句含否定词且非问句（引擎词表判定）。 | 原先只有 UI 与卡片拒绝能入墓，聊天中「不要了」没有路径。 |
+| K-12 | §14.11 `TurnRef.occurrence`（编译器提示） | 复活判定路径忽略编译器 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`（§4.4）。**显式风险**：确认判定路径（`mark_user_confirmed`，§3.4）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定。 | 允许编译器挑出现处，即可把 ILLEGAL 洗成 LEGAL（R-18）。 |
 
 ---
 
@@ -181,6 +184,8 @@ flowchart TD
 | P4 | 钉选与受保护（§3.3） | 只决定「直接写」还是「先问」。 |
 | P5 | 写入 | — |
 
+**`reject_item` 的 op 级判定**（K-11）：P1 在通用溯源之外追加两条。其一，证据 turn 必须在 `compiled_from_turns` 内，否则 `E_REJECT_TURN_NOT_IN_BATCH`。其二，锚定句须含 `NEGATION_CUES` 中的否定词且不是问句，否则 `E_REJECT_NOT_NEGATED`；否定判定只看引擎词表，不采信 op 自报。P3 墓地不适用，与 `remove_item` 同理。P4 复用受保护规则：目标不存在 → `E_REJECT_TARGET_MISSING`；`user_pinned` → `SUGGEST S_OVERRIDE_PINNED`；`user_said` / `user_confirmed` 未钉选 → `SUGGEST S_OVERRIDE_PROTECTED`；其余 → APPLY（生效规则见 §5.4）。
+
 #### 2.3.3 三方碰撞真值表：`user_pinned` × 墓地 × AI 覆盖
 
 列含义：`pin` 目标是否钉选；`grave` 内容是否命中活跃墓碑（`H` 命中且 `disallow_revival=true`；`S` 命中且为 `false`；`G` 命中且 `rejected_by=security_gate`；`-` 未命中）；`rev` 复活判定（`L` 合法、`A` 模糊、`I` 非法、`-` 不适用）。
@@ -299,7 +304,7 @@ function anchorQuote(turn: TranscriptTurn, ref: TurnRef, opts?: { requireQuote?:
    }
 ```
 
-**为什么默认取最后一处**：同一条消息里，用户后说的话代表他在这条消息里的最终态度（例：「先别加 Excel 导出……想了想，还是加 Excel 导出吧」）。§4 的复活判定与 §3.4 的确认判定都在这一处上做否定词与问句检查，高亮也落在这一处，三者口径一致。编译器若确有意图指向前面的出现，必须显式给 `occurrence`。
+**为什么默认取最后一处**：同一条消息里，用户后说的话代表他在这条消息里的最终态度（例：「先别加 Excel 导出……想了想，还是加 Excel 导出吧」）。§4 的复活判定与 §3.4 的确认判定都在这一处上做否定词与问句检查，高亮也落在这一处，三者口径一致。编译器给出的 `occurrence` 只影响锚点选择；复活判定路径忽略它（§4.4，K-12）。确认判定路径（§3.4）存在同型洗白面，修法待定（显式风险，见 K-12）。
 
 **为什么短引用要整句边界**：「对」「好」「可以」是合法的确认原话，不能设最小长度拒之门外。但一个字的 quote 几乎能在任何消息里找到（「对」出现在「对比」里）。要求它构成一个完整的短句，就排除了这种碰巧命中。
 
@@ -366,10 +371,13 @@ interface GraveyardFingerprint {
   (a) entry.item_ref 存在 且 op 目标 id === entry.item_ref.id
   (b) matchNormalize(op 主文本) === entry.fingerprint.key
   (c) Dice(lexemes(op 主文本), entry.fingerprint.lexemes) ≥ GRAVEYARD_DICE_THRESHOLD（= 0.75）
+  (d) ∃ k ∈ entry.revival_keys：字素数(k) ≥ 4 且 matchNormalize(op 主文本) 包含 k（子串，口径同 R6）
 多个墓碑同时命中时，按 rejected_id 字典序取第一个作为主墓碑，其余写入 reasons[]
 ```
 
-**能力边界（必须写进 PR 描述）**：(b)(c) 是字面相似度，**抓不住纯语义改写**（「用 MongoDB」与「换成文档数据库」Dice 为 0）。零模型方案在此处的残余风险由三层兜底：① 编译器与 Worker 的提示词注入活跃墓碑（§14.11 已规定）；② 金标对话集加入「语义改写偷渡」样本并要求 0 漏网（J.11）；③ Worker 产出物门禁（不在 J.9）。阈值 0.75 是保守取值：宁可误拦一个相似的新想法（用户仍可亲口说出来走合法复活），不可漏放一个已否决的想法。
+(d) 命中**不直接 DROP**，与 (a)(b)(c) 同一汇合点，进入 §4.4 `judgeRevival`（P3 → RV）。它让拦截与复活使用同一套关键词，消除「复活认得、拦截不认得」的不对称。字素数下限 4 防止两字短词造成大面积过拦截。
+
+**能力边界（必须写进 PR 描述）**：(b)(c)(d) 都是字面匹配，**抓不住纯语义改写**（「用 MongoDB」与「换成文档数据库」Dice 为 0）。零模型方案在此处的残余风险由三层兜底：① 编译器与 Worker 的提示词注入活跃墓碑（§14.11 已规定）；② 金标对话集加入「语义改写偷渡」样本并要求 0 漏网（J.11）；③ Worker 产出物门禁（不在 J.9）。阈值 0.75 是保守取值：宁可误拦一个相似的新想法（用户仍可亲口说出来走合法复活），不可漏放一个已否决的想法。(d) 只抓复用了用户原话关键词的重提。「MongoDB 存储」与墓碑「用 MongoDB 存数据」之间只有模块名重叠，既不超过 Dice 阈值，也不含用户原话的完整关键词，(d) 不命中，仍放行。这是已登记的残余风险，由 J.11 金标覆盖。
 
 ### 4.3 复活关键词 `revival_keys`
 
@@ -401,6 +409,8 @@ function judgeRevival(input: {
 ```
 
 候选证据 = `op.revival?.evidence`（显式复活声明）优先；没有显式声明时取 `op.evidence`（**隐式复活自动识别**：编译器忘了声明，但用户确实重提了，也能放行；编译器没声明且用户没重提，就是偷渡，拦截）。对每条候选 `TurnRef` 依次检查，**任一条 LEGAL 即 LEGAL**；否则若任一条 AMBIGUOUS 即 AMBIGUOUS；否则 ILLEGAL（取第一条候选的失败码）。
+
+**锚点选择（K-12）**：`judgeRevival` 调用 `anchorQuote` 时传入可选项 `ignoreOccurrence: true`（默认 false）。编译器提供的 `ref.occurrence` 被丢弃并记 `W_REVIVAL_OCCURRENCE_IGNORED`，锚点一律取最后一处。若允许 `occurrence` 指向前面的出现，「还是加上 X。算了，不要 X」就能被洗成 LEGAL（R-18）。
 
 | 条件 | 类型 | 检查 | 不满足 |
 | :-: | :-: | :--- | :--- |
@@ -459,10 +469,10 @@ export const AFFIRMATION_CUES = [
 | R-12 | 14 / 是，但 `rejected_by: "security_gate"` | `要 Excel 导出` | ILLEGAL | `E_REVIVAL_SECURITY_LOCKED` |
 | R-13 | 14 / 是，op 内容为「PDF 导出」，声明复活 `REJ-001` | `要 Excel 导出` | ILLEGAL | `E_REVIVAL_FINGERPRINT_MISMATCH` |
 | R-14 | 14 / 是，同一消息 `先不要 Excel 导出。想了想还是加上 Excel 导出`，无 occurrence | 取最后一处所在句 | LEGAL | — |
-| R-15 | 同 R-14，`occurrence: 0` | 第一处所在句 | ILLEGAL | `E_REVIVAL_NEGATED` |
+| R-15 | 同 R-14，`occurrence: 0`（被忽略） | 最后一处所在句 | LEGAL（自动识别） | `W_REVIVAL_OCCURRENCE_IGNORED` |
 | R-16 | 14 / 是，op 未声明 `revival`（隐式） | `还是把 Excel 导出加上吧` | LEGAL（自动识别） | — |
 | R-17 | 14 / 是，op 未声明 `revival`，evidence 是 `我想要报表` | — | ILLEGAL | `E_PROPOSAL_PREVIOUSLY_REJECTED` |
-| R-18 | 14 / 是，消息 `还是加上 Excel 导出。算了，不要 Excel 导出`，op 声明复活，`occurrence: 0` | 第一处所在句 | ILLEGAL | `E_REVIVAL_NEGATED`（**当前红灯**：按现行口径判 LEGAL，见 TM-Y-32） |
+| R-18 | 14 / 是，消息 `还是加上 Excel 导出。算了，不要 Excel 导出`，op 声明复活，`occurrence: 0`（被忽略） | 最后一处所在句（`W_REVIVAL_OCCURRENCE_IGNORED`） | ILLEGAL | `E_REVIVAL_NEGATED` |
 
 ### 4.6 复活生效
 
@@ -587,6 +597,7 @@ export type SchemeOp =
       item: Record<string, unknown> & { id: string; source?: ItemSource };
       evidence: TurnRef[]; revival?: RevivalClaim }
   | { op: "remove_item"; id: string; reason: string; evidence: TurnRef[] }
+  | { op: "reject_item"; id: string; reason?: string; evidence: TurnRef[] }   // K-11，见 §2.3.2
   | { op: "propose_decision" | "raise_conflict"; item: Record<string, unknown> & { id: string };
       evidence: TurnRef[]; revival?: RevivalClaim }
   | { op: "mark_user_confirmed"; id: string; evidence: TurnRef[] }
@@ -685,6 +696,9 @@ export const OP_CODES = [
   "E_REVIVAL_TURN_NOT_IN_BATCH",
   "E_REVIVAL_FINGERPRINT_MISMATCH",
   "E_REVIVAL_NEGATED",
+  "E_REJECT_NOT_NEGATED",          // reject_item 锚定句不含否定词或为问句（K-11）
+  "E_REJECT_TURN_NOT_IN_BATCH",    // reject_item 证据不在本批（K-11）
+  "E_REJECT_TARGET_MISSING",       // reject_item 目标不存在（K-11）
   // 闭包
   "E_OP_DEPENDENCY_DROPPED",
 ] as const;
@@ -700,6 +714,7 @@ export const WARNING_CODES = [
   "W_SUGGESTION_DEDUPED",
   "W_NOOP_IDENTICAL",
   "W_COMPILER_ANCHOR_IGNORED",      // 编译器提交了 anchor / introduced_after_turn_seq，已丢弃
+  "W_REVIVAL_OCCURRENCE_IGNORED",   // 复活判定路径丢弃了编译器 occurrence（K-12，§4.4）
   "W_PARTNER_HINT_TRUNCATED",       // partner_hint > 200 字被截断
 ] as const;
 
@@ -758,6 +773,7 @@ stageCommit(...)                               → applied | noop
 - 新建条目：`source` 取 P2 判定后的值；`user_pinned: false`；`introduced_after_turn_seq = watermark`；`evidence` = op 证据（含引擎锚点）包成 `{ kind:"turn" }`。
 - 更新条目：只覆盖 op 提供的业务字段；`evidence` 追加（按 `turn_id + raw_start` 去重）；`source` 永不降级（`user_*` 不会被写回 `ai_inferred`）。
 - `remove_item`：从集合移除；**不**自动入墓（AI 删掉的东西不是用户否决的东西）。
+- `reject_item`（K-11）：移除条目，经依赖闭包与后置审计（同 `remove_item`）；随后以该 op 调用 `rejectItemToGraveyard`，建墓碑 `rejected_by: "user"`、`disallow_revival: true`，`rejected_after_turn_seq` 取证据消息的 seq，`reason` 缺省为「用户在聊天中否决」。
 - 所有被触及条目 `updated_in_revision = 新修订号`。
 - `partner_hint` 不进入方案，原样（截断到 200 字）放在结果的 `journal` 里给调用方。
 
@@ -911,7 +927,16 @@ stageCommit(...)                               → applied | noop
 | TM-Y-29 | `migrateGraveyardEntry` 补全旧数据（无 fingerprint 等字段） | 输出字段与 `buildTombstone` 对同一输入的结果相等 |
 | TM-Y-30 | `remove_item` 的目标恰好与某墓碑相似 | 墓地检查不适用于删除，按 P4 处理 |
 | TM-Y-31 | 墓碑「Excel 导出」活跃且 `disallow_revival: true`；新想法与其 Dice ≥ 0.75 但意图不同，用户无复活证据（误拦方向） | DROP `E_PROPOSAL_PREVIOUSLY_REJECTED`；`journal.verdicts` 留有该 verdict 且含命中的 `rejected_id`；卡片数为 0；随后用户以原话复活（同 TM-Y-25 路径）可成功 |
-| TM-Y-32 | R-18 复引用：复活判定中编译器给出显式 `occurrence` | ILLEGAL，`E_REVIVAL_NEGATED`。复活路径忽略编译器 `occurrence` 并记 `W_*` 警告（码名待定：沿用 `W_COMPILER_ANCHOR_IGNORED` 则需扩写其注释，否则新增 `W_REVIVAL_OCCURRENCE_IGNORED`）。**当前红灯**：修复前此行必然失败 |
+| TM-Y-32 | R-18 复引用：复活判定中编译器给出显式 `occurrence` | ILLEGAL，`E_REVIVAL_NEGATED`；`occurrence` 被忽略并记 `W_REVIVAL_OCCURRENCE_IGNORED` |
+| TM-Y-33 | 墓碑「用 MongoDB 存数据」，`revival_keys` 含 `用mongodb存数据`（字素 ≥ 4）；AI 发 `upsert_module`，主文本 `matchNormalize` 包含该 key，Dice < 0.75；op 锚定句不含该 key | SUGGEST `S_REVIVAL_AMBIGUOUS`（R6 `NO_KEY`），不写入；卡片数为 1 |
+| TM-Y-34 | 对照：同一墓碑；AI 发 `upsert_module`「MongoDB 存储」，`matchNormalize` 不包含任何 key，Dice 0.33 | APPLY。**已知残余风险**：(d) 不覆盖模块名重叠的改写（§4.2 能力边界），此行记录现行口径 |
+| TM-Y-35 | 下限：墓碑 `revival_keys` 含字素数为 3 的 key（如 `excel`）；AI op 主文本包含该 key，Dice < 0.75 | APPLY（字素数 < 4，不触发 (d)） |
+| TM-Y-36 | `reject_item`：本批用户消息，锚定句「不要 Excel 导出」（含否定词，非问句），目标为未钉选的 `ai_inferred` 条目 | APPLY：条目移出方案；新墓碑 `rejected_by: "user"`、`disallow_revival: true`、`rejected_after_turn_seq` 为该消息 seq；修订号 +1 |
+| TM-Y-37 | `reject_item`：锚定句「加上 Excel 导出」（无否定词） | DROP `E_REJECT_NOT_NEGATED`；不建墓碑，方案不变 |
+| TM-Y-38 | `reject_item`：锚定句「不要 Excel 导出吗？」（否定词 + 问句） | DROP `E_REJECT_NOT_NEGATED`（问句不算否决） |
+| TM-Y-39 | `reject_item`：证据为更早批次的用户消息（不在 `compiled_from_turns` 内） | DROP `E_REJECT_TURN_NOT_IN_BATCH` |
+| TM-Y-40 | `reject_item`：目标为 `user_pinned` 条目；另一组目标为未钉选的 `user_said` 条目 | pinned → SUGGEST `S_OVERRIDE_PINNED`；`user_said` → SUGGEST `S_OVERRIDE_PROTECTED`；两者均不删除、不入墓 |
+| TM-Y-41 | `reject_item`：目标 id 不存在 | DROP `E_REJECT_TARGET_MISSING` |
 
 ### 6.8 TM-Z 三方碰撞（对拍 §2.3.3）
 
