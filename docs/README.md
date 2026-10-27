@@ -20,7 +20,7 @@
 | :--- | :--- | :--- |
 | [`specs/system-architecture.md`](./specs/system-architecture.md) | 架构宪法：产品定义、系统拓扑、分层职责、安全网关、Git/Worktree、状态机、数据模型、路线图 | v1.6.1（commit `4280de6`） |
 | [`specs/development-tasks.md`](./specs/development-tasks.md) | 任务卡：87 张卡、DAG 依赖、Sprint 排期、修订流水 | v1.6.2 |
-| [`specs/supervisor.md`](./specs/supervisor.md) | Supervisor 单一事实源（SSOT）：产品与监理语义；由 v2.0 正文 + v2.0.2 裁定层**物理合流**而成 | v2.0.2 |
+| [`specs/supervisor.md`](./specs/supervisor.md) | Supervisor 单一事实源（SSOT）：产品与监理语义；由 v2.0 正文 + v2.0.2 裁定层**物理合流**而成；**第三部分（v2.1）**定义意图编译器、《改动范围与验收方式》与确认后单页四幕旅程。**用户旅程以本文为准**，架构规范 §0.2 / §7.1 的旧旅程已加取代标注 | v2.1 |
 | [`specs/runtime-contract-and-safety.md`](./specs/runtime-contract-and-safety.md) | 运行时硬契约：合同护照、Scope/通配分级、P.1 保护清单、Token/越界熔断、审计侧车、终态与清理、错误码分层 | 2026-10-27 新建（收口自 6 处散落条文） |
 
 ---

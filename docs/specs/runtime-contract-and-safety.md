@@ -19,6 +19,8 @@
 | 交付终态与归档 | §7 | Spec Freeze §2.1 / 文档治理 §4.2 的 `DELIVERED` — 见 ADR-0012 |
 | 终态 Worktree 清理 | §7.2 | 旧「放弃本轮 → 清理临时 worktree」笼统表述；分阶段清理协议尚未实现，见 RFC |
 | 澄清轮次上限 | §2.5 | Top7 §4「≤2 轮」— **已正式作废**（裁决 D-3） |
+| 合同范围的来源与确认前展示 | §1、§2.2 | 「确认方案」时由意图文本临时推断范围 — 见 Supervisor SSOT 第三部分 §15（D7） |
+| 确认后右栏是否锁定 | §2.1 | Supervisor SSOT §7 D3「右栏保持锁定」— 见 SSOT 第三部分 §16.5（D9） |
 
 **相关法律**：[`../adr/`](../adr/) — ADR-0002（互斥）、0003（能力边界）、0004（预算）、0005（验证）、0006（非防篡改）、0008（Demo Origin）、0010、0011、0012、0013。
 
@@ -35,6 +37,8 @@
 5. **授权状态**（`approval` + `authorization.git`）——未达 `APPROVED` 不得写盘。
 
 **铁律**：合同是**护照**不是愿望清单。合同里没写的路径，一律不可写；合同里没写的命令，一律不可跑。
+
+**护照的来源（v2.1 · D7）**：第 2～4 类信息必须在确认前由范围预检算出 `ScopePlan`，以白话展示在中栏《改动范围与验收方式》，并随冻结快照落盘。带 `confirmation_id` 的合同**只能**从快照里的 `ScopePlan` 原样生成，Daemon 不得从意图文本重新推断。详见 [`supervisor.md`](./supervisor.md) 第三部分 §15。
 
 ---
 
@@ -57,16 +61,18 @@
 | 2 | `VALIDATE_CONFIRMATION` | 在**已冻结**的同一修订上跑唯一谓词 | 失败即解锁，可重试 |
 | 3 | `FREEZE_SNAPSHOT` | 写不可变快照 `.stagent/drafts/schemes/{confirmation_id}.json` | 失败即解锁，**不进签署** |
 | 4 | `SIGN_AND_PREPARE` | 建合同（带 `confirmation_id`）→ 批准 → 建任务图 | 失败**必须** `compensate` |
-| 5 | `COMMIT` | 记住幂等结果，方案冻结，右栏保持锁定 | — |
+| 5 | `COMMIT` | 记住幂等结果，方案冻结；右栏解锁进入施工对话（v2.1 · D9） | — |
 
 **幂等契约**：`confirmation_id` 由**前端生成**，同一修订重试必须复用同一 id（`src/lib/journey/confirm-scheme-atomic.ts`）。同 id + 同内容 → `idempotent: true`；同 id + 换修订 → `E_CONFIRMATION_ID_REUSED`；`confirmation_id` 非法 → `E_CONFIRMATION_ID_INVALID`。
 > **裁决 D-1**：内容派生式 `sha256(scheme_id + revision + digest)` **不采纳**（会使 `E_CONFIRMATION_ID_REUSED` 永远无法触发），留档为 v0.2 备选，见 [`../rfc/scheme-snapshot-and-attestation-model.md`](../rfc/scheme-snapshot-and-attestation-model.md) §5。
+
+> **v2.1 补充**：第 2 阶段同时校验 `ScopePlan` 与当前修订绑定，并在 Daemon 上重跑预检比对 `plan_digest`，不一致 → `E_SCOPE_PLAN_DRIFT`（409）；第 3 阶段快照包含完整 `ScopePlan`；第 4 阶段建合同的范围、验证命令与预算只取自快照。冻结后的右栏消息按 SSOT 第三部分 §16.5 分流，**不得**写入冻结快照。
 
 **补偿契约**：第 4 阶段任何失败都必须调用 `compensate`；补偿失败 → `E_COMPENSATION_FAILED`，**保持锁定**（禁止假装成功、禁止静默解锁）。
 
 ### 2.2 唯一确认谓词
 
-`evaluateSchemeConfirmation(draft, demo)` 是**唯一**的「能不能点确认方案」判定函数。UI、Daemon、脚本、重试全部调用它；任何第二套判断——包括「UI 根据自己的状态推导 `disabled`」——均视为缺陷。
+`evaluateSchemeConfirmation(draft, demo)` 是**唯一**的「能不能点确认方案」判定函数（v2.1 目标签名：`evaluateSchemeConfirmation(draft, demo, scopePlan)`，见 SSOT 第三部分 §15.5）。UI、Daemon、脚本、重试全部调用它；任何第二套判断——包括「UI 根据自己的状态推导 `disabled`」——均视为缺陷。
 
 - 实现锚点：`src/lib/journey/scheme-draft.ts` → `evaluateSchemeConfirmation`
 - Daemon 侧等价物：`daemon/supervisor/demo/signing-gate.ts` → `evaluateSnapshotDemoGate` / `evaluateLatestDemoGate`（同一组拒绝码，不得自造新码）
@@ -83,8 +89,20 @@
 | `E_DEMO_FAILED` | `demo.status === "failed"` | 重试 / 显式接受降级 |
 | `E_DEMO_CONFIRMATION_REQUIRED` | 已生成但 `decision_revision !== scheme_revision` | 点「确认 Demo」或「接受降级」 |
 | `E_DEMO_STALE` | `demo.scheme_revision !== scheme_revision` | 重新生成 Demo |
+| `E_SCOPE_NOT_READY`（v2.1） | 没有与当前修订绑定的 `ScopePlan` | 等预检完成 |
+| `E_SCOPE_POLICY`（v2.1） | 自动收敛后范围仍违反通配符分级（§4.1） | 说清要改哪块，或排除该区域 |
+| `E_SCOPE_APPROVAL_REQUIRED`（v2.1） | `ScopePlan.needs_approval` 有未表态项 | 点「可以」或「不行」 |
 
-Daemon 层另有两个签署拦截码：`E_DEMO_NOT_CONFIRMED`（`confirmed !== true`）、`E_SCHEME_SNAPSHOT_NOT_FOUND`（传了 `confirmation_id` 但快照缺失，HTTP 409）。**新增码必须同时更新本表与测试。**
+**Daemon 专属码**（只有 Daemon 能检出：需要读磁盘、快照或重跑预检；前端无从提前告知）：
+
+| 码 | 触发条件 |
+| :--- | :--- |
+| `E_DEMO_NOT_CONFIRMED` | Demo 确认记录 `confirmed !== true` |
+| `E_SCHEME_SNAPSHOT_NOT_FOUND` | 传了 `confirmation_id` 但快照缺失或损坏（HTTP 409） |
+| `E_SCOPE_PLAN_DRIFT`（v2.1） | Daemon 重跑预检得到的 `plan_digest` 与前端提交的不一致（HTTP 409） |
+| `E_SCHEME_SNAPSHOT_MISMATCH`（v2.1） | 带 `confirmation_id` 的合同范围、验证命令或预算与快照里的 `ScopePlan` 不一致（HTTP 409） |
+
+**新增码必须同时更新本表、Supervisor SSOT §7 D1 与测试。** 带 `confirmation_id` 的签署链**不得**返回 `E_WRITABLE_SCOPE_POLICY`；若发生，按 D1 违约缺陷处理。
 
 ### 2.4 允许与禁止的状态边
 
@@ -213,11 +231,11 @@ Daemon 层另有两个签署拦截码：`E_DEMO_NOT_CONFIRMED`（`confirmed !== 
 
 | 层 | 位置 | 职责 | 代表码 |
 | :--- | :--- | :--- | :--- |
-| **L1 前端提前告知** | `evaluateSchemeConfirmation` | 决定按钮 `disabled` 与提示文案，可被用户直接修正 | §2.3 的 7 码闭集 |
-| **L2 Daemon 签署拦截** | `signing-gate.ts` | 真正放行判定；快照缺失即拒 | `E_SCHEME_SNAPSHOT_NOT_FOUND` / `E_DEMO_NOT_CONFIRMED` |
+| **L1 前端提前告知** | `evaluateSchemeConfirmation` | 决定按钮 `disabled` 与提示文案，可被用户直接修正 | §2.3 主表（7 码 + v2.1 三个范围码） |
+| **L2 Daemon 签署拦截** | `signing-gate.ts` | 真正放行判定；快照缺失即拒 | §2.3 主表 + 「Daemon 专属码」表 |
 | **L3 执行期运行时** | Gateway / Orchestrator | 越界、预算、锁、越权 | `E_OUT_OF_SCOPE` / `E_OUT_OF_SCOPE_UNTRACKED` / `BUDGET_EXCEEDED` / `E_WORKSPACE_LOCKED` / `E_CHECKPOINT_FAILED` |
 
-**纪律**：L1 与 L2 必须使用**同一组拒绝码**，L2 不得自造新码；两者结论不一致时以 L2 为准并记一条告警。
+**纪律**：凡前端能检出的情形，L1 与 L2 必须使用**同一组拒绝码**；L2 只可额外使用 §2.3「Daemon 专属码」表中登记的码，不得自造未登记的码。两者结论不一致时以 L2 为准并记一条告警。
 
 ---
 
