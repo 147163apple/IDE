@@ -2853,7 +2853,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **前置依赖**：`TASK-J.9`（硬：引擎）；合并成功后触发范围预检依赖 `TASK-J.2`
 * **优先级**：P1
 * **状态**：`[NEW_TASK]`
-* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（21/47）的引擎码不可能被触发，其余由提示词纪律降低、由引擎兜底。
+* **一句话目标**：用户发消息后 1.2 秒，编译器在结构化输出约束下产出补丁，经组装送进引擎；结构层让近一半（21/47）的引擎码不可能被触发（注：`47` 为定稿时口径，现行引擎码表 51 码，待按 51 重算，见 `consistency-audit.md` OP-15），其余由提示词纪律降低、由引擎兜底。
 * **范围**：
   1. `src/lib/journey/compiler-output-schema.ts`：按消息别名、本批别名、现有 id、墓碑 id 动态构造 zod Schema；`assembleCompilerOutput`（别名 → `turn_id`、摘录 qid 展开、`new:` id 替换、代填 `base_revision` 与 `compiled_from_turns`；失败映射 `E_PATCH_SCHEMA_INVALID` 并记子原因）。
   2. `daemon/supervisor/intent-compiler/system-prompt.ts`：实施口径 §6.2 骨架 + §6.5 八条 few-shot；`COMPILER_PROMPT_VERSION`。
