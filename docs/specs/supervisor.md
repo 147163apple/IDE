@@ -19,7 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
-| **v2.1 试玩自查口径** | 2026-10-28 | 新增实施口径 [`playtest-self-check.md`](./playtest-self-check.md)：§16.7 三方比对责任边界、防自证白话摘要、验收清单点亮、归因状态机与模型单向棘轮、K-14 回填三分类算法；提案 K-16（`attributions.trigger` 收紧为闭集并加 `linked_reason_code`），本次未改 §14.11 原文。 |
+| **v2.1 试玩自查口径** | 2026-10-28 | 新增实施口径 [`playtest-self-check.md`](./playtest-self-check.md)：§16.7 三方比对责任边界、防自证白话摘要、验收清单点亮、归因状态机与模型单向棘轮、K-14 回填三分类算法；登记 K-16（`attributions.trigger` 收紧为闭集并加 `linked_reason_code`，见 §14.11）。 |
 | **v2.1 派工墓地门禁** | 2026-10-28 | §14.11 新增第 5 小节 G-MATCH（墓地匹配单一语义源：自然语言通道 NL-1～5、代码通道 CODE-1～4）；§16.6 增「碰了你否决过的方案」行；新增实施口径 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md)（`TASK-J.18`）。 |
 | **v2.1 沉默损耗规格增补** | 2026-10-28 | 三项规格态（⏳，未实现）：①§14.11 第 3 条墓地继承扩充为「冻结快照及其回写记录 + 墓地子账本」，墓碑随 journey 迁移；②§14.11 新增子账本四 `attributions`（质疑归因账本，三分类）与收紧项 K-14，只写台账、不改 `requirements-store.ts` 的 `source` 枚举；③§13.3 增「第一反应速记」前置说明（不新增决定类型、不阻断流程）。§13.4 ③ 幕补呼应标注；`intent-compiler-prompt.md` §2.2 补归因字段的生成端不可写边界；`system-architecture.md` 步骤五加交叉引用。 |
 | **v2.1 生成端 reject_item 口径（J.10）** | 2026-10-28 | 生成端 Schema 开放 `reject_item`，只在用户明确否决方案中现有条目时发出（发射条件见 `intent-compiler-prompt.md` §4.5、§6.2「六之二」）；§14.11 登记 K-13：`reject_item` 指向已有效用户墓碑时记 no-op（复用 `W_NOOP_IDENTICAL`）；码表仍为 51 码。 |
@@ -1202,6 +1202,7 @@ export interface EvidenceLedger {
 - **K-13**：生成端开放 `reject_item`：仅在用户对方案中现有条目明确否决时发出，发射条件与金标见 `intent-compiler-prompt.md` §4.5、§8.2 G 组；引擎对已有效用户墓碑的重复否决记 no-op（`W_NOOP_IDENTICAL`，见 `scheme-patch-engine.md` §2.3.2 P4）。否决不用 `remove_item`（它不入墓）。
 - **K-14**：质疑归因账本——每次质疑事件强制回填三分类归因（清单上已批准 / 差集未上屏 / 差集没有），只写台账不改 `requirements-store.ts` 的 `source` 枚举；墓碑跨旅程存活由权威方向第 3 条扩充解决，两件事分开裁决。
 - **K-15**：`E_PROPOSAL_PREVIOUSLY_REJECTED` 具有双重角色：编译期由引擎输出至 `journal.verdicts`（编译日志码），施工期由派工门禁输出为 L3 运行时码，并登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`，映射 `SCOPE_VIOLATION`（不新增原因码）。同一码名的两种产出不改变 K-9 对其余编译日志码的约束；K-9 的例外条款以本条为准。该登记随 `TASK-J.18` 施工期实现，本条为规格决定，本 PR 未改代码。
+- **K-16**：质疑归因账本 `attributions.trigger` 收紧为闭集 `"first_impression" | "user_dispute" | "acceptance_fail"`（删除 `| string`）；新增可选字段 `linked_reason_code`（类型 `reasonCodeSchema`，只读引用，仅 `trigger === "acceptance_fail"` 的条目可带，见 `playtest-self-check.md` §5.2 与 SR-5）。读取旧台账时未知 trigger 映射为 `user_dispute` 并在 `resolution_note` 前缀 `[legacy-trigger:<原值>]`；写入拒绝未知值。不建 reason 映射表，两个码系保持正交。代码随 `TASK-J.16` 实施。
 
 #### 5. 墓地匹配语义（单一语义源 G-MATCH）
 
