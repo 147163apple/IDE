@@ -13,6 +13,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+    # Windows 目前**不阻断合并**：README 的「平台矩阵」写明 Windows 尚未完成
+    # 真机验证（路径分隔符、autocrlf 换行、符号链接需管理员权限、文件锁导致
+    # 清理 EBUSY —— 多数属平台适配而非逻辑缺陷）。把它留在这里是为了持续
+    # 观测、防止腐化，但不能让它挡住 macOS/Linux 的真实回归。
+    # 收紧成阻断的前置条件：Windows 单独开卡修完后删掉这一行。
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
 

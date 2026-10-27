@@ -64,6 +64,35 @@ function nextFrame(ws: WebSocket, timeoutMs = 2_000): Promise<IpcFrame> {
   });
 }
 
+/**
+ * 等某一**类**帧，忽略期间到达的无关帧。
+ *
+ * 连上来的客户端会同时收到全局广播（`BASELINE_PROGRESS` / `TASK_GRAPH_UPDATED`
+ * 等），它们跟 PING/PONG 毫无关系，却完全可能插在两帧之间。
+ * 「我发的下一个请求，下一帧就必须是它的响应」是把调度顺序当协议契约——
+ * 在更慢或更忙的机器（CI 的 macOS runner）上必然偶发。
+ */
+function nextFrameOfType(
+  ws: WebSocket,
+  type: IpcFrame["type"],
+  timeoutMs = 2_000,
+): Promise<IpcFrame> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      ws.off("message", onMessage);
+      reject(new Error(`timeout waiting for frame ${type}`));
+    }, timeoutMs);
+    const onMessage = (raw: Buffer) => {
+      const frame = JSON.parse(raw.toString()) as IpcFrame;
+      if (frame.type !== type) return; // 无关广播：跳过，继续等
+      clearTimeout(timer);
+      ws.off("message", onMessage);
+      resolve(frame);
+    };
+    ws.on("message", onMessage);
+  });
+}
+
 function waitClose(ws: WebSocket): Promise<number> {
   return new Promise((resolve) => {
     ws.once("close", (code) => resolve(code));
@@ -117,7 +146,8 @@ describe("WebSocket 第一帧 AUTH 鉴权（协议 v1.1）", () => {
       ws.send(
         JSON.stringify({ type: "PING", timestamp: new Date().toISOString() }),
       );
-      const pong = await nextFrame(ws);
+      // 不要求 PONG 是紧邻的下一帧：期间可能夹着服务端广播
+      const pong = await nextFrameOfType(ws, "PONG");
       expect(pong.type).toBe("PONG");
       expect(daemon?.getClientCount()).toBe(1);
     } finally {
