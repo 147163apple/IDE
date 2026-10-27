@@ -18,6 +18,13 @@ export interface IpcClientOptions {
   port: number;
   token: string;
   host?: string;
+  /**
+   * 完整 Daemon Base URL（如 `https://8787-xxx.example.com` 或
+   * `http://127.0.0.1:3001`）。提供时优先于 host/port 推导 WS 地址：
+   * https → wss，并保留代理场景下省略的默认端口。不提供时沿用
+   * `ws://${host}:${port}/ws`（本机同端口开发场景）。
+   */
+  baseUrl?: string;
   /** 测试注入用；默认使用全局 WebSocket */
   websocketImpl?: typeof WebSocket;
   pingIntervalMs?: number;
@@ -28,6 +35,29 @@ export interface IpcClientOptions {
 
 export type IpcClientStatus =
   "connecting" | "connected" | "reconnecting" | "closed";
+
+/**
+ * 由 baseUrl（若提供）推导 WS 地址，否则回退 `ws://${host}:${port}/ws`。
+ * 独立反向代理场景下，控制台与 Daemon 的公网 Origin 相同但协议是
+ * https，端口折进子域名——这时固定 `ws://127.0.0.1:<port>` 连的是浏览器
+ * 自己的回环地址而非 Daemon，必须跟随 baseUrl 的 scheme/host。
+ */
+export function deriveWsUrl(options: IpcClientOptions): string {
+  if (options.baseUrl) {
+    try {
+      const u = new URL(options.baseUrl);
+      u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
+      u.pathname = "/ws";
+      u.search = "";
+      u.hash = "";
+      return u.toString();
+    } catch {
+      // 畸形 baseUrl：回退 host/port 推导
+    }
+  }
+  const host = options.host ?? "127.0.0.1";
+  return `ws://${host}:${options.port}/ws`;
+}
 
 export class StagentIpcClient {
   private readonly url: string;
@@ -50,9 +80,8 @@ export class StagentIpcClient {
   private readonly onStatusOption?: ((s: IpcClientStatus) => void) | undefined;
 
   constructor(options: IpcClientOptions) {
-    const host = options.host ?? "127.0.0.1";
     // Token 绝不进入 URL；连接建立后通过第一帧 AUTH 发送
-    this.url = `ws://${host}:${options.port}/ws`;
+    this.url = deriveWsUrl(options);
     this.token = options.token;
     this.WebSocketImpl = options.websocketImpl ?? WebSocket;
     this.pingIntervalMs = options.pingIntervalMs ?? 5_000;

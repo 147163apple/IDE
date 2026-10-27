@@ -26,10 +26,12 @@ function setLocation(url: string): void {
 describe("loadConnection：Token 引导通道", () => {
   beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
   });
 
   afterEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     setLocation("http://localhost:3000/");
   });
 
@@ -64,6 +66,26 @@ describe("loadConnection：Token 引导通道", () => {
     setLocation("http://localhost:3000/");
     const conn = loadConnection();
     expect(conn.baseUrl).toBe(DEFAULT_DAEMON_URL);
+  });
+
+  it("无 fragment 且 sessionStorage 为空时，退回 localStorage 作一次性引导源（自动化回放只能预置 localStorage）", () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "localstorage-seed-token");
+    localStorage.setItem("stagent.baseUrl", "https://proxy.example.com");
+    setLocation("http://localhost:3000/");
+    const conn = loadConnection();
+    expect(conn.token).toBe("localstorage-seed-token");
+    expect(conn.baseUrl).toBe("https://proxy.example.com");
+    // 落回 sessionStorage，后续逻辑（如 saveConnection）走原有同一条路径
+    expect(sessionStorage.getItem(TOKEN_STORAGE_KEY)).toBe(
+      "localstorage-seed-token",
+    );
+  });
+
+  it("fragment 引导存在时忽略 localStorage（fragment 优先级更高）", () => {
+    localStorage.setItem(TOKEN_STORAGE_KEY, "localstorage-seed-token");
+    setLocation("http://localhost:3000/#token=fragment-token-ok");
+    const conn = loadConnection();
+    expect(conn.token).toBe("fragment-token-ok");
   });
 });
 

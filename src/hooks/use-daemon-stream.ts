@@ -62,6 +62,8 @@ export interface UseDaemonStreamOptions {
   port: number | null;
   token: string;
   host?: string;
+  /** 完整 Daemon Base URL；提供时用于推导 WS scheme/host（跨域代理场景） */
+  baseUrl?: string;
   enabled?: boolean;
   onContractUpdate?: (payload: ContractUpdatePayload) => void;
   onEvidenceReady?: (payload: EvidenceReadyPayload) => void;
@@ -103,7 +105,7 @@ function asPayload<T>(frame: IpcFrame): T | null {
 export function useDaemonStream(
   options: UseDaemonStreamOptions,
 ): DaemonStreamState {
-  const { port, token, host = "127.0.0.1", enabled = true } = options;
+  const { port, token, host = "127.0.0.1", baseUrl, enabled = true } = options;
 
   const [status, setStatus] = useState<IpcClientStatus>("closed");
   const [logs, setLogs] = useState<StreamLogLine[]>([]);
@@ -126,6 +128,7 @@ export function useDaemonStream(
       port,
       token,
       host,
+      ...(baseUrl === undefined ? {} : { baseUrl }),
       onStatusChange: setStatus,
     });
 
@@ -277,7 +280,7 @@ export function useDaemonStream(
       off();
       client.close();
     };
-  }, [port, token, host, enabled]);
+  }, [port, token, host, baseUrl, enabled]);
 
   const clearLogs = useCallback(() => setLogs([]), []);
   const clearTerminal = useCallback(() => setTerminal([]), []);

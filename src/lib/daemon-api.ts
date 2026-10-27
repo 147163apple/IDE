@@ -174,6 +174,19 @@ export function loadConnection(): DaemonConnection {
     );
   }
 
+  // 自动化预览回放（如 Playwright storageState）只能预置 localStorage，不支持
+  // sessionStorage。没有 fragment 引导且 sessionStorage 为空时，退回
+  // localStorage 作为一次性引导源，仍统一落回 sessionStorage 走原有逻辑——
+  // 不改变鉴权本身，Token 仍必须通过服务端 AUTH 校验。
+  if (!boot.token && !sessionStorage.getItem(TOKEN_STORAGE_KEY)) {
+    const seedToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+    if (seedToken) sessionStorage.setItem(TOKEN_STORAGE_KEY, seedToken);
+  }
+  if (!boot.baseUrl && !sessionStorage.getItem("stagent.baseUrl")) {
+    const seedBase = localStorage.getItem("stagent.baseUrl");
+    if (seedBase) sessionStorage.setItem("stagent.baseUrl", seedBase);
+  }
+
   const storedBase = sessionStorage.getItem("stagent.baseUrl");
   const envBase = import.meta.env["VITE_DAEMON_URL"] as string | undefined;
   const sameOrigin = inferSameOriginDaemonBase();

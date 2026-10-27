@@ -1620,6 +1620,7 @@ ${trimmed}`
   const stream = useDaemonStream({
     port: daemonPort,
     token: conn.token,
+    baseUrl: conn.baseUrl,
     enabled: connected,
     onContractUpdate: (_p: ContractUpdatePayload) => {
       void refresh();
