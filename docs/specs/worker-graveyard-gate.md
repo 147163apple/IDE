@@ -338,7 +338,7 @@ runtime §8 新增 §8.1「L3 执行期码闭集」，列：码 / 触发点 / �
 | `E_GATE_SCAN_FAILED` | **本卡新增**：全量扫描无法读取 diff | 失败关闭：不进入合并 | 「自动检查没跑完」 | **待登记** | `PREPARATION_INTERRUPTED`（提案） |
 | `E_CHECKPOINT_FAILED` | 开一轮前打检查点 | 不开工 | — | 否 | **移出 L3**，改登记为开工前码（提案） |
 
-**K-9 解释冲突（需评审拍板）**：K-9 规定引擎码「不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`」，并把 `E_PROPOSAL_PREVIOUSLY_REJECTED` 列为例外，但例外条文只说明它出现在 `journal.verdicts` 且归属门禁层，**没有说明它是否进 `ERROR_CODES`**。工地侧拦截要写证据包 `verdict.reason_code`，而 `error-codes.ts` 规定每个运行时 `error_code` 都映射到一个 `reason_code`。**建议**：作为 L3 运行时码登记进 `ERROR_CODES`，映射 `SCOPE_VIOLATION`（不新增原因码）；同时补 K-13 明确「引擎编译期产出的同名码仍是编译日志码，工地侧产出的才是运行时码」。在拍板前，J.18 实施只写门禁日志与 `forbiddenViolations`，不写 `reason_code` 新映射。
+**K-9 解释冲突（已拍板：按建议登记，见 K-15）**：K-9 规定引擎码「不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`」，并把 `E_PROPOSAL_PREVIOUSLY_REJECTED` 列为例外，但例外条文只说明它出现在 `journal.verdicts` 且归属门禁层，**没有说明它是否进 `ERROR_CODES`**。工地侧拦截要写证据包 `verdict.reason_code`，而 `error-codes.ts` 规定每个运行时 `error_code` 都映射到一个 `reason_code`。**决定**：作为 L3 运行时码登记进 `ERROR_CODES`，映射 `SCOPE_VIOLATION`（不新增原因码）；由 K-15 明确「引擎编译期产出的同名码仍是编译日志码，工地侧产出的才是运行时码」。登记的代码动作随 J.18 实施 PR 完成；在该 PR 合入前，门禁只写日志与 `forbiddenViolations`，不写 `reason_code` 新映射。
 
 ---
 
@@ -612,7 +612,7 @@ export function verifyDispatchBinding(repoRoot: string, contract: SoftwareContra
 | GAP-W6 | `ai-worker.ts:350` 与 `gateway.ts:859` 向 blockers 推送原始 `access.reason`（`FORBIDDEN_PATH` / `NOT_WRITABLE`），而非映射后的 `E_*` 码 | 改为 `scopeErrorCode` 映射；否则 `pickPrimaryVerdict` 无法比较 | 本卡（顺带修） |
 | OBS-1 | `runBoundaryStop` 由 Gateway 回调时传入 `workerPid: null`，SIGINT 软停一步被跳过 | 观察项，不在本卡修；建议另开卡核实 | — |
 | DEP-1 | `E_SCOPE_PLAN_DRIFT` / `E_SCHEME_SNAPSHOT_MISMATCH` 代码 0 命中（F-9） | `TASK-J.4` 先行 | J.4 |
-| DEC-1 | K-9 对 `ERROR_CODES` 登记的解释冲突（§5.3） | 评审拍板；建议补 K-13 | 规格评审 |
+| DEC-1 | K-9 对 `ERROR_CODES` 登记的解释冲突（§5.3） | 已拍板：按建议登记，见 K-15；代码登记随 J.18 实施 | 规格评审（已决） |
 
 ## 9. 已知局限
 
