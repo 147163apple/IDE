@@ -2835,6 +2835,7 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **FAIL**：任一 op 在证据不合格时被部分应用；墓地命中的内容以覆盖建议卡形式出现在用户面前（Z-04）；一次成功合并使修订号增加超过 1；同一输入两次调用结果不同；引擎源码出现 `node:` 导入、`Date.now`、`Math.random` 或网络调用。
 * **关键文件**：`src/lib/journey/scheme-patch-types.ts`（新）、`src/lib/journey/evidence-anchor.ts`（新）、`src/lib/journey/graveyard-revival.ts`（新）、`src/lib/journey/scheme-patch-engine.ts`（新）、`tests/helpers/scheme-patch-fixtures.ts`（新）
 * **估算**：M
+* **备注**：`runtime-contract-and-safety.md` §8 L3 行的门禁层拒绝码无 §2.3 式闭集。`E_CHECKPOINT_FAILED`（`daemon/server.ts` 两处 catch，Daemon HTTP 层以 409 直接返回）与 `E_WRITABLE_SCOPE_POLICY`（类 `WritableScopePolicyError` 定义于 `daemon/supervisor/scope-gate.ts`）均未登记入 `ERROR_CODES`；待派工门禁产出证据归因时统一补登，不在本卡范围。注意 `E_SCOPE_POLICY`（§2.3 表内，v2.1）与 `E_WRITABLE_SCOPE_POLICY` 是两个不同的码，仅名字相近。
 
 #### 第二批预告（本批合入后再细化立卡，**本条不立卡**）
 
