@@ -54,7 +54,7 @@
 | K-9 | 引擎码 | 引擎码表中的 `E_* / W_* / S_*` 码是**编译日志码**，面向开发者与审计，不进入 [`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §2.3 签署闭集，也不登记入 `src/lib/error-codes.ts` 的 `ERROR_CODES`。例外：`E_PROPOSAL_PREVIOUSLY_REJECTED` 由引擎在编译期以 DROP 裁决输出（含 Z-04 静默 DROP），故同时出现在码表与 `journal.verdicts` 中；其拒绝码归属为门禁层（§8 L3，定义见 INV-LEDGER-03），同样不进入 §2.3 签署闭集。 | 拒绝码闭集是「用户可做什么」的表；编译日志码只给开发者与审计看。 |
 | K-10 | §14.11 墓地命中判定（INV-LEDGER-03） | `matchesTombstone` 增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中；命中只进入复活判定，不直接 DROP（§4.2）。 | 复活判定认用户自己的说法，拦截原先只认指纹与 Dice，两者方向不一致，拦截比复活宽松。 |
 | K-11 | §14.3 `SchemeOp` 联合 | 新增 `reject_item` 操作（§2.3.2、§5.4）：聊天里的否决入墓；证据须为本批用户消息，锚定句含否定词且非问句（引擎词表判定）。 | 原先只有 UI 与卡片拒绝能入墓，聊天中「不要了」没有路径。 |
-| K-12 | §14.11 `TurnRef.occurrence`（编译器提示） | 复活判定路径忽略编译器 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`（§4.4）。确认判定路径待定。 | 允许编译器挑出现处，即可把 ILLEGAL 洗成 LEGAL（R-18）。 |
+| K-12 | §14.11 `TurnRef.occurrence`（编译器提示） | 复活判定路径忽略编译器 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`（§4.4）。**显式风险**：确认判定路径（`mark_user_confirmed`，§3.4）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定。 | 允许编译器挑出现处，即可把 ILLEGAL 洗成 LEGAL（R-18）。 |
 
 ---
 
@@ -304,7 +304,7 @@ function anchorQuote(turn: TranscriptTurn, ref: TurnRef, opts?: { requireQuote?:
    }
 ```
 
-**为什么默认取最后一处**：同一条消息里，用户后说的话代表他在这条消息里的最终态度（例：「先别加 Excel 导出……想了想，还是加 Excel 导出吧」）。§4 的复活判定与 §3.4 的确认判定都在这一处上做否定词与问句检查，高亮也落在这一处，三者口径一致。编译器给出的 `occurrence` 只影响锚点选择；复活判定路径忽略它（§4.4，K-12）。确认判定路径是否同样处理，待定。
+**为什么默认取最后一处**：同一条消息里，用户后说的话代表他在这条消息里的最终态度（例：「先别加 Excel 导出……想了想，还是加 Excel 导出吧」）。§4 的复活判定与 §3.4 的确认判定都在这一处上做否定词与问句检查，高亮也落在这一处，三者口径一致。编译器给出的 `occurrence` 只影响锚点选择；复活判定路径忽略它（§4.4，K-12）。确认判定路径（§3.4）存在同型洗白面，修法待定（显式风险，见 K-12）。
 
 **为什么短引用要整句边界**：「对」「好」「可以」是合法的确认原话，不能设最小长度拒之门外。但一个字的 quote 几乎能在任何消息里找到（「对」出现在「对比」里）。要求它构成一个完整的短句，就排除了这种碰巧命中。
 
@@ -469,7 +469,7 @@ export const AFFIRMATION_CUES = [
 | R-12 | 14 / 是，但 `rejected_by: "security_gate"` | `要 Excel 导出` | ILLEGAL | `E_REVIVAL_SECURITY_LOCKED` |
 | R-13 | 14 / 是，op 内容为「PDF 导出」，声明复活 `REJ-001` | `要 Excel 导出` | ILLEGAL | `E_REVIVAL_FINGERPRINT_MISMATCH` |
 | R-14 | 14 / 是，同一消息 `先不要 Excel 导出。想了想还是加上 Excel 导出`，无 occurrence | 取最后一处所在句 | LEGAL | — |
-| R-15 | 同 R-14，`occurrence: 0` | 第一处所在句 | ILLEGAL | `E_REVIVAL_NEGATED` |
+| R-15 | 同 R-14，`occurrence: 0`（被忽略） | 最后一处所在句 | LEGAL（自动识别） | `W_REVIVAL_OCCURRENCE_IGNORED` |
 | R-16 | 14 / 是，op 未声明 `revival`（隐式） | `还是把 Excel 导出加上吧` | LEGAL（自动识别） | — |
 | R-17 | 14 / 是，op 未声明 `revival`，evidence 是 `我想要报表` | — | ILLEGAL | `E_PROPOSAL_PREVIOUSLY_REJECTED` |
 | R-18 | 14 / 是，消息 `还是加上 Excel 导出。算了，不要 Excel 导出`，op 声明复活，`occurrence: 0`（被忽略） | 最后一处所在句（`W_REVIVAL_OCCURRENCE_IGNORED`） | ILLEGAL | `E_REVIVAL_NEGATED` |
