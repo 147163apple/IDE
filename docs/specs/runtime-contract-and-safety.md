@@ -235,6 +235,8 @@
 | **L2 Daemon 签署拦截** | `signing-gate.ts` | 真正放行判定；快照缺失即拒 | §2.3 主表 + 「Daemon 专属码」表 |
 | **L3 执行期运行时** | Gateway / Orchestrator / Daemon HTTP 层 / 派工门禁 | 越界、预算、锁、越权、墓地命中 | `E_OUT_OF_SCOPE` / `E_OUT_OF_SCOPE_UNTRACKED` / `E_BUDGET_EXCEEDED` / `E_WORKSPACE_LOCKED` / `E_CHECKPOINT_FAILED` / `E_PROPOSAL_PREVIOUSLY_REJECTED`（v2.1，INV-LEDGER-03） |
 
+> **L3 闭集待补登（提案）**：L3 行目前只列代表码，没有闭集表；`E_FORBIDDEN_PATH`、`E_TEST_FILE_WRITE_BLOCKED` 是执行期码却未列入，`E_CHECKPOINT_FAILED` 实为开一轮前的检查点码。补登方案与候选闭集表见 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md) §5.3，由 `TASK-J.18` 实施 PR 合入本节 §8.1。
+
 **纪律**：凡前端能检出的情形，L1 与 L2 必须使用**同一组拒绝码**；L2 只可额外使用 §2.3「Daemon 专属码」表中登记的码，不得自造未登记的码。两者结论不一致时以 L2 为准并记一条告警。
 
 ---

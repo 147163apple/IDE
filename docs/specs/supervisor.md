@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 派工墓地门禁** | 2026-10-28 | §14.11 新增第 5 小节 G-MATCH（墓地匹配单一语义源：自然语言通道 NL-1～5、代码通道 CODE-1～4）；§16.6 增「碰了你否决过的方案」行；新增实施口径 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md)（`TASK-J.18`）。 |
 | **v2.1 合并引擎增补（J.9a）** | 2026-10-28 | 引擎规格增补 K-10～K-12：墓地命中 (d) 关键词通道、聊天否决 `reject_item`、复活判定忽略 `occurrence`；新增码 `E_REJECT_NOT_NEGATED` / `E_REJECT_TURN_NOT_IN_BATCH` / `E_REJECT_TARGET_MISSING` 与 `W_REVIVAL_OCCURRENCE_IGNORED`；§14.3 `SchemeOp` 同步 `reject_item`。 |
 | **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
 | **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 第 4 小节登记收紧项 K-1、K-2、K-3（指向 §14.3 实施口径）、K-4、K-5/K-6、K-7、K-8（§14.2、§14.11 字段）、K-9；`runtime-contract-and-safety.md` §8 L3 行补登 `E_PROPOSAL_PREVIOUSLY_REJECTED` 并修正 `E_BUDGET_EXCEEDED` 码名；§18 增 V-10～V-13。 |
@@ -1178,6 +1179,27 @@ export interface EvidenceLedger {
 - **K-11**：新增 `reject_item` 操作：用户在聊天中否决某条目；本批用户消息须含否定词且非问句，生效后入墓（`rejected_by: "user"`、`disallow_revival: true`）；受保护目标走覆盖建议卡。
 - **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。**显式风险**：确认判定路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定，落地前不得视为无问题。
 
+#### 5. 墓地匹配语义（单一语义源 G-MATCH）
+
+墓地匹配在两处执行：编译期的合并引擎（[`scheme-patch-engine.md`](./scheme-patch-engine.md) §4.2）与施工期的 Worker 派工门禁（[`worker-graveyard-gate.md`](./worker-graveyard-gate.md) §2.4）。**匹配语义只在本小节定义一次**；两份实施口径只能按编号引用，不得复述公式或常量值。代码只有一份实现（`src/lib/journey/graveyard-match.ts`），两处各写一个投影函数把各自的输入变成本小节定义的输入。
+
+**G-MATCH-NL（自然语言通道）**：
+
+- **NL-1** `matchNormalize`：`normalizeForAnchor` 之后，ASCII 转小写，删除全部空白与 `\p{P}\p{S}`。
+- **NL-2** `lexemes`：汉字连续段取相邻二元组；长度为 1 的汉字段取单字；ASCII 字母数字词（长度 ≥ 2）整体作为一个元素；排序去重。
+- **NL-3** `dice(A, B) = 2|A∩B| / (|A| + |B|)`；阈值 `GRAVEYARD_DICE_THRESHOLD = 0.75`，含等号。
+- **NL-4** 命中 ⇔ 墓碑 `status === "active"` 且满足其一：(a) 目标 id 等于 `item_ref.id`（只在输入是方案条目时求值）；(b) `matchNormalize(文本) === fingerprint.key`；(c) `dice(lexemes(文本), fingerprint.lexemes) ≥ 阈值`；(d) 存在字素数 ≥ 4 的 `revival_keys` 元素被 `matchNormalize(文本)` 包含。
+- **NL-5** 投影：引擎的输入文本是 op 主文本（引擎 §4.2 主文本表）；门禁的输入文本是 Worker 日志、完成摘要、提交信息、新增的文档行与注释行。
+
+**G-MATCH-CODE（代码通道，仅门禁使用）**：
+
+- **CODE-1** `artifact_keys(墓碑)`：从 `fingerprint.lexemes` 与 `revival_keys` 中取长度 ≥ 3 的 ASCII 字母数字词，去掉 `CODE_STOPLIST`，再按版本化的 `ALIAS_LEXICON` 展开，去重排序。
+- **CODE-2** `code_tokens(文本)`：按非字母数字切分，驼峰与下划线再切分，转小写，同时保留完整模块说明符的小写原样。
+- **CODE-3** 命中：依赖、安装命令、导入单元要求包名（或模块说明符末段、或 `@scope/name` 的 `name`）与某个 key 全等；路径与标识符单元要求某个 key 属于 `code_tokens`。代码通道不使用 Dice。
+- **CODE-4** 证据强度：依赖、安装命令、导入为强证据；路径、标识符与全部自然语言单元为弱证据；同一墓碑同批同时被路径与标识符命中，升级为强证据。只有强证据命中 `disallow_revival === true` 的活跃墓碑才触发 INV-LEDGER-03 第 1 款的拦截。
+
+**变更纪律**：改动任一条 → 先改本小节 → 再改共享夹具 `tests/fixtures/graveyard-match/cases.json`（版本号递增）→ 引擎与门禁两侧测试同时变红 → 再改实现。
+
 ---
 
 ## 15. 中栏《改动范围与验收方式》
@@ -1431,6 +1453,7 @@ interface ScopePlan {
 | 检查反复失败 | 「换个思路再试一次」；「告诉它怎么改」= 聚焦右栏输入框，用户的话按 B 类处理 |
 | 外部改了代码 | 「把你的改动一起带上，重新检查」 |
 | Worker 失联 | 「重新接上继续」 |
+| 碰了你否决过的方案（`E_PROPOSAL_PREVIOUSLY_REJECTED`） | 「让它换个思路再试一次」；「我改主意了」= 回到方案幕、右栏预填但不自动发送，由你亲口重提后重签；安全门禁否决的不提供该按钮。见 [`worker-graveyard-gate.md`](./worker-graveyard-gate.md) §5 |
 
 **禁止**出现 Token 数、tool calls、退出码、原因码原文（可放进「技术细节」折叠区）。
 

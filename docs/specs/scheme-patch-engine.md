@@ -364,6 +364,8 @@ interface GraveyardFingerprint {
 
 「主文本」按条目类别取：`modules → name + " " + purpose`；`goals / out_of_scope / acceptance / open_questions → text`；`flows / entities → name`；`decisions → question + " " + (chosen ?? recommended)`；`conflicts → question`；`set_title / set_summary / set_audience → value`。
 
+> **语义源**：本小节的 `matchNormalize`、`lexemes`、Dice 与 (a)～(d) 以 [`supervisor.md`](./supervisor.md) §14.11 第 5 小节 G-MATCH-NL 为准；Worker 派工门禁按同一语义投影（[`worker-graveyard-gate.md`](./worker-graveyard-gate.md) §4）。下文公式保留为历史记录。
+
 **命中判定** `matchesTombstone(opContent, entry)`（与条目类别无关，防止「换个 op 类型偷渡」）：
 
 ```text
