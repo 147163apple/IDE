@@ -24,7 +24,7 @@
 | **v2.1 沉默损耗规格增补** | 2026-10-28 | 三项规格态（⏳，未实现）：①§14.11 第 3 条墓地继承扩充为「冻结快照及其回写记录 + 墓地子账本」，墓碑随 journey 迁移；②§14.11 新增子账本四 `attributions`（质疑归因账本，三分类）与收紧项 K-14，只写台账、不改 `requirements-store.ts` 的 `source` 枚举；③§13.3 增「第一反应速记」前置说明（不新增决定类型、不阻断流程）。§13.4 ③ 幕补呼应标注；`intent-compiler-prompt.md` §2.2 补归因字段的生成端不可写边界；`system-architecture.md` 步骤五加交叉引用。 |
 | **v2.1 生成端 reject_item 口径（J.10）** | 2026-10-28 | 生成端 Schema 开放 `reject_item`，只在用户明确否决方案中现有条目时发出（发射条件见 `intent-compiler-prompt.md` §4.5、§6.2「六之二」）；§14.11 登记 K-13：`reject_item` 指向已有效用户墓碑时记 no-op（复用 `W_NOOP_IDENTICAL`）；码表仍为 51 码。 |
 | **v2.1 合并引擎增补（J.9a）** | 2026-10-28 | 引擎规格增补 K-10～K-12：墓地命中 (d) 关键词通道、聊天否决 `reject_item`、复活判定忽略 `occurrence`；新增码 `E_REJECT_NOT_NEGATED` / `E_REJECT_TURN_NOT_IN_BATCH` / `E_REJECT_TARGET_MISSING` 与 `W_REVIVAL_OCCURRENCE_IGNORED`；§14.3 `SchemeOp` 同步 `reject_item`。 |
-| **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
+| **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表（注：47 为 2026-10-27 当时口径，现行引擎码表 51 码，见 `intent-compiler-prompt.md` §2.2，本条不回改）、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
 | **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 第 4 小节登记收紧项 K-1、K-2、K-3（指向 §14.3 实施口径）、K-4、K-5/K-6、K-7、K-8（§14.2、§14.11 字段）、K-9；`runtime-contract-and-safety.md` §8 L3 行补登 `E_PROPOSAL_PREVIOUSLY_REJECTED` 并修正 `E_BUDGET_EXCEEDED` 码名；§18 增 V-10～V-13。 |
 | **v2.1 证据台账契约** | 2026-10-28 | §14 增补 §14.11 证据台账（Evidence Ledger）契约与不可变式（INV-LEDGER-01～04）：条目级 Schema、EditRef 手改证据、原话子串确定性校验、代选择阻断、墓地不可复活与逃生口、Delta 回写与快照继承权威方向、与 docs/templates/ REQ/ADR/EVID 主键映射表。 |
 | **v2.1 增补** | 2026-10-27 | 交互温度层增补：点击溯源双向联动、白话合同三层折叠与单向投影不变式、质询台三栏并排规格与双白话按钮、重试非警报呈现与交付仪式卡、低置信度分流保守默认（不变式 C-1）；§18 验收矩阵增补 6 条（V-10, S2-09, J-12～J-15，全部 `⏳`），总计 35 条（`✅ 0 / ⏳ 35`）。 |
@@ -112,7 +112,7 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
 
 **目标**：用**结构化规则**判断方案是否够出 Demo、是否够确认开工。**禁止只靠大模型自报 `completeness` 分**——模型极易「自嗨」刚聊一句就打 80 分，导致「生成 Demo」过早弹出。
 
-**硬性布尔底线（`demoReady` 必要条件，现行契约 · v2.0.1）**——下列全部为真才可置 `demoReady = true`：
+**硬性布尔底线（`demoReady` 必要条件，现行契约 · v2.0.1；第 1 条已由第三部分 §14.10 改判，以 §14.10 为准）**——下列全部为真才可置 `demoReady = true`：
 
 1. 识别出 **≥ 2 个业务模块**；
 2. 识别出 **≥ 1 条主流程**（流程/时序可表达）；
@@ -1152,7 +1152,8 @@ export interface EvidenceLedger {
   //   (c) absent_from_diff：差集里根本没有（规格残缺 / 回写断裂 / 意图未结晶）。
   attributions: {
     attribution_id: string;
-    trigger: "first_impression" | "user_dispute" | "acceptance_fail" | string; // 触发源
+    trigger: "first_impression" | "user_dispute" | "acceptance_fail"; // 触发源（闭集，K-16：已删除 `| string` 兜底）
+    linked_reason_code?: reasonCodeSchema; // K-16：可选，只读引用 reasonCodeSchema（不新增码、不建映射）；仅 trigger === "acceptance_fail" 的条目可带
     item_ref?: { section: string; id: string };   // 归因指向的方案/台账条目（可空）
     category: "approved_on_list" | "diff_unsurfaced" | "absent_from_diff"; // 三分类
     resolution_note: string;
@@ -1601,14 +1602,14 @@ interface ScopePlan {
 | J-10 | 「基于这次继续」新方案带入下一轮草稿与对话摘要 | `tests/ui/journey-continue.test.tsx` | ⏳ |
 | J-11 | `size_hint = tiny` 且满足准则时出现「直接改」卡；聊天本身不会静默开工；PROTECTED 下可用 | `tests/integration/fast-path-single-page.test.ts` | ⏳ |
 | P-01 | 方案工作台里右栏搭档以只读工具集运行；尝试写文件或 shell 被拒 | `tests/integration/partner-readonly.test.ts` | ⏳ |
-| V-10 | 点击中栏条目滚动并高亮对应右栏原话；无 evidence 条目不显示溯源入口 | `tests/ui/scheme-evidence-deep-link.test.tsx` | ⏳ |
+| V-14 | 点击中栏条目滚动并高亮对应右栏原话；无 evidence 条目不显示溯源入口 | `tests/ui/scheme-evidence-deep-link.test.tsx` | ⏳ |
 | S2-09 | 白话层为单向投影：改白话文案不改变合同范围与 `plan_digest` | `tests/unit/contract-sheet-projection.test.ts` | ⏳ |
 | J-12 | 质询台三栏并排渲染 + 双白话按钮；低置信度不替用户裁决且界面无技术分类字样 | `tests/ui/dispute-triad-pane.test.tsx` | ⏳ |
 | J-13 | 自动重试期内节点不渲染红色失败态；重试耗尽才出现意外卡 | `tests/ui/construction-retry-presentation.test.tsx` | ⏳ |
 | J-14 | MERGED 后展示白话交付卡（改动摘要+用时+继续入口），非仅状态标签 | `tests/ui/delivery-complete-card.test.tsx` | ⏳ |
 | J-15 | 低置信度分流默认按 A 类处理，不产生任何施工副作用 | `tests/unit/construction-message-routing.test.ts` | ⏳ |
 
-**统计**：本节 35 条，`✅ 0` / `⏳ 35`。
+**统计**：本节 39 条，`✅ 0` / `⏳ 39`。
 
 ---
 
