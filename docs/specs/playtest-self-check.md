@@ -2,7 +2,7 @@
 
 > **状态**：**设计定稿 · 待施工**（归属第二批预告 `J.16`「试玩幕、对话式验收」；本文只覆盖其中的自查与点亮，建议实施时拆卡）
 > **建立日期**：2026-10-28（Asia/Hong_Kong）
-> **上位规格**：[`supervisor.md`](./supervisor.md) §14.11（台账、子账本四 `attributions`、K-14、K-15）、§16.5（B/C 分流与不变式 C-1）、§16.7（试玩幕与质询台）、§17 D10；[`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §5.4；[`worker-graveyard-gate.md`](./worker-graveyard-gate.md)（返工派工同样过门禁）；架构 [`system-architecture.md`](./system-architecture.md) 步骤六（已被 §16.7 与 D10 修订的部分以 SSOT 为准）。
+> **上位规格**：[`supervisor.md`](./supervisor.md) §14.11（台账、子账本四 `attributions`、K-14、K-15、K-16）、§16.5（B/C 分流与不变式 C-1）、§16.7（试玩幕与质询台）、§17 D10；[`runtime-contract-and-safety.md`](./runtime-contract-and-safety.md) §5.4；[`worker-graveyard-gate.md`](./worker-graveyard-gate.md)（返工派工同样过门禁）；架构 [`system-architecture.md`](./system-architecture.md) 步骤六（已被 §16.7 与 D10 修订的部分以 SSOT 为准）。
 > **与上位规格的关系**：本文是实施口径，不新增场景、不新增用户决定类型、不新增错误码与原因码。冲突时以 SSOT 为准。
 > **逐字核对基线**：`main` @ `0613a00`。本文引用的类型、常量与函数名均已对照原文：`src/lib/evidence.schema.ts`（`reasonCodeSchema` 9 码、`evidenceBundleSchema`、`deriveCanMerge`、`tests_modified`）；`daemon/supervisor/dispute/*`（`DISPUTE_CONFIDENCE_THRESHOLD = 0.7`、`DisputeClassification`、`DisputeUserChoice`、`DisputeReport`、`classifyDispute`、`buildReworkProposal`、`assertReworkScopeSubset`、`extractKeywords`、`CodeFactSourceImpl`）。
 
@@ -241,6 +241,8 @@ stateDiagram-v2
 
 两个方向都不能自动走的理由：误判为 Bug → 免费返工可能隐性扩大范围（违反「合同里没写的路径一律不可写」）；误判为新需求 → 把施工方的漏做转嫁给用户，并推迟修复。
 
+**不变式 C-2′（免费返工上限）**：同一验收条目（`item_ref`）在同一旅程内，系统最多自动派发一次免费返工（`IMPLEMENTATION_BUG` 的返工派工）。第二次起即使再次判为 `IMPLEMENTATION_BUG`，也**不派工**，按 C-1′ 呈现三栏事实与两个按钮，并标注「这一条已经免费修过一次」。上限为用户于 2026-10-28 拍板的决定（建议值一次）。
+
 ### 4.6 与墓地、§16.5、dispute 阈值的交叉决议
 
 | # | 交叉情形 | 裁决 | 依据 |
@@ -267,7 +269,7 @@ stateDiagram-v2
 
 **去重**：同一次用户操作同时满足 `user_dispute` 与 `acceptance_fail`（用户质疑引发返工，返工复检失败）→ 两条都记，`resolution_note` 互相引用对方的 `attribution_id`。它们回答不同的问题：一个是「用户为什么觉得不对」，一个是「系统为什么没做到」。
 
-### 5.2 trigger 收紧为闭集（提案 K-16）
+### 5.2 trigger 收紧为闭集（K-16）
 
 现行 SSOT：`trigger: "first_impression" | "user_dispute" | "acceptance_fail" | string`。
 
@@ -277,7 +279,7 @@ stateDiagram-v2
 2. 归因账本是度量出口（K-14 原文「归因是读数」）。开放字符串会让统计口径漂移（`"dispute"`、`"user-dispute"`、`"userDispute"` 被当作三种来源）。
 3. 新增来源是规格变更，应走 SSOT 增补，而不是运行时随手写。
 
-**兼容处理**：读取旧台账时，未知 trigger 映射为 `"user_dispute"` 并在 `resolution_note` 前缀 `[legacy-trigger:<原值>]`，写入时拒绝未知值。此为提案，需 SSOT 登记为 K-16 后生效；本文不改 §14.11 原文。
+**兼容处理**：读取旧台账时，未知 trigger 映射为 `"user_dispute"` 并在 `resolution_note` 前缀 `[legacy-trigger:<原值>]`，写入时拒绝未知值。已登记为 K-16（`supervisor.md` §14.11），实施期生效；回填机代码随 `TASK-J.16` 落地。
 
 ### 5.3 三分类裁决算法
 
@@ -421,7 +423,7 @@ export function decideSelfCheckRoute(input: {
 }): SelfCheckRoute;
 
 // ───── K-14 回填 ─────
-export type AttributionTrigger = "first_impression" | "user_dispute" | "acceptance_fail";   // K-16 提案：闭集
+export type AttributionTrigger = "first_impression" | "user_dispute" | "acceptance_fail";   // K-16：闭集
 export type AttributionCategory = "approved_on_list" | "diff_unsurfaced" | "absent_from_diff";
 export function classifyAttribution(input: {
   item_ref: ResolvedItemRef | null; snapshot: SchemeDraftV2; surface_log: SurfaceLog;
@@ -487,7 +489,7 @@ export const selfCheckReportSchema = z.object({
 
 | ID | 断言 |
 | :-- | :--- |
-| SR-1 | `classification === "UNATTRIBUTED"` ⇔ `route === "ASK_ONLY"`（除 `graveyard_hit` 非空时 `route === "REVIVAL"`） |
+| SR-1 | `classification === "UNATTRIBUTED"` ⇔ `route === "ASK_ONLY"` |
 | SR-2 | `graveyard_hit !== null` ⇒ `route === "REVIVAL"` 且 `classification !== "IMPLEMENTATION_BUG"` |
 | SR-3 | `confidence < 0.7` ⇒ `classification === "UNATTRIBUTED"` |
 | SR-4 | `item_ref === null` ⇒ `classification !== "IMPLEMENTATION_BUG"` |
@@ -507,7 +509,7 @@ export const selfCheckReportSchema = z.object({
 | GAP-P7 | P-7 验收条目无测试链接 | 本版不做条目级自动点亮（§3.3） |
 | GAP-P8 | 没有 `surface_log` | 新增，随 §15.4 投影写入 |
 | DEP | 依赖 J.18 GAP-W1（`scheme_binding`）与 J.4（快照 `scope_plan`） | 先行 |
-| K-16 | `attributions.trigger` 闭集与 `linked_reason_code` | SSOT 登记后生效 |
+| K-16 | `attributions.trigger` 闭集与 `linked_reason_code` | 已登记（§14.11）；实施期生效 |
 
 ---
 
@@ -633,6 +635,7 @@ export const selfCheckReportSchema = z.object({
 | TM-PX-11 | 用户把方案里已有的条目说成新需求（「能不能加个按月切换」） | `AC-2` 词法命中 → `IMPLEMENTATION_BUG`（方案里有优先于话术） | §2.5 |
 | TM-PX-12 | 用户把方案里没有的东西说成 Bug（「导出 PDF 坏了」） | `none` → `REQUIREMENT_DRIFT` → `ROUTE_BC` | §4.3 |
 | TM-PX-13 | Worker 在区域外改了文件，摘要试图隐藏 | 「另有改动不在原定区域里」必出现 | TM-PS-02 |
+| TM-PX-14 | 同一条目第一次「这是 Bug，免费修」已派工返工；第二次对同一条目再次点「这是 Bug，免费修」 | 不派工；按 C-1′ 呈现，标注「已免费修过一次」 | §4.5 C-2′ |
 
 ### 7.10 TM-PK attributions 回填
 
@@ -659,6 +662,6 @@ export const selfCheckReportSchema = z.object({
 
 1. 条目级自动点亮本版不做（P-7）：没有基线已存在、未被本轮修改的测试，就没有独立于 Worker 的条目级证据。
 2. `item_ref` 的词法解析对同义改写无能为力，此时依赖模型消歧与问用户；模型只能让系统多问。
-3. 「区域有改动但没做对」（TM-PX-09）只能由用户的「这里不对」暴露；系统默认按「方案里写了即没做到」处理，可能把口味问题当作缺陷免费返工一次。这是有意的偏向：漏做的代价由施工方承担。
+3. 「区域有改动但没做对」（TM-PX-09）只能由用户的「这里不对」暴露；系统默认按「方案里写了即没做到」处理，可能把口味问题当作缺陷免费返工一次。这是有意的偏向：漏做的代价由施工方承担。同一条目在同一旅程内最多免费返工一次，上限见 §4.5 C-2′。
 4. `surface_log` 是新数据（GAP-P8）；落地前三分类的 (a)/(b) 无法区分，只能退化为「`item_ref` 在快照中 → (a)，否则 (c)」并在 `resolution_note` 标注「无呈现记录」。
-5. K-16（trigger 闭集与 `linked_reason_code`）是提案，SSOT 登记前回填机按现行 `| string` 类型写入，但只写三个已知值。
+5. K-16（trigger 闭集与 `linked_reason_code`）已登记；在 `TASK-J.16` 实施前，回填机代码可能仍按旧的 `| string` 类型写入，但只写三个已知值。
