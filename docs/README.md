@@ -25,6 +25,8 @@
 
 > **附属实施口径**（不是第五份权威，从属于所指的上位规格，冲突时以上位规格为准）：[`specs/scheme-patch-engine.md`](./specs/scheme-patch-engine.md)——`supervisor.md` §14.2 / §14.3 / §14.11 的 SchemePatch 零模型合并引擎判定树、引用锚定、墓地复活与测试矩阵（`TASK-J.9`）。[`specs/intent-compiler-prompt.md`](./specs/intent-compiler-prompt.md)——`supervisor.md` §14.4～§14.9 的意图编译器 System Prompt、生成 Schema、原话摘录协议与对抗性金标种子（`TASK-J.10` / J.11）。[`specs/worker-graveyard-gate.md`](./specs/worker-graveyard-gate.md)——`supervisor.md` §14.11 INV-LEDGER-03 的 Worker 派工墓地门禁、四防线优先级与 G-MATCH 双投影测试矩阵（`TASK-J.18`）。[`specs/playtest-self-check.md`](./specs/playtest-self-check.md)——`supervisor.md` §16.7 试玩自查引擎的规格与对现行 `dispute` 实现的差距登记（`TASK-J.16`）。[`specs/constants-and-paths.md`](./specs/constants-and-paths.md) 与 [`specs/state-machine-contract.md`](./specs/state-machine-contract.md) 为「待核验目标规范草案」，同样不是第五份权威，冲突时以四份现行规范为准。
 
+> **审计台账与试玩口径**：[`specs/playtest-self-check.md`](./specs/playtest-self-check.md)——`supervisor.md` §16.7 试玩自查引擎实施口径（实施卡 `TASK-J.16`）。[`specs/consistency-audit.md`](./specs/consistency-audit.md)——规格一致性审计台账：待裁决矛盾、机械修复、挂账项与权威分层（审计记录，不是权威来源）。
+
 ---
 
 ## 2. 架构决策记录（`adr/`）· 13 篇
