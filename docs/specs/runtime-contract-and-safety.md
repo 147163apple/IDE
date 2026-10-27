@@ -130,7 +130,7 @@
 | Demo 基于旧修订 | `E_DEMO_STALE`，重新生成 |
 | Demo 构建失败 | 中栏必须同时提供【重试生成】与【接受仅用流程图说明开工（标风险）】；降级后落 `demo.status = degraded_flowcard` + `demo.risk_flags ⊇ {NO_INTERACTIVE_DEMO}` |
 
-**`demoReady` 的四条布尔底线**（全部为真才可浮现「生成 Demo」按钮）：识别 ≥2 个业务模块 ／ 识别 ≥1 条主流程 ／ 无 OPEN 未决冲突 ／ 至少 1 轮有效业务属性输入。
+**`demoReady` 判定**以 `supervisor.md` §14.10（v2.1 改判：`≥ 1` 个 `user_visible` 模块）为准，本节不复述谓词。
 `completeness`（0–100）**只作 UI 进度展示**，不参与任何门禁、分支或 `disabled` 推导。
 
 ---
