@@ -271,7 +271,7 @@ stateDiagram-v2
 
 ### 5.2 trigger 收紧为闭集（K-16）
 
-现行 SSOT：`trigger: "first_impression" | "user_dispute" | "acceptance_fail" | string`。
+K-16 前 SSOT 口径（已由 `supervisor.md` §14.11 K-16 收紧为闭集，见下方兼容处理）：`trigger: "first_impression" | "user_dispute" | "acceptance_fail" | string`。
 
 **建议去掉 `| string`**，理由：
 
