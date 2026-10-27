@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 沉默损耗规格增补** | 2026-10-28 | 三项规格态（⏳，未实现）：①§14.11 第 3 条墓地继承扩充为「冻结快照及其回写记录 + 墓地子账本」，墓碑随 journey 迁移；②§14.11 新增子账本四 `attributions`（质疑归因账本，三分类）与收紧项 K-14，只写台账、不改 `requirements-store.ts` 的 `source` 枚举；③§13.3 增「第一反应速记」前置说明（不新增决定类型、不阻断流程）。§13.4 ③ 幕补呼应标注；`intent-compiler-prompt.md` §2.2 补归因字段的生成端不可写边界；`system-architecture.md` 步骤五加交叉引用。 |
 | **v2.1 生成端 reject_item 口径（J.10）** | 2026-10-28 | 生成端 Schema 开放 `reject_item`，只在用户明确否决方案中现有条目时发出（发射条件见 `intent-compiler-prompt.md` §4.5、§6.2「六之二」）；§14.11 登记 K-13：`reject_item` 指向已有效用户墓碑时记 no-op（复用 `W_NOOP_IDENTICAL`）；码表仍为 51 码。 |
 | **v2.1 合并引擎增补（J.9a）** | 2026-10-28 | 引擎规格增补 K-10～K-12：墓地命中 (d) 关键词通道、聊天否决 `reject_item`、复活判定忽略 `occurrence`；新增码 `E_REJECT_NOT_NEGATED` / `E_REJECT_TURN_NOT_IN_BATCH` / `E_REJECT_TARGET_MISSING` 与 `W_REVIVAL_OCCURRENCE_IGNORED`；§14.3 `SchemeOp` 同步 `reject_item`。 |
 | **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
@@ -846,6 +847,8 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
 4. **处理意外**：施工中需要扩范围、超预算、需要人工确认时，在一张白话卡上点一下（§16.6）。
 5. **验收合入**：试玩后「合入项目」，或说「这里不对」。
 
+**第一反应速记（前置说明，规格态 ⏳，不新增决定类型、不阻断流程）**：试玩产物呈现后、用户点「合入项目」或「这里不对」之前，系统呈现一个不阻断的时效性输入（第一印象速记：一句白话感受，可跳过）；计时窗口结束后随验收决定一并入账。该输入的回填走 K-14 质疑归因账本 `trigger: "first_impression"`，用于抢在适应偏差钝化感知前记录第一反应，作为后续三分类回溯的触发源。计时窗口长度实现期定。
+
 **禁止**把以下判断推给用户：合同 JSON、glob 写法、Git 哈希、测试退出码、「按缺陷修复 / 按新需求演进」这类技术分类（§16.7）。
 
 ### 13.4 一张图看完整个旅程
@@ -856,7 +859,7 @@ Stagent 的灵魂不是「另一个能写码的聊天框」，而是：**自由�
 右栏 AI 搭档     │                                                                          │
  方案对话 ──────▶│ 摘要/图/决议        步骤清单逐格完成    真实界面 + 验收清单  变更摘要        │
  （自由聊）      │ 改动范围与验收      当前在做什么        对照原型（若有）     基于此继续      │
-                 │ [生成 Demo]可选     [暂停][放弃本轮]    [合入项目]                          │
+                 │ [生成 Demo]可选     [暂停][放弃本轮]    [第一印象速记] [合入项目]           │
                  │ [确认方案] ────交接────▶                                                  │
  施工对话 ──────▶│                    补充/改需求 → 中栏卡片，一键决定                        │
  试玩对话 ──────▶│                                       「这里不对」→ 对话式自查 → 返工     │
@@ -1073,7 +1076,7 @@ type SchemeOp =
 > **权威方向**：
 > 1. **冻结前**：台账为单一事实源（SSOT），所有对话与编辑的增量补丁必须先在台账确权记账；
 > 2. **冻结后（`freeze()` 之后）**：以冻结快照（Snapshot）为唯一执行与验收权威源，台账转为只追加（append-only）的只读审计流；
-> 3. **后续继承**：§16.8「基于这次继续」以最终通过的冻结快照及其回写记录为继承基线，新台账直接基于此快照初始化，不得从空白状态从头脑补。
+> 3. **后续继承**：§16.8「基于这次继续」以最终通过的冻结快照及其回写记录，以及墓地子账本（`graveyard` 的 `RejectedAlternative` 全量活跃条目）为继承基线，新台账直接基于此快照初始化，不得从空白状态从头脑补。跨 journey 时墓碑随迁：`disallow_revival` 语义与 `evidence` / `rejection_reason` 整体保留，新 journey 的派工上下文注入（INV-LEDGER-03）对随迁条目同样生效；`rejected_id` 与新 journey 冲突时以旧 journey 前缀区分（如 `REJ-{journey}-001`），具体格式实现期定。
 
 #### 1. 数据结构与子账本划分 (Schema)
 
@@ -1138,6 +1141,22 @@ export interface EvidenceLedger {
   })[];
   // 子账本三：否决与墓地台账（Graveyard Ledger）
   graveyard: RejectedAlternative[];
+  // 子账本四：质疑归因账本（Attribution Ledger，K-14）
+  // 每次用户质疑/差异事件（第一反应速记、『这里不对』、验收未过）必须回填三分类归因；
+  // 台账只存原料不够，归因是读数——它是感知钝化与沉默损耗的度量出口。
+  // 归因只写本台账：不改 requirements-store.ts 的 source 枚举，不在需求快照侧新开字段。
+  // 三分类语义：
+  //   (a) approved_on_list：在决议清单上但被批准（审查通道问题）；
+  //   (b) diff_unsurfaced：在差集里但未被分级上屏（分流规则问题）；
+  //   (c) absent_from_diff：差集里根本没有（规格残缺 / 回写断裂 / 意图未结晶）。
+  attributions: {
+    attribution_id: string;
+    trigger: "first_impression" | "user_dispute" | "acceptance_fail" | string; // 触发源
+    item_ref?: { section: string; id: string };   // 归因指向的方案/台账条目（可空）
+    category: "approved_on_list" | "diff_unsurfaced" | "absent_from_diff"; // 三分类
+    resolution_note: string;
+    created_in_revision: number;
+  }[];
 }
 ```
 
@@ -1180,6 +1199,7 @@ export interface EvidenceLedger {
 - **K-11**：新增 `reject_item` 操作：用户在聊天中否决某条目；本批用户消息须含否定词且非问句，生效后入墓（`rejected_by: "user"`、`disallow_revival: true`）；受保护目标走覆盖建议卡。
 - **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。**显式风险**：确认判定路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定，落地前不得视为无问题。
 - **K-13**：生成端开放 `reject_item`：仅在用户对方案中现有条目明确否决时发出，发射条件与金标见 `intent-compiler-prompt.md` §4.5、§8.2 G 组；引擎对已有效用户墓碑的重复否决记 no-op（`W_NOOP_IDENTICAL`，见 `scheme-patch-engine.md` §2.3.2 P4）。否决不用 `remove_item`（它不入墓）。
+- **K-14**：质疑归因账本——每次质疑事件强制回填三分类归因（清单上已批准 / 差集未上屏 / 差集没有），只写台账不改 `requirements-store.ts` 的 `source` 枚举；墓碑跨旅程存活由权威方向第 3 条扩充解决，两件事分开裁决。
 
 ---
 
