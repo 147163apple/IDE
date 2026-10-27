@@ -19,6 +19,7 @@
 
 | 版本 | 日期（Asia/Hong_Kong） | 摘要 |
 | :--- | :--- | :--- |
+| **v2.1 生成端 reject_item 口径（J.10）** | 2026-10-28 | 生成端 Schema 开放 `reject_item`，只在用户明确否决方案中现有条目时发出（发射条件见 `intent-compiler-prompt.md` §4.5、§6.2「六之二」）；§14.11 登记 K-13：`reject_item` 指向已有效用户墓碑时记 no-op（复用 `W_NOOP_IDENTICAL`）；码表仍为 51 码。 |
 | **v2.1 合并引擎增补（J.9a）** | 2026-10-28 | 引擎规格增补 K-10～K-12：墓地命中 (d) 关键词通道、聊天否决 `reject_item`、复活判定忽略 `occurrence`；新增码 `E_REJECT_NOT_NEGATED` / `E_REJECT_TURN_NOT_IN_BATCH` / `E_REJECT_TARGET_MISSING` 与 `W_REVIVAL_OCCURRENCE_IGNORED`；§14.3 `SchemeOp` 同步 `reject_item`。 |
 | **v2.1 编译器生成端口径** | 2026-10-27 | 新增实施口径 [`intent-compiler-prompt.md`](./intent-compiler-prompt.md)（`TASK-J.10`）：生成端 × 引擎 47 码责任表、零转述摘录协议、墓碑注入取舍、搭档与编译器双调用、对抗性金标种子（J.11）。 |
 | **v2.1 合并引擎口径** | 2026-10-27 | 新增实施口径 [`scheme-patch-engine.md`](./scheme-patch-engine.md)（`TASK-J.9`）：§14.3 合并规则的判定树与优先级、§14.11 引用锚定算法与墓地复活判定；§14.11 第 4 小节登记收紧项 K-1、K-2、K-3（指向 §14.3 实施口径）、K-4、K-5/K-6、K-7、K-8（§14.2、§14.11 字段）、K-9；`runtime-contract-and-safety.md` §8 L3 行补登 `E_PROPOSAL_PREVIOUSLY_REJECTED` 并修正 `E_BUDGET_EXCEEDED` 码名；§18 增 V-10～V-13。 |
@@ -988,6 +989,7 @@ type SchemeOp =
 | op 要把 `ai_inferred` 写成 `user_said` | 拒绝；只有 `mark_user_confirmed` 且证据是用户原话时才可升级 |
 | `remove_item` 指向已确认或已 pin 的条目 | 转成「覆盖建议」卡 |
 | `reject_item`（K-11）证据不在本批，或锚定句不含否定词 / 为问句 | 该 op 丢弃；指向已 pin 或已确认条目 → 覆盖建议卡 |
+| `reject_item`（K-13）目标不在方案中，但存在指向同一 id 的有效用户墓碑 | 记 no-op `W_NOOP_IDENTICAL`；不改修订号，不新建墓碑 |
 | `base_revision` 落后于当前修订 | 不直接合并；以最新方案为基础**重新编译一次**（最多重试 1 次，仍落后则等下一轮） |
 | 方案已冻结 | 补丁一律丢弃（冻结后的新意图走 §16.5 分流） |
 
@@ -1177,6 +1179,7 @@ export interface EvidenceLedger {
 - **K-10**：墓地命中判定增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中，但只进入复活判定，不直接 DROP。
 - **K-11**：新增 `reject_item` 操作：用户在聊天中否决某条目；本批用户消息须含否定词且非问句，生效后入墓（`rejected_by: "user"`、`disallow_revival: true`）；受保护目标走覆盖建议卡。
 - **K-12**：复活判定路径忽略编译器提供的 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`。**显式风险**：确认判定路径（`mark_user_confirmed`）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定，落地前不得视为无问题。
+- **K-13**：生成端开放 `reject_item`：仅在用户对方案中现有条目明确否决时发出，发射条件与金标见 `intent-compiler-prompt.md` §4.5、§8.2 G 组；引擎对已有效用户墓碑的重复否决记 no-op（`W_NOOP_IDENTICAL`，见 `scheme-patch-engine.md` §2.3.2 P4）。否决不用 `remove_item`（它不入墓）。
 
 ---
 
