@@ -18,7 +18,8 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # 22 = 当前 LTS，同时与开发机一致；20 已在 runner 上标记弃用
+          node-version: 22
           cache: npm
 
       - name: Verify environment (Node >= 20, Git >= 2.30)

@@ -29,6 +29,13 @@ function newRoot(): string {
   return dir;
 }
 
+/**
+ * 只读目录只能靠 POSIX 权限位造（`chmod 0o500`）。Windows 上 chmod 只翻转
+ * 只读属性、不阻止 mkdir/unlink，产不出 EACCES，也就无从验证「写不进去要降级」。
+ * 所以依赖它的用例在 win32 上跳过——不是掩盖失败，而是该机制在平台层不存在。
+ */
+const POSIX_ONLY = process.platform === "win32";
+
 /** 造一个只读目录（含一个已存在的文件），返回 [目录, 文件] */
 function newReadOnlyDir(): [string, string] {
   const dir = newRoot();
@@ -63,7 +70,7 @@ describe("safeRmSync：只吞环境拒绝", () => {
     expect(safeRmSync(missing)).toBe(true);
   });
 
-  it("非 safe-delete 的删除失败不得被当成成功", () => {
+  it.skipIf(POSIX_ONLY)("非 safe-delete 的删除失败不得被当成成功", () => {
     const [, file] = newReadOnlyDir();
     let claimed = false;
     try {
@@ -82,16 +89,22 @@ describe("diskDeleteBlocked：探测写不进去时降级而不是抛错", () =>
     expect(diskDeleteBlockedIn([newRoot()])).toBe(false);
   });
 
-  it("只读目录探针写不进去 → 按不可观测处理，且不抛错", () => {
-    const [readOnly] = newReadOnlyDir();
-    expect(() => diskDeleteBlockedIn([readOnly])).not.toThrow();
-    expect(diskDeleteBlockedIn([readOnly])).toBe(true);
-  });
+  it.skipIf(POSIX_ONLY)(
+    "只读目录探针写不进去 → 按不可观测处理，且不抛错",
+    () => {
+      const [readOnly] = newReadOnlyDir();
+      expect(() => diskDeleteBlockedIn([readOnly])).not.toThrow();
+      expect(diskDeleteBlockedIn([readOnly])).toBe(true);
+    },
+  );
 
-  it("前一处不可用不会短路，后面可用的位置仍能给出结论", () => {
-    const [readOnly] = newReadOnlyDir();
-    expect(diskDeleteBlockedIn([readOnly, newRoot()])).toBe(false);
-  });
+  it.skipIf(POSIX_ONLY)(
+    "前一处不可用不会短路，后面可用的位置仍能给出结论",
+    () => {
+      const [readOnly] = newReadOnlyDir();
+      expect(diskDeleteBlockedIn([readOnly, newRoot()])).toBe(false);
+    },
+  );
 
   it("候选全空 → 视为不可观测（调用方据此降级）", () => {
     expect(diskDeleteBlockedIn([])).toBe(true);

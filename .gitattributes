@@ -1,0 +1,28 @@
+# 统一换行符：仓库内一律 LF，检出到任何平台也保持 LF。
+#
+# 为什么需要这条：CI 的 lint 在 windows-latest 上跑，而 Git for Windows 默认
+# `core.autocrlf=true` 会在检出时把 LF 改成 CRLF，prettier 的 `endOfLine` 默认
+# 又是 "lf"，于是**每一个受版本控制的文本文件**都报 `Delete ␍`——
+# 一次检出就能制造几百条与代码无关的 lint 错误。
+#
+# 放在 .gitattributes 而不是改 prettier 配置，是因为换行符属于「检出行为」，
+# 该由 Git 统一；把 prettier 放宽成 "auto" 只会让同一个文件在不同机器上
+# 有两种合法格式，diff 噪声更大。
+* text=auto eol=lf
+
+# 二进制/非文本资产不要参与换行符转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+
+# Windows 批处理必须 CRLF，否则 cmd 解析异常
+*.bat text eol=crlf
+*.cmd text eol=crlf
