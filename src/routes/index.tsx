@@ -373,7 +373,7 @@ function Console() {
   const schemeConfirmation = useMemo(
     () =>
       schemeDraft
-        ? evaluateSchemeConfirmation(schemeDraft, schemeDemoGate)
+        ? evaluateSchemeConfirmation(schemeDraft, schemeDemoGate, null)
         : null,
     [schemeDraft, schemeDemoGate],
   );
