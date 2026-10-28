@@ -166,10 +166,10 @@ describe("TASK-J.1 partner 角色：右栏只读工具集", () => {
   const settingsOf = (launch: { settingsPath: string }) =>
     JSON.parse(fs.readFileSync(launch.settingsPath, "utf8"));
 
-  it("默认角色即 partner（失败关闭）：--tools 与 --allowedTools 恰为 Read,Glob,Grep,LS", () => {
+  it("默认角色即 partner（失败关闭）：--tools 与 --allowedTools 恰为 Read,Glob,Grep", () => {
     const launch = build();
-    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep,LS");
-    expect(argOf(launch.args, "--allowedTools")).toBe("Read,Glob,Grep,LS");
+    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep");
+    expect(argOf(launch.args, "--allowedTools")).toBe("Read,Glob,Grep");
   });
 
   it("--disallowedTools 追加写类 / Shell / Todo 工具；--permission-mode 不是 acceptEdits", () => {
@@ -244,7 +244,7 @@ describe("TASK-J.1 partner 角色：右栏只读工具集", () => {
 
   it("partner 忽略 allowBash，并把只读角色交给 hook 做第二重保险", () => {
     const launch = build({ allowBash: true });
-    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep,LS");
+    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep");
     expect(argOf(launch.args, "--allowedTools")).not.toContain("Bash");
     expect(launch.env["STAGENT_HOOK_ROLE"]).toBe("partner");
     expect(launch.env["STAGENT_HOOK_ALLOW_BASH"]).toBeUndefined();
@@ -511,20 +511,24 @@ describe("TASK-J.1 hook：partner 角色只放行读类工具（第二重保险�
     );
   });
 
-  it("读类工具照常放行（右栏仍能读、搜、列目录）", () => {
+  it("读类工具照常放行（右栏仍能读、搜，并用 Glob 模式列目录）", () => {
     fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
     fs.writeFileSync(path.join(tmp, "src", "a.ts"), "export const a = 1;\n");
     for (const [tool, input] of [
       ["Read", { file_path: "src/a.ts" }],
       ["Glob", { pattern: "src/**/*.ts" }],
       ["Grep", { pattern: "export" }],
-      ["LS", { path: "src" }],
+      ["Glob", { pattern: "src/*" }],
     ] as const) {
       expect(
         runPartnerHook(tool, input as Record<string, unknown>).status,
         `应放行 ${tool}`,
       ).toBe(0);
     }
+  });
+
+  it("LS 不在 partner 白名单（CLI 2.1.296 不提供，列目录改由 Glob 承担）", () => {
+    expect(runPartnerHook("LS", { path: "src" }).status, "应拦截 LS").toBe(2);
   });
 
   it("partner 下即便注入 STAGENT_HOOK_ALLOW_BASH=1 也拦 Shell（角色优先）", () => {

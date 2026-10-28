@@ -263,7 +263,7 @@ describe("TASK-J.1 右栏搭档只读（P-01）", () => {
     );
   });
 
-  it("右栏仍可读：Read / Glob / Grep / LS 不被误伤", () => {
+  it("右栏仍可读：Read / Glob / Grep 不被误伤（Glob 模式承担列目录）", () => {
     const launch = partnerAdapter().buildLaunch({
       prompt: "看下代码",
       cwd: repo,
@@ -273,7 +273,7 @@ describe("TASK-J.1 右栏搭档只读（P-01）", () => {
       ["Read", { file_path: "src/a.ts" }],
       ["Glob", { pattern: "src/**/*.ts" }],
       ["Grep", { pattern: "export" }],
-      ["LS", { path: "src" }],
+      ["Glob", { pattern: "src/*" }],
     ] as const) {
       expect(
         hook(launch.env, tool, input as Record<string, unknown>).status,

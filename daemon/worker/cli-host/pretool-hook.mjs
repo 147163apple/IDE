@@ -11,7 +11,7 @@
  *  4. 不在白名单内的工具（含未知 MCP 工具）一律拒绝。
  *
  * TASK-J.1（P0 安全）：`STAGENT_HOOK_ROLE=partner`（方案工作台右栏搭档）时，
- * 只放行读类工具 Read/Glob/Grep/LS；其余一律拒绝（含 Edit/Write/MultiEdit/
+ * 只放行读类工具 Read/Glob/Grep（列目录经 Glob 模式完成；LS 不由 CLI 2.1.296 提供）；其余一律拒绝（含 Edit/Write/MultiEdit/
  * NotebookEdit/Bash/TodoWrite 与任何未知工具）。CLI 侧 --tools 已是精确白名单，
  * 这里是第二重保险：hook 先于工具执行，命中即 block。
  */
@@ -22,8 +22,8 @@ const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite", "Task"]);
 const PROTECTED_SEGMENTS = [".git", ".stagent", ".claude"];
 
-/** partner 角色只允许这四件事：读文件、按名找文件、按内容搜、列目录 */
-const PARTNER_ALLOWED_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
+/** partner 角色只允许这三件事：读文件、按名或按模式找文件（含列目录）、按内容搜 */
+const PARTNER_ALLOWED_TOOLS = new Set(["Read", "Glob", "Grep"]);
 
 /**
  * Shell 通道的保留区（G-3 加固，2026-10-21）：
@@ -305,7 +305,7 @@ try {
     !PARTNER_ALLOWED_TOOLS.has(tool)
   ) {
     deny(
-      `方案工作台右栏是只读搭档：只能读文件、搜代码、看目录，已拦截 ${tool || "(未知工具)"} 调用`,
+      `方案工作台右栏是只读搭档：只能读文件、搜代码、按模式列目录（Glob），已拦截 ${tool || "(未知工具)"} 调用`,
     );
   }
 

@@ -209,7 +209,7 @@
 | **TASK-C.19** | Supervisor SSOT 合流（DOC-SSOT-Supervisor） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t906u；本提交合入） | P4 规范合流 | • 前置 `C.18` COMPLETED<br>• 新建 `docs/specs/supervisor.md` 五大章<br>• 旧右栏/工作流/澄清/接口/运转机制加 SSOT 指针<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
 | **TASK-C.20** | Supervisor 合流前碎片归档（DOC-ARCHIVE-Supervisor-pre-SSOT） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t908u「归档」；本提交合入） | P4 规范归档 | • 前置 `C.19` COMPLETED<br>• `docs/archive/supervisor-pre-ssot/` + 5 份 git mv<br>• reports 留 stub；Freeze 总册保留并强化指针<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
 | **TASK-C.21** | Supervisor SSOT 审查补丁（DOC-SSOT-Supervisor-Patch） | 文档治理 | **[COMPLETED]**（2026-10-26 Tina t910u「补丁」；本提交合入） | P4 规范补丁 | • 前置 `C.20` COMPLETED<br>• SSOT v2.0.1：Demo 门禁 / 通配分级 / 确认原子时序 / pin / 降级 / demoReady<br>• 不改产品代码；不抢 D.1e；不扩 v0.2 |
-| **TASK-J.1** | 右栏 AI 搭档只读工具集 | 安全 / 工作台 | **[NEW_TASK]** | **P0** 闭环 v2.1 第一批 | • SSOT §13.2 / P-01 / L-02<br>• Claude Code 右栏改 `role: partner`：仅 Read/Glob/Grep/LS，禁写与 Bash，不用 acceptEdits<br>• 右栏拒选 read_write 适配器 |
+| **TASK-J.1** | 右栏 AI 搭档只读工具集 | 安全 / 工作台 | **[NEW_TASK]** | **P0** 闭环 v2.1 第一批 | • SSOT §13.2 / P-01 / L-02<br>• Claude Code 右栏改 `role: partner`：仅 Read/Glob/Grep（列目录经 Glob 模式；LS 不纳入），禁写与 Bash，不用 acceptEdits<br>• 右栏拒选 read_write 适配器 |
 | **TASK-J.2** | `ScopePlan` 纯函数与范围预检构建器 | 门禁 / 范围 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • SSOT §15.3 / S2-02 / S2-04 / L-03<br>• 单一来源 + 稳定 digest；确定性收敛，不编造路径<br>• 无验证脚本 → manual_only |
 | **TASK-J.3** | 唯一确认谓词纳入 `ScopePlan` | 门禁 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.2`<br>• 新增 `E_SCOPE_NOT_READY` / `E_SCOPE_POLICY` / `E_SCOPE_APPROVAL_REQUIRED`<br>• 与 J.5 同 PR 或开关保护 |
 | **TASK-J.4** | Daemon 范围预检接口与快照绑定 | 门禁 / 控制面 | **[NEW_TASK]** | P1 闭环 v2.1 第一批 | • 前置 `J.2`<br>• `POST /api/supervisor/scope/preflight`；快照 1.1 含 `scope_plan`<br>• `E_SCOPE_PLAN_DRIFT` / `E_SCHEME_SNAPSHOT_MISMATCH`；签署链不得 403 |
@@ -2621,13 +2621,15 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
 * **对照痛点（代码事实）**：右栏默认首选适配器是 `ClaudeCodeAdapter`（`daemon/server.ts::defaultChatAdapters`），其 `BASE_TOOLS` 含 `Edit` / `Write` / `MultiEdit`，以 `--permission-mode acceptEdits` 启动，`cwd` 为用户仓库根（`daemon/chat/session-manager.ts` 的 `resolveCwd ?? repoRoot`）。也就是说，右栏聊天今天可以**不经合同、不经 Worktree** 直接改用户主干——违反签署分水岭「签署前主干改动为 0 字节」。
 * **一句话目标**：在方案工作台里，无论接哪个适配器，右栏只能读、搜、列目录，不能写文件、不能跑 shell、不能联网。
 * **范围**：
-  1. `ClaudeCodeAdapter` 新增角色选项 `role: "partner" | "worker"`（默认 `"partner"`）。`partner` 时：`--tools` / `--allowedTools` 仅 `Read,Glob,Grep,LS`；`--disallowedTools` 追加 `Edit,Write,MultiEdit,NotebookEdit,Bash,TodoWrite`；`permissions.defaultMode` 与 `--permission-mode` 改为 `default`（**不**用 `acceptEdits`）；`permissions.deny` 同步加入写类工具。`worker` 角色保持现行行为（仅供 Worker 路径使用，不进右栏）。
+  1. `ClaudeCodeAdapter` 新增角色选项 `role: "partner" | "worker"`（默认 `"partner"`）。`partner` 时：`--tools` / `--allowedTools` 仅 `Read,Glob,Grep`（列目录由 Glob 模式承担；LS 不由 CLI 2.1.296 提供，见 J1 报告，不纳入白名单）；`--disallowedTools` 追加 `Edit,Write,MultiEdit,NotebookEdit,Bash,TodoWrite`；`permissions.defaultMode` 与 `--permission-mode` 改为 `default`（**不**用 `acceptEdits`）；`permissions.deny` 同步加入写类工具。`worker` 角色保持现行行为（仅供 Worker 路径使用，不进右栏）。
   2. `defaultChatAdapters` 构造右栏适配器时显式传 `role: "partner"`。
   3. `ChatAdapterInfo` 增加 `tool_mode: "read_only" | "read_write"`；`BaselineChatAdapter` / `DemoChatAdapter` 标 `read_only`。右栏适配器选择（`pick-chat-adapter`）**拒绝**选中 `read_write` 适配器，并在设置页显示白话原因。
   4. PreToolUse hook（`pretool-hook.mjs`）在 `partner` 角色下对任何写类工具调用返回 block（双保险：hook 失败时 CLI 参数仍拦截）。
 * **非目标**：不改 Worker 适配器行为；不做施工对话分流（第二批）；不改 `BaselineChatAdapter` 的提示词。
 * **验收（PASS）**：
-  - `tests/unit/cli-host-claude-code.test.ts` 新增用例：`role: "partner"` 生成的 argv 中 `--tools` 与 `--allowedTools` 恰为 `Read,Glob,Grep,LS`；`--disallowedTools` 含 `Edit`、`Write`、`MultiEdit`、`Bash`；`--permission-mode` 不是 `acceptEdits`；settings 的 `permissions.deny` 含全部写类工具。
+  - `tests/unit/cli-host-claude-code.test.ts` 新增用例：`role: "partner"` 生成的 argv 中 `--tools` 与 `--allowedTools` 恰为 `Read,Glob,Grep`；`--disallowedTools` 含 `Edit`、`Write`、`MultiEdit`、`Bash`；`--permission-mode` 不是 `acceptEdits`；settings 的 `permissions.deny` 含全部写类工具。
+  - partner 下 hook 对 `LS` 返回 block（退出码 2）；`Glob` 的目录模式（如 `src/*`）放行。
+  - **“看目录”承诺的真机验证**：在真实 CLI 上，partner 的 `Glob` 目录模式须返回目录内条目（不只是文件）。未通过前 J.1 不得 PASS。
   - `tests/unit/pick-chat-adapter.test.ts` 新增用例：`tool_mode: "read_write"` 的适配器不会被选为右栏适配器。
   - 新增 `tests/integration/partner-readonly.test.ts`（对应 SSOT `P-01`）：用替身 spawn 捕获启动参数并模拟一次 `Write` 工具调用经 hook，断言被 block、仓库内目标文件不存在。
   - `worker` 角色既有用例全部不回归。

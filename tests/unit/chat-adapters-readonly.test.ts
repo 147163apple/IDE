@@ -157,7 +157,7 @@ describe("DemoChatAdapter 只回放固定事件，不碰盘", () => {
 });
 
 describe("ClaudeCodeAdapter（partner）只读由 CLI 参数层保证", () => {
-  it("工具集恰为 Read/Glob/Grep/LS，没有任何写类或联网工具", () => {
+  it("工具集恰为 Read/Glob/Grep，没有任何写类或联网工具", () => {
     const launch = new ClaudeCodeAdapter({
       apiKey: () => KEY_ANTHROPIC,
       tmpRoot: tmp,
@@ -165,7 +165,7 @@ describe("ClaudeCodeAdapter（partner）只读由 CLI 参数层保证", () => {
     const tools = (launch.args[launch.args.indexOf("--tools") + 1] ?? "").split(
       ",",
     );
-    expect(tools).toEqual(["Read", "Glob", "Grep", "LS"]);
+    expect(tools).toEqual(["Read", "Glob", "Grep"]);
     for (const forbidden of [
       "Edit",
       "Write",

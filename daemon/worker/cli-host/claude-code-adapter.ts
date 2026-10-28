@@ -24,7 +24,7 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
  * permissions.deny 收窄；永不使用 bypassPermissions；续接只用 `--resume <session_id>`。
  *
  * TASK-J.1（P0 安全）：角色分档。`partner`（默认）= 方案工作台右栏搭档，工具集恒为
- * Read/Glob/Grep/LS，permission-mode 恒为 default（绝不用 acceptEdits），写类工具进
+ * Read/Glob/Grep（列目录经 Glob；LS 不由 CLI 2.1.296 提供），permission-mode 恒为 default（绝不用 acceptEdits），写类工具进
  * --disallowedTools 与 permissions.deny；`worker` = 施工路径，保持既有可写行为。
  * 右栏永远由 `defaultChatAdapters` 显式以 partner 构造，不依赖调用方记得传参。
  *
@@ -83,7 +83,7 @@ export const HOOK_SCRIPT = fileURLToPath(
 );
 
 /** 右栏搭档的全部可用工具：只读、可搜、可列目录 */
-export const PARTNER_TOOLS = ["Read", "Glob", "Grep", "LS"] as const;
+export const PARTNER_TOOLS = ["Read", "Glob", "Grep"] as const;
 
 /** partner 角色在三个层面（--tools / --disallowedTools / permissions.deny）一并封禁的工具 */
 export const PARTNER_DENIED_TOOLS = [
