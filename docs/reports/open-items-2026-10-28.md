@@ -12,6 +12,7 @@
   - 因此这类方案直接建合同会被 schema 拒绝，与 SSOT §15.4「没有自动检查 → 施工步骤按 `MANUAL_REVIEW` 处理」的意图不一致。
 - **本轮处理**：**不改 schema、不改 `scope-plan` 输出**；仅在 J.5 接线前登记。
 - **建议决策点**：TASK-J.5 决定采用哪条路径（例如：schema 允许 `commands: []` 且以 `manual_only`/`MANUAL_REVIEW` 表达；或 J.5 生成一条显式的人工验收占位命令）。两条路径都需同步更新 J.2/J.5 的验收断言。
+- **修复条款（挂账修复时必须执行）**：解除 `tests/integration/scheme-confirm-scope-drift.test.ts` 中 T-HTTP-S207b/c 的 `it.fails`，否则挂账修复后测试反红。
 
 ## 2. `E_SCOPE_INVARIANT_BROKEN` 未登记进规格文档
 
