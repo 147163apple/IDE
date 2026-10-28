@@ -742,6 +742,20 @@ export class StagentDaemon {
         seq,
         demo_confirmed: demo?.confirmed === true,
         demo_mode: demo?.demo_mode ?? null,
+        // TASK-J.8：表外组合写 daemon.jsonl 告警（沿用 C.17 日志），不进前端载荷
+        on_journey_warning: (warning, input) =>
+          appendDaemonLog(this.repoRoot, {
+            level: "warn",
+            kind: "journey_stage",
+            contractId,
+            code: warning,
+            detail: {
+              delivery_state: input.delivery_state,
+              transient: input.transient,
+              lifecycle_state: input.lifecycle_state,
+              presentation_state: input.presentation_state,
+            },
+          }),
       }),
     );
   }

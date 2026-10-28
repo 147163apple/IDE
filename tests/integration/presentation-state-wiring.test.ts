@@ -217,5 +217,9 @@ describe("展示态接线：落盘 / 读取 / 回放", () => {
     expect(replayed).toBeDefined();
     expect(replayed?.presentation_state).toBe("EXPLORING");
     expect(replayed?.persisted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    // TASK-J.8 / J-01：STATE_CHANGED 帧携带 Daemon 投影的幕次
+    expect(replayed?.journey_stage).toBe("scheme");
+    expect(replayed?.journey_substate).toBe("plan_chatting");
+    expect(replayed?.journey_archived).toBe(false);
   });
 });
