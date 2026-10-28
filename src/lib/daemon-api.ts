@@ -2,6 +2,7 @@ import type { SoftwareContract } from "./contract.schema";
 import type { EvidenceBundle } from "./evidence.schema";
 import type { SupervisorProposalV1, TaskGraph } from "./graph/task-graph";
 import type { DemoGate, SchemeDraft } from "./journey/scheme-draft";
+import type { ScopePlan, ScopePlanDecisions } from "./journey/scope-plan";
 
 /**
  * Daemon REST 客户端（浏览器侧唯一数据入口）。
@@ -1671,6 +1672,36 @@ export interface SchemeSnapshotView {
   idempotent: boolean;
 }
 
+/**
+ * TASK-J.4：`POST /api/supervisor/scope/preflight`
+ * 只读范围预检（零模型、零落盘）；返回与当前方案修订绑定的 `ScopePlan`。
+ */
+export async function preflightScope(
+  conn: DaemonConnection,
+  input: {
+    scheme: Pick<
+      SchemeDraft,
+      "scheme_revision" | "title" | "summary" | "modules" | "notes"
+    >;
+    decisions?: ScopePlanDecisions | undefined;
+  },
+): Promise<ScopePlan> {
+  const response = await request<{ scope_plan: ScopePlan }>(
+    conn,
+    "/api/supervisor/scope/preflight",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        scheme: input.scheme,
+        ...(input.decisions === undefined
+          ? {}
+          : { decisions: input.decisions }),
+      }),
+    },
+  );
+  return response.scope_plan;
+}
+
 /** TASK-C.22：确认方案不可变快照（幂等）。 */
 export async function freezeSchemeSnapshot(
   conn: DaemonConnection,
@@ -1683,6 +1714,8 @@ export async function freezeSchemeSnapshot(
       message: string;
       demo_mode: "none" | "interactive" | "degraded";
     };
+    /** TASK-J.4：冻结时带上的范围；Daemon 会重跑预检比对 digest */
+    scope_plan?: ScopePlan | undefined;
   },
 ): Promise<SchemeSnapshotView> {
   return request<SchemeSnapshotView>(conn, "/api/supervisor/scheme/freeze", {
