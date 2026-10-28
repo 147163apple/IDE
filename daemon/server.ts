@@ -62,8 +62,21 @@ import {
 } from "./pipeline/scheme-snapshot-store";
 import {
   assertContractScopeAllowed,
+  evaluateContractScope,
   WritableScopePolicyError,
 } from "./supervisor/scope-gate";
+import {
+  buildScopePlan,
+  type ScopePlanScheme,
+} from "./supervisor/scope-plan-builder";
+import {
+  scopePlanToContractScope,
+  type ContractScopeFromPlan,
+  type ScopePlan,
+  type ScopePlanDecisions,
+} from "../src/lib/journey/scope-plan";
+import type { SchemeDraft } from "../src/lib/journey/scheme-draft";
+import { stableStringify } from "../src/lib/stable-stringify";
 import {
   createRealPreviewServer,
   writeRealPlaytestStub,
@@ -1163,7 +1176,10 @@ export class StagentDaemon {
       error?.code === "E_CONCURRENT_OPERATION" ||
       error?.code === "E_ILLEGAL_NODE_TRANSITION" ||
       error?.code === "E_UPSTREAM_NOT_ILLUMINATED" ||
-      error?.code === "E_REPLAY_CONFLICT";
+      error?.code === "E_REPLAY_CONFLICT" ||
+      // TASK-J.4：RangePlan 与快照绑定后的两个并发/版本冲突码
+      error?.code === "E_SCOPE_PLAN_DRIFT" ||
+      error?.code === "E_SCHEME_SNAPSHOT_MISMATCH";
     this.sendJson(res, conflict ? 409 : 400, {
       error: error?.message ?? String(err),
       ...(error?.code === undefined ? {} : { code: error.code }),
@@ -1320,6 +1336,7 @@ export class StagentDaemon {
       scheme?: unknown;
       demo?: unknown;
       decision?: unknown;
+      scope_plan?: unknown;
     };
     try {
       body = (await this.readJsonBody(req)) as typeof body;
@@ -1368,10 +1385,40 @@ export class StagentDaemon {
     }
 
     try {
+      const draftScheme = scheme as unknown as SchemeDraft;
+      const submittedPlan =
+        body.scope_plan === undefined ? null : asScopePlan(body.scope_plan);
+      if (body.scope_plan !== undefined && !submittedPlan) {
+        this.sendJson(res, 400, {
+          error: "invalid_scope_plan",
+          code: "E_SCOPE_PREFLIGHT_INVALID",
+          message: "scope_plan 字段不合法",
+        });
+        return;
+      }
+      // TASK-J.4：冻结时用快照内 scheme + 提交 plan 里的用户表态重跑预检。
+      // 不一致说明项目或在别处变了（例如绿野判定翻转），必须中止且不写快照。
+      const freshPlan = buildScopePlan({
+        repoRoot: this.repoRoot,
+        scheme: draftScheme,
+        decisions: submittedPlan ? decisionsFromScopePlan(submittedPlan) : {},
+      });
+      if (
+        submittedPlan &&
+        submittedPlan.plan_digest !== freshPlan.plan_digest
+      ) {
+        this.sendJson(res, 409, {
+          error: "scheme_plan_drift",
+          code: "E_SCOPE_PLAN_DRIFT",
+          message: "项目刚刚有变化，我重新核对了改动范围，请再看一眼",
+          scope_plan: freshPlan,
+        });
+        return;
+      }
+
       const written = writeSchemeSnapshot(this.repoRoot, {
         confirmation_id: confirmationId,
-        scheme:
-          scheme as unknown as import("../src/lib/journey/scheme-draft").SchemeDraft,
+        scheme: draftScheme,
         demo: demo as unknown as import("../src/lib/journey/scheme-draft").DemoGate,
         decision: {
           code: decision["code"],
@@ -1379,6 +1426,7 @@ export class StagentDaemon {
           demo_mode: decision["demo_mode"] as
             "none" | "interactive" | "degraded",
         },
+        scope_plan: freshPlan,
       });
       this.sendJson(res, written.idempotent ? 200 : 201, {
         snapshot_id: written.snapshot.snapshot_id,
@@ -1396,6 +1444,56 @@ export class StagentDaemon {
       }
       this.sendActionError(res, err);
     }
+  }
+
+  /**
+   * TASK-J.4 / SSOT §15.5：范围预检接口。
+   * POST /api/supervisor/scope/preflight（只读、零模型、零落盘）
+   */
+  private async handleScopePreflight(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    method: string,
+  ): Promise<void> {
+    if (method !== "POST") {
+      this.sendJson(res, 405, { error: "Method not allowed" });
+      return;
+    }
+    let body: { scheme?: unknown; decisions?: unknown };
+    try {
+      body = (await this.readJsonBody(req)) as typeof body;
+    } catch (err) {
+      this.sendJson(res, 400, {
+        error: "invalid_json",
+        message: (err as Error).message,
+      });
+      return;
+    }
+    const scheme = asScopePlanScheme(body.scheme);
+    if (!scheme) {
+      this.sendJson(res, 400, {
+        error: "invalid_scheme",
+        code: "E_SCOPE_PREFLIGHT_INVALID",
+        message: "scheme 字段不完整",
+      });
+      return;
+    }
+    const decisions = asScopeDecisions(body.decisions);
+    if (decisions === null) {
+      this.sendJson(res, 400, {
+        error: "invalid_decisions",
+        code: "E_SCOPE_PREFLIGHT_INVALID",
+        message: "decisions 字段不合法",
+      });
+      return;
+    }
+    // 只读：buildScopePlan 不写盘、不调模型、不建 Worktree
+    const scopePlan = buildScopePlan({
+      repoRoot: this.repoRoot,
+      scheme,
+      decisions,
+    });
+    this.sendJson(res, 200, { scope_plan: scopePlan });
   }
 
   private async handleSupervisorDraft(
@@ -3606,6 +3704,15 @@ export class StagentDaemon {
       return;
     }
 
+    if (pathname === "/api/supervisor/scope/preflight") {
+      if (!this.isAuthorized(req)) {
+        this.sendJson(res, 401, { error: "Unauthorized" });
+        return;
+      }
+      await this.handleScopePreflight(req, res, method);
+      return;
+    }
+
     if (pathname === "/api/supervisor/scheme/freeze") {
       if (!this.isAuthorized(req)) {
         this.sendJson(res, 401, { error: "Unauthorized" });
@@ -3678,11 +3785,8 @@ export class StagentDaemon {
             return;
           }
           const contract = softwareContractSchema.parse(body.contract);
-          assertContractScopeAllowed(
-            this.repoRoot,
-            contract.authorization.file_system_scope.writable_paths,
-          );
           let snapshotDemoGate: DemoSignGateDecision | undefined;
+          let scopedBySnapshot = false;
           if (body.confirmation_id) {
             const snapshot = readSchemeSnapshot(
               this.repoRoot,
@@ -3696,6 +3800,50 @@ export class StagentDaemon {
               });
               return;
             }
+            if (!snapshot.scope_plan) {
+              this.sendJson(res, 409, {
+                error: "scheme_snapshot_not_found",
+                code: "E_SCHEME_SNAPSHOT_NOT_FOUND",
+                message: "快照版本过旧（缺少改动范围），请重新确认方案",
+              });
+              return;
+            }
+            const expectedScope = scopePlanToContractScope(snapshot.scope_plan);
+            const mismatch = contractScopeMismatch(contract, expectedScope);
+            if (mismatch) {
+              this.sendJson(res, 409, {
+                error: "scheme_snapshot_mismatch",
+                code: "E_SCHEME_SNAPSHOT_MISMATCH",
+                message: `合同的 ${mismatch} 与快照里的改动范围不一致`,
+                field: mismatch,
+              });
+              return;
+            }
+            // 预检已保证合规，但 D1 不变量仍要自检；违反说明是缺陷，不得伪装成 403。
+            const invariant = evaluateContractScope(
+              this.repoRoot,
+              expectedScope.writable_paths,
+            );
+            if (!invariant.ok) {
+              try {
+                appendDaemonLog(this.repoRoot, {
+                  kind: "scope-invariant",
+                  level: "warn",
+                  code: "E_SCOPE_INVARIANT_BROKEN",
+                  detail: { rejected: invariant.rejected },
+                });
+              } catch {
+                /* 日志失败不改变结论 */
+              }
+              this.sendJson(res, 500, {
+                error: "scope_invariant_broken",
+                code: "E_SCOPE_INVARIANT_BROKEN",
+                message: "快照范围本身不合规，属于 D1 违约，请按缺陷处理",
+                rejected: invariant.rejected,
+              });
+              return;
+            }
+            scopedBySnapshot = true;
             snapshotDemoGate = evaluateSnapshotDemoGate(
               snapshot,
               (prototypeId) => readDemoConfirm(this.repoRoot, prototypeId),
@@ -3707,6 +3855,12 @@ export class StagentDaemon {
               });
               return;
             }
+          }
+          if (!scopedBySnapshot) {
+            assertContractScopeAllowed(
+              this.repoRoot,
+              contract.authorization.file_system_scope.writable_paths,
+            );
           }
           const saved = store.save(contract);
           this.emitContractUpdate(saved);
@@ -3972,12 +4126,9 @@ export class StagentDaemon {
               this.sendJson(res, 404, { error: "Contract not found" });
               return;
             }
-            assertContractScopeAllowed(
-              this.repoRoot,
-              current.authorization.file_system_scope.writable_paths,
-            );
 
             let demoGate: DemoSignGateDecision;
+            let scopedBySnapshot = false;
             if (body.confirmation_id) {
               const snapshot = readSchemeSnapshot(
                 this.repoRoot,
@@ -3991,12 +4142,63 @@ export class StagentDaemon {
                 });
                 return;
               }
+              if (!snapshot.scope_plan) {
+                this.sendJson(res, 409, {
+                  error: "scheme_snapshot_not_found",
+                  code: "E_SCHEME_SNAPSHOT_NOT_FOUND",
+                  message: "快照版本过旧（缺少改动范围），请重新确认方案",
+                });
+                return;
+              }
+              const expectedScope = scopePlanToContractScope(
+                snapshot.scope_plan,
+              );
+              const mismatch = contractScopeMismatch(current, expectedScope);
+              if (mismatch) {
+                this.sendJson(res, 409, {
+                  error: "scheme_snapshot_mismatch",
+                  code: "E_SCHEME_SNAPSHOT_MISMATCH",
+                  message: `合同的 ${mismatch} 与快照里的改动范围不一致`,
+                  field: mismatch,
+                });
+                return;
+              }
+              const invariant = evaluateContractScope(
+                this.repoRoot,
+                expectedScope.writable_paths,
+              );
+              if (!invariant.ok) {
+                try {
+                  appendDaemonLog(this.repoRoot, {
+                    kind: "scope-invariant",
+                    level: "warn",
+                    code: "E_SCOPE_INVARIANT_BROKEN",
+                    detail: { rejected: invariant.rejected },
+                  });
+                } catch {
+                  /* 日志失败不改变结论 */
+                }
+                this.sendJson(res, 500, {
+                  error: "scope_invariant_broken",
+                  code: "E_SCOPE_INVARIANT_BROKEN",
+                  message: "快照范围本身不合规，属于 D1 违约，请按缺陷处理",
+                  rejected: invariant.rejected,
+                });
+                return;
+              }
+              scopedBySnapshot = true;
               demoGate = evaluateSnapshotDemoGate(snapshot, (prototypeId) =>
                 readDemoConfirm(this.repoRoot, prototypeId),
               );
             } else {
               // 旧路径没有快照：保守回退最新 Demo 记录；从未生成才允许。
               demoGate = evaluateLatestDemoGate(this.repoRoot);
+            }
+            if (!scopedBySnapshot) {
+              assertContractScopeAllowed(
+                this.repoRoot,
+                current.authorization.file_system_scope.writable_paths,
+              );
             }
             if (!demoGate.ok) {
               this.sendJson(res, 409, {
@@ -4582,9 +4784,148 @@ export class StagentDaemon {
   }
 }
 
+/**
+ * TASK-J.4 请求体解析：范围预检只依赖方案的这五个字段。
+ * 任何缺字段都返回 null，由调用方按 400 处理（不猜、不补默认值）。
+ */
+function asScopePlanScheme(value: unknown): ScopePlanScheme | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const revision = v["scheme_revision"];
+  const modules = v["modules"];
+  if (
+    typeof revision !== "number" ||
+    !Number.isInteger(revision) ||
+    revision < 1 ||
+    typeof v["title"] !== "string" ||
+    typeof v["summary"] !== "string" ||
+    typeof v["notes"] !== "string" ||
+    !Array.isArray(modules) ||
+    modules.some((m) => typeof m !== "string")
+  ) {
+    return null;
+  }
+  return {
+    scheme_revision: revision,
+    title: v["title"] as string,
+    summary: v["summary"] as string,
+    modules: modules as string[],
+    notes: v["notes"] as string,
+  };
+}
+
+/** 用户表态：只接受显式形状，数组里出现脏元素整包拒绝 */
+function asScopeDecisions(value: unknown): ScopePlanDecisions | null {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const ids = v["excluded_area_ids"];
+  if (
+    ids !== undefined &&
+    (!Array.isArray(ids) || ids.some((id) => typeof id !== "string"))
+  ) {
+    return null;
+  }
+  const approvals = v["approvals"];
+  if (approvals !== undefined) {
+    if (!Array.isArray(approvals)) return null;
+    for (const entry of approvals) {
+      if (
+        !entry ||
+        typeof entry !== "object" ||
+        typeof (entry as Record<string, unknown>)["id"] !== "string" ||
+        typeof (entry as Record<string, unknown>)["approved"] !== "boolean"
+      ) {
+        return null;
+      }
+    }
+  }
+  return {
+    ...(ids === undefined ? {} : { excluded_area_ids: ids as string[] }),
+    ...(approvals === undefined
+      ? {}
+      : {
+          approvals: approvals as { id: string; approved: boolean }[],
+        }),
+  };
+}
+
+/**
+ * 前端提交的 ScopePlan：只做结构判定（下游只用 digest / 表态 / 修订号），
+ * 不信任其中的 paths 或 grade——权威值由 Daemon 重算。
+ */
+function asScopePlan(value: unknown): ScopePlan | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v["plan_digest"] !== "string" ||
+    typeof v["scheme_revision"] !== "number" ||
+    !Array.isArray(v["areas"]) ||
+    !Array.isArray(v["needs_approval"]) ||
+    !v["grade"] ||
+    typeof v["grade"] !== "object"
+  ) {
+    return null;
+  }
+  return value as ScopePlan;
+}
+
+function decisionsFromScopePlan(plan: ScopePlan): ScopePlanDecisions {
+  return {
+    excluded_area_ids: plan.areas
+      .filter((area) => area.excluded_by_user === true)
+      .map((area) => area.id),
+    approvals: plan.needs_approval
+      .filter((item) => item.approved !== null)
+      .map((item) => ({ id: item.id, approved: item.approved === true })),
+  };
+}
+
+function samePathSet(
+  left: readonly string[],
+  right: readonly string[],
+): boolean {
+  const a = [...new Set(left)].sort();
+  const b = [...new Set(right)].sort();
+  return a.length === b.length && a.every((p, i) => p === b[i]);
+}
+
+/**
+ * 合同与快照范围的逐字段比对。
+ * 返回首个不一致的字段名（用于 409 的 field），一致返回 null。
+ */
+function contractScopeMismatch(
+  contract: SoftwareContract,
+  expected: ContractScopeFromPlan,
+): string | null {
+  const scope = contract.authorization.file_system_scope;
+  if (!samePathSet(scope.writable_paths, expected.writable_paths)) {
+    return "writable_paths";
+  }
+  if (!samePathSet(scope.strictly_forbidden_paths, expected.forbidden_paths)) {
+    return "strictly_forbidden_paths";
+  }
+  if (
+    stableStringify(contract.verification_spec.commands) !==
+    stableStringify(expected.verification_spec.commands)
+  ) {
+    return "verification_spec";
+  }
+  if (
+    stableStringify(contract.authorization.budget_limits) !==
+    stableStringify(expected.budget)
+  ) {
+    return "budget_limits";
+  }
+  return null;
+}
+
 function defaultChatAdapters(repoRoot: string): ChatAdapter[] {
   return [
+    // TASK-J.1：右栏是方案搭档，不是施工工人——显式声明 partner（只读工具集）。
+    // 不依赖 ClaudeCodeAdapter 的默认值：这一行就是「右栏绝不写主干」的唯一定义处。
     new ClaudeCodeAdapter({
+      role: "partner",
       configDir: path.join(repoRoot, ".stagent", "claude-config"),
       verifiedOn: CLAUDE_CODE_VERIFIED_ON,
     }),

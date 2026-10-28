@@ -10,6 +10,7 @@ import {
   type DemoGate,
   type SchemeDraft,
 } from "../../src/lib/journey/scheme-draft";
+import type { ScopePlan } from "../../src/lib/journey/scope-plan";
 import {
   SCHEME_SNAPSHOT_DIR,
   SchemeSnapshotConflictError,
@@ -68,6 +69,28 @@ function makeDemo(partial: Partial<DemoGate> = {}): DemoGate {
   return { ...EMPTY_DEMO_GATE, ...partial };
 }
 
+/** TASK-J.4：1.1 快照必须携带 ScopePlan；这里给最小合规夹具 */
+function makeScopePlan(scheme: SchemeDraft): ScopePlan {
+  return {
+    scheme_revision: scheme.scheme_revision,
+    plan_digest: `digest-${scheme.scheme_revision}`,
+    areas: [],
+    never_touch: [],
+    needs_approval: [],
+    verification: { commands: [], plain: [], manual_only: true },
+    budget: {
+      limits: {
+        max_file_modifications: 10,
+        max_total_diff_lines: 2000,
+        max_duration_seconds: 1800,
+        max_verification_retries: 3,
+      },
+      plain: "最多改约 10 个文件，预计 15～30 分钟",
+    },
+    grade: { ok: true, rejected: [] },
+  };
+}
+
 function writeConfirmRecord(
   repoRoot: string,
   record: Partial<DemoConfirmRecord> & { prototype_id: string },
@@ -95,6 +118,7 @@ function writeSnapshot(
       message: "ok",
       demo_mode: demo.status === "degraded_flowcard" ? "degraded" : "none",
     },
+    scope_plan: makeScopePlan(scheme),
   });
 }
 

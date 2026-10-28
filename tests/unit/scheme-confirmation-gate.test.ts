@@ -10,6 +10,7 @@ import {
   type SchemeConflict,
   type SchemeDraft,
 } from "../../src/lib/journey/scheme-draft";
+import type { ScopePlan } from "../../src/lib/journey/scope-plan";
 import { canTransitionDelivery } from "../../src/lib/state/delivery-state";
 
 /**
@@ -35,6 +36,40 @@ function makeDemo(partial: Partial<DemoGate> = {}): DemoGate {
   return { ...EMPTY_DEMO_GATE, ...partial };
 }
 
+function scopePlanFor(
+  draft: SchemeDraft,
+  partial: Partial<ScopePlan> = {},
+): ScopePlan {
+  return {
+    scheme_revision: draft.scheme_revision,
+    plan_digest: "fixture-digest",
+    areas: [],
+    never_touch: [],
+    needs_approval: [],
+    verification: { commands: [], plain: [], manual_only: true },
+    budget: {
+      limits: {
+        max_file_modifications: 10,
+        max_total_diff_lines: 2000,
+        max_duration_seconds: 1800,
+        max_verification_retries: 3,
+      },
+      plain: "最多改约 10 个文件，预计 15～30 分钟",
+    },
+    grade: { ok: true, rejected: [] },
+    ...partial,
+  };
+}
+
+/** J.3 起统一入口：合规 plan + 显式打开临时开关 */
+function confirm(
+  draft: SchemeDraft,
+  demo: DemoGate = EMPTY_DEMO_GATE,
+  plan: ScopePlan | null = scopePlanFor(draft),
+) {
+  return evaluateSchemeConfirmation(draft, demo, plan, { scope_gate: true });
+}
+
 function openConflict(): SchemeConflict {
   return {
     id: "c1",
@@ -49,7 +84,7 @@ function openConflict(): SchemeConflict {
 
 describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   it("T-GATE-001 从未生成 Demo：允许按静态方案签署，demo_mode=none", () => {
-    const decision = evaluateSchemeConfirmation(makeDraft(), EMPTY_DEMO_GATE);
+    const decision = confirm(makeDraft(), EMPTY_DEMO_GATE);
     expect(decision.ok).toBe(true);
     expect(decision.code).toBe("OK");
     expect(decision.demo_mode).toBe("none");
@@ -58,7 +93,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
 
   it("T-GATE-002 Demo 已就绪且对同一修订确认：允许签署", () => {
     const draft = makeDraft({ scheme_revision: 3 });
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       draft,
       makeDemo({
         status: "ready",
@@ -73,7 +108,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
 
   it("T-GATE-003 Demo 仍在生成：拒绝 E_DEMO_BUILDING", () => {
     const draft = makeDraft({ scheme_revision: 2 });
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       draft,
       makeDemo({ status: "building", scheme_revision: 2 }),
     );
@@ -83,7 +118,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   });
 
   it("T-GATE-004 Demo 生成失败且未处置：拒绝 E_DEMO_FAILED", () => {
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       makeDraft({ scheme_revision: 2 }),
       makeDemo({ status: "failed", scheme_revision: 2 }),
     );
@@ -92,7 +127,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   });
 
   it("T-GATE-005 已生成但未确认（decision_revision=null）：拒绝 E_DEMO_CONFIRMATION_REQUIRED", () => {
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       makeDraft({ scheme_revision: 4 }),
       makeDemo({
         status: "ready",
@@ -106,7 +141,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   });
 
   it("T-GATE-006 Demo 基于旧修订：拒绝 E_DEMO_STALE（改过方案必须重生成）", () => {
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       makeDraft({ scheme_revision: 5 }),
       makeDemo({
         status: "ready",
@@ -124,7 +159,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
       scheme_revision: 1,
       conflicts: [openConflict()],
     });
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       draft,
       makeDemo({
         status: "ready",
@@ -139,7 +174,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   });
 
   it("T-GATE-008 方案不可审阅（标题/摘要不足）：拒绝 E_SCHEME_NOT_REVIEWABLE", () => {
-    const decision = evaluateSchemeConfirmation(
+    const decision = confirm(
       makeDraft({ title: "", summary: "", modules: [] }),
       EMPTY_DEMO_GATE,
     );
@@ -148,17 +183,14 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
   });
 
   it("T-GATE-009 已冻结方案：拒绝 E_SCHEME_ALREADY_FROZEN（不重复签署）", () => {
-    const decision = evaluateSchemeConfirmation(
-      freezeScheme(makeDraft()),
-      EMPTY_DEMO_GATE,
-    );
+    const decision = confirm(freezeScheme(makeDraft()), EMPTY_DEMO_GATE);
     expect(decision.ok).toBe(false);
     expect(decision.code).toBe("E_SCHEME_ALREADY_FROZEN");
   });
 
   it("T-GATE-010 降级流程卡：未显式接受拒绝；已接受则允许且 demo_mode=degraded", () => {
     const draft = makeDraft({ scheme_revision: 2 });
-    const notAccepted = evaluateSchemeConfirmation(
+    const notAccepted = confirm(
       draft,
       makeDemo({
         status: "degraded_flowcard",
@@ -170,7 +202,7 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
     expect(notAccepted.code).toBe("E_DEMO_CONFIRMATION_REQUIRED");
     expect(notAccepted.message).toContain("降级");
 
-    const accepted = evaluateSchemeConfirmation(
+    const accepted = confirm(
       draft,
       makeDemo({
         status: "degraded_flowcard",
@@ -197,15 +229,12 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
     expect(computeDemoReady(lowScore)).toBe(true);
 
     // 确认谓词只看可读性与 Demo 状态，与分数无关
-    expect(
-      evaluateSchemeConfirmation(
-        { ...lowScore, completeness: 0 },
-        EMPTY_DEMO_GATE,
-      ).ok,
-    ).toBe(true);
+    expect(confirm({ ...lowScore, completeness: 0 }, EMPTY_DEMO_GATE).ok).toBe(
+      true,
+    );
   });
 
-  it("T-GATE-012 demoReady 四条件逐条落地：任一缺失即 false", () => {
+  it("T-GATE-011a demoReady 四条件逐条落地：任一缺失即 false", () => {
     expect(computeDemoReady(makeDraft())).toBe(true);
     expect(computeDemoReady(makeDraft({ modules: ["仅一个模块"] }))).toBe(
       false,
@@ -219,10 +248,108 @@ describe("T-GATE 单一确认谓词 evaluateSchemeConfirmation", () => {
     );
   });
 
-  it("T-GATE-013 canConfirmScheme 只是兼容别名，与主谓词在无 Demo 时等价", () => {
-    expect(canConfirmScheme(makeDraft())).toBe(
-      evaluateSchemeConfirmation(makeDraft(), EMPTY_DEMO_GATE).ok,
+  it("T-GATE-011b canConfirmScheme 已禁用：恒为 false（迫使遗留调用点暴露）", () => {
+    expect(canConfirmScheme(makeDraft())).toBe(false);
+  });
+});
+
+describe("T-GATE 范围门禁（TASK-J.3 / SSOT §15.5）", () => {
+  const area = (label: string, path: string) => ({
+    id: "area_1",
+    label,
+    why: "",
+    module_ids: [],
+    kind: "change_existing" as const,
+    paths: [path],
+    excluded_by_user: false,
+  });
+
+  it("T-GATE-012 修订号不一致 → E_SCOPE_NOT_READY；OPEN 冲突优先于范围", () => {
+    const draft = makeDraft({ scheme_revision: 3 });
+    const stale = confirm(
+      draft,
+      EMPTY_DEMO_GATE,
+      scopePlanFor(draft, { scheme_revision: 2 }),
     );
+    expect(stale.ok).toBe(false);
+    expect(stale.code).toBe("E_SCOPE_NOT_READY");
+    expect(stale.message).toContain("正在核对要改哪些地方");
+
+    // 判定顺序：冲突先于范围
+    const conflicted = makeDraft({
+      scheme_revision: 3,
+      conflicts: [openConflict()],
+    });
+    const priority = confirm(conflicted, EMPTY_DEMO_GATE, null);
+    expect(priority.code).toBe("E_SCHEME_CONFLICTS_OPEN");
+  });
+
+  it("T-GATE-013 scopePlan 为 null → E_SCOPE_NOT_READY", () => {
+    const decision = confirm(makeDraft(), EMPTY_DEMO_GATE, null);
+    expect(decision.ok).toBe(false);
+    expect(decision.code).toBe("E_SCOPE_NOT_READY");
+  });
+
+  it("T-GATE-014 grade.ok=false → E_SCOPE_POLICY：文案含白话区域名，不含 **", () => {
+    const draft = makeDraft();
+    const plan = scopePlanFor(draft, {
+      areas: [area("src 这一块", "src/**")],
+      grade: {
+        ok: false,
+        rejected: [{ path: "src/**", kind: "bare_top_glob" }],
+      },
+    });
+    const decision = confirm(draft, EMPTY_DEMO_GATE, plan);
+    expect(decision.ok).toBe(false);
+    expect(decision.code).toBe("E_SCOPE_POLICY");
+    expect(decision.message).toContain("src 这一块");
+    expect(decision.message).not.toContain("**");
+    expect(decision.reasons.join("")).not.toContain("**");
+  });
+
+  it("T-GATE-015 有未表态敏感项 → E_SCOPE_APPROVAL_REQUIRED；表态后放行", () => {
+    const draft = makeDraft();
+    const pending = scopePlanFor(draft, {
+      needs_approval: [
+        {
+          id: "ap_dependency_manifest",
+          label: "项目依赖清单（package.json）",
+          why: "要加依赖",
+          paths: ["package.json"],
+          approved: null,
+        },
+      ],
+    });
+    const decision = confirm(draft, EMPTY_DEMO_GATE, pending);
+    expect(decision.ok).toBe(false);
+    expect(decision.code).toBe("E_SCOPE_APPROVAL_REQUIRED");
+    expect(decision.message).toContain("还有 1 处敏感改动等你点头");
+
+    const approved = {
+      ...pending,
+      needs_approval: pending.needs_approval.map((item) => ({
+        ...item,
+        approved: true,
+      })),
+    };
+    expect(confirm(draft, EMPTY_DEMO_GATE, approved).ok).toBe(true);
+  });
+
+  it("T-GATE-016 范围全部满足（Demo 已对同一修订确认）→ OK", () => {
+    const draft = makeDraft({ scheme_revision: 2 });
+    const decision = confirm(
+      draft,
+      makeDemo({
+        status: "ready",
+        scheme_revision: 2,
+        decision_revision: 2,
+        prototype_id: "proto-ok",
+      }),
+      scopePlanFor(draft),
+    );
+    expect(decision.ok).toBe(true);
+    expect(decision.code).toBe("OK");
+    expect(decision.demo_mode).toBe("interactive");
   });
 });
 

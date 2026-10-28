@@ -16,6 +16,10 @@ import {
   type SchemeDraft,
 } from "../../src/lib/journey/scheme-draft";
 import {
+  scopePlanToContractScope,
+  type ScopePlan,
+} from "../../src/lib/journey/scope-plan";
+import {
   resetConfirmSchemeTransactionsForTest,
   runConfirmSchemeAtomic,
 } from "../../src/lib/journey/confirm-scheme-atomic";
@@ -53,8 +57,23 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     git(repo, ["init", "-q", "-b", "main"]);
     git(repo, ["config", "user.email", "t@example.com"]);
     git(repo, ["config", "user.name", "T"]);
-    fs.mkdirSync(path.join(repo, "src"), { recursive: true });
+    fs.mkdirSync(path.join(repo, "src", "pages"), { recursive: true });
     fs.writeFileSync(path.join(repo, "src", "a.ts"), "export const a = 1;\n");
+    fs.writeFileSync(
+      path.join(repo, "src", "pages", "home.tsx"),
+      "export const home = 1;\n",
+    );
+    fs.writeFileSync(
+      path.join(repo, "package.json"),
+      JSON.stringify(
+        {
+          name: "fixture",
+          scripts: { typecheck: "tsc --noEmit", test: "vitest run" },
+        },
+        null,
+        2,
+      ),
+    );
     git(repo, ["add", "."]);
     git(repo, ["commit", "-q", "-m", "init"]);
 
@@ -117,7 +136,7 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
       title: "工程项目进度管控台",
       summary:
         "按项目维度汇总进度与预算，并对超期节点发出预警，支持月度报表导出。",
-      modules: ["工程进度管控", "财务数据与预算"],
+      modules: ["工程进度管控", "财务数据与预算", "pages"],
       mermaidFlow: "flowchart LR\n  A[录入进度] --> B[汇总]",
       business_input_rounds: 1,
       scheme_revision: revision,
@@ -146,6 +165,52 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     return softwareContractSchema.parse({
       ...draft,
       lifecycle_state: lifecycle,
+      ...(lifecycle === "PENDING_APPROVAL"
+        ? { approval: { status: "PENDING_REVIEW" } }
+        : {}),
+    });
+  }
+
+  /** TASK-J.4：先预检，再按 plan 造合同（J.5 的同一路径） */
+  async function preflightPlan(scheme: SchemeDraft): Promise<ScopePlan> {
+    const res = await call<{ scope_plan: ScopePlan }>(
+      "POST",
+      "/api/supervisor/scope/preflight",
+      { scheme },
+    );
+    expect(res.status).toBe(200);
+    return res.body.scope_plan;
+  }
+
+  function contractFromPlan(
+    plan: ScopePlan,
+    lifecycle: "DRAFT" | "PENDING_APPROVAL",
+  ): SoftwareContract {
+    const scope = scopePlanToContractScope(plan);
+    const base = createContractDraft({
+      title: "确认后签署",
+      description: "R-10 / F-07 HTTP 级注入",
+      acceptanceCriteria: ["verify passes"],
+      writablePaths: scope.writable_paths,
+      strictlyForbiddenPaths: scope.forbidden_paths,
+      commands: scope.verification_spec.commands,
+      maxFileModifications: scope.budget.max_file_modifications,
+      maxDurationSeconds: scope.budget.max_duration_seconds,
+      maxVerificationRetries: scope.budget.max_verification_retries,
+    });
+    return softwareContractSchema.parse({
+      ...base,
+      lifecycle_state: lifecycle,
+      authorization: {
+        ...base.authorization,
+        file_system_scope: {
+          ...base.authorization.file_system_scope,
+          writable_paths: scope.writable_paths,
+          strictly_forbidden_paths: scope.forbidden_paths,
+        },
+        budget_limits: scope.budget,
+      },
+      verification_spec: scope.verification_spec,
       ...(lifecycle === "PENDING_APPROVAL"
         ? { approval: { status: "PENDING_REVIEW" } }
         : {}),
@@ -193,7 +258,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
   });
 
   it("T-HTTP-R10-002 快照缺失时签署路径（approve）同样 409，且合同状态未推进", async () => {
-    const contract = makeContract("DRAFT");
+    const contract = contractFromPlan(
+      await preflightPlan(makeScheme()),
+      "DRAFT",
+    );
     const created = await call("POST", "/api/contracts", { contract });
     expect(created.status).toBe(201);
 
@@ -232,7 +300,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
     expect(frozen.status).toBe(201);
 
     const res = await call("POST", "/api/contracts", {
-      contract: makeContract("PENDING_APPROVAL"),
+      contract: contractFromPlan(
+        await preflightPlan(scheme),
+        "PENDING_APPROVAL",
+      ),
       confirmation_id: confirmationId,
     });
     expect(res.status).toBe(409);
@@ -256,7 +327,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
       "POST",
       "/api/contracts",
       {
-        contract: makeContract("PENDING_APPROVAL"),
+        contract: contractFromPlan(
+          await preflightPlan(scheme),
+          "PENDING_APPROVAL",
+        ),
         confirmation_id: confirmationId,
       },
     );
@@ -359,7 +433,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
           "POST",
           "/api/contracts",
           {
-            contract: makeContract("PENDING_APPROVAL"),
+            contract: contractFromPlan(
+              await preflightPlan(scheme),
+              "PENDING_APPROVAL",
+            ),
             confirmation_id,
           },
         );
@@ -491,7 +568,10 @@ describe("T-HTTP R-10 / F-07 确认快照与建图补偿（真 Daemon）", () =>
           "POST",
           "/api/contracts",
           {
-            contract: makeContract("PENDING_APPROVAL"),
+            contract: contractFromPlan(
+              await preflightPlan(scheme),
+              "PENDING_APPROVAL",
+            ),
             confirmation_id,
           },
         );
