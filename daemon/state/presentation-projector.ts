@@ -14,6 +14,11 @@ import {
   type ActivityTransient,
   type DemoMode,
 } from "../../src/lib/state/delivery-state";
+import {
+  projectJourneyStage,
+  type JourneyStageInput,
+  type JourneyWarning,
+} from "../../src/lib/state/journey-stage";
 
 /**
  * TASK-D.3（续）：把合同 + 运行时判据投影成可持久化/可广播的记录。
@@ -149,6 +154,11 @@ export function toStateChangedPayload(
     activity_transient?: ActivityTransient | null;
     demo_confirmed?: boolean;
     demo_mode?: DemoMode | null;
+    /** TASK-J.8：投影表外组合时回调（由 Daemon 写 daemon.jsonl，载荷不带告警） */
+    on_journey_warning?: (
+      warning: JourneyWarning,
+      input: JourneyStageInput,
+    ) => void;
   },
 ): StateChangedPayload {
   const delivery_state = projectDeliveryState({
@@ -160,6 +170,25 @@ export function toStateChangedPayload(
       : {}),
     ...(extras?.demo_mode !== undefined ? { demo_mode: extras.demo_mode } : {}),
   });
+  // TASK-J.8：幕次投影只消费不含瞬态的主态；瞬态单独作为输入
+  const base_delivery = projectDeliveryState({
+    lifecycle_state: record.lifecycle_state,
+    ...(extras?.demo_confirmed !== undefined
+      ? { demo_confirmed: extras.demo_confirmed }
+      : {}),
+    ...(extras?.demo_mode !== undefined ? { demo_mode: extras.demo_mode } : {}),
+  });
+  const journey_input: JourneyStageInput = {
+    delivery_state: base_delivery,
+    transient: extras?.activity_transient ?? null,
+    lifecycle_state: record.lifecycle_state,
+    presentation_state: record.presentation_state,
+    has_contract: true,
+  };
+  const journey = projectJourneyStage(journey_input);
+  if (journey.warning) {
+    extras?.on_journey_warning?.(journey.warning, journey_input);
+  }
   return {
     contract_id: record.contract_id,
     presentation_state: record.presentation_state,
@@ -174,6 +203,9 @@ export function toStateChangedPayload(
         }
       : {}),
     delivery_state,
+    journey_stage: journey.stage,
+    journey_substate: journey.substate,
+    journey_archived: journey.archived,
   };
 }
 

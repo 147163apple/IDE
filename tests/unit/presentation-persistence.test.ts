@@ -297,6 +297,10 @@ describe("STATE_CHANGED 载荷与证据信号", () => {
       approval_status: "APPROVED",
       persisted_at: "2026-10-23T10:00:00.000Z",
       delivery_state: "IMPLEMENTING",
+      // TASK-J.8：幕次字段随 STATE_CHANGED 下发（EXECUTING → 施工 · 进行中）
+      journey_stage: "construction",
+      journey_substate: "build_running",
+      journey_archived: false,
     });
   });
 
