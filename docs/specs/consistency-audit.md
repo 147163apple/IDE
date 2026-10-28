@@ -69,6 +69,7 @@
 | ~~OP-21~~ | supervisor §16.7 内部口径冲突：低置信度时既写「系统问一个业务问题、不把技术分类推给用户」，又写「底部仍显示两按钮，上方加一行『我不确定是谁的问题，你定』」 | — | **已销项**（本 PR）：裁决为「以 supervisor §16.7 澄清问题口径为准，质询台规格段已同步，按钮保留为用户主动裁决入口」；底部按钮段改为低置信度先问业务澄清问题、按钮标注「我不确定是谁的问题」 | 本 PR 修架构时发现；后续提交已同步 supervisor 质询台规格段 |
 | OP-22 | J.8「施工·返工」行歧义：§16.2 第 1404 行用「→」把过程压成一行（`REWORK_REQUIRED → IMPLEMENTING`、`VERIFYING → EXECUTING`），返工回到 IMPLEMENTING 后快照上与首次施工同构，无法区分 | Tina 裁决；J.8 后续 | 裁决：代码按现状保留（返工仅在 REWORK_REQUIRED 瞬态可见，之后归「进行中」）；建议补充可观测标记（如快照字段 `rework_in_progress`），否则返工子态只能覆盖 REWORK_REQUIRED 瞬态 | PR #4（J.8）审核，`src/lib/state/journey-stage.ts` 的 `build_rework` 行注释；supervisor §16.2 第 1404 行 |
 | OP-23 | J.9 TM-G / TM-Z 的 oracle 为单人编写，未满足规格 §6.1 的独立编写要求 | 第三方复核人（待指定；非实现者、非 J.9 实施上下文） | J.9 转正式评审前 | `scheme-patch-engine.md` §6.1、§8 第 5 条；PR #5（草稿） |
+| OP-24 | J.8 瞬态行整组生产不可达：`JOURNEY_ROWS` 中依赖 `transient` 的行（交接 `plan_handoff`、Demo 构建、合并中）在生产路径永不命中，因为 `daemon/server.ts` 调用 `toStateChangedPayload` 时从未传入 `activity_transient`；J.8 实际只覆盖 lifecycle×presentation 的静态子集，§16.2 文档声称映射交接，口径与实现分叉 | 待指定（候选：J.5 签署链或 J.2 ScopePlan，负责产生瞬态事件） | 补 `activity_transient` 生产来源前，文档须把交接、Demo 构建、合并中的映射标为「待接线」；回放路径（`replayPresentationState`）不传 `on_journey_warning` 为有意取舍，表外告警防线在实时广播路径 | 核对 PR #3 时全量检索 main：`activity_transient` 仅出现于 delivery-state、journey-stage、projector 与测试；PR #4 评审时未发现 |
 
 ## 四、三层皮权威表
 
