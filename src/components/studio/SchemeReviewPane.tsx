@@ -66,7 +66,7 @@ export function SchemeReviewPane(props: SchemeReviewPaneProps) {
   const confirmation =
     props.confirmation ??
     (scheme
-      ? evaluateSchemeConfirmation(scheme, demoGate)
+      ? evaluateSchemeConfirmation(scheme, demoGate, null)
       : {
           ok: false,
           code: "E_SCHEME_NOT_REVIEWABLE" as const,
