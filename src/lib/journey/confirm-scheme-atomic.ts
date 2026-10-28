@@ -212,7 +212,7 @@ export async function runConfirmSchemeAtomic(
     );
   }
 
-  const decision = evaluateSchemeConfirmation(input.scheme, input.demo);
+  const decision = evaluateSchemeConfirmation(input.scheme, input.demo, null);
   if (!decision.ok) {
     input.restoreRightChat?.();
     steps.push({
