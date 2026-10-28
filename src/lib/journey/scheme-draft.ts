@@ -10,6 +10,8 @@
  *   evaluateSchemeConfirmation（含 Demo 与 revision 绑定）
  */
 
+import type { ScopePlan } from "./scope-plan";
+
 export interface SchemeDecision {
   id: string;
   label: string;
@@ -100,7 +102,10 @@ export type SchemeConfirmationCode =
   | "E_DEMO_BUILDING"
   | "E_DEMO_FAILED"
   | "E_DEMO_CONFIRMATION_REQUIRED"
-  | "E_DEMO_STALE";
+  | "E_DEMO_STALE"
+  | "E_SCOPE_NOT_READY"
+  | "E_SCOPE_POLICY"
+  | "E_SCOPE_APPROVAL_REQUIRED";
 
 export interface SchemeConfirmationDecision {
   ok: boolean;
@@ -109,6 +114,18 @@ export interface SchemeConfirmationDecision {
   /** 命中的全部原因，供 UI 一次说清，不只显示第一条。 */
   reasons: string[];
   demo_mode: "none" | "interactive" | "degraded";
+}
+
+/**
+ * TASK-J.3 临时开关：范围门禁默认**关闭**，等 TASK-J.5 把预检接到前端后移除。
+ * 开着会让「确认方案」在 J.5 之前恒显示「正在核对要改哪些地方…」且不可点，
+ * 相当于给主干开一个不可用窗口；因此只在测试里显式打开。
+ */
+export const SCOPE_GATE_ENABLED = false;
+
+export interface SchemeConfirmationOptions {
+  /** 覆盖临时开关（测试用；生产恒取 SCOPE_GATE_ENABLED） */
+  scope_gate?: boolean;
 }
 
 const MODULE_HINTS: { re: RegExp; label: string }[] = [
@@ -324,8 +341,69 @@ function isReviewableScheme(draft: SchemeDraft): boolean {
   );
 }
 
+/** 被拒范围 → 白话标签：优先用区域名，任何 glob 字符都不许出现在文案里 */
+function plainRejectedLabels(plan: ScopePlan): string[] {
+  const byPath = new Map<string, string>();
+  for (const area of plan.areas) {
+    for (const p of area.paths) byPath.set(p, area.label);
+  }
+  const labels = plan.grade.rejected.map(({ path: rejected }) => {
+    const direct = byPath.get(rejected);
+    if (direct) return direct.replace(/\*/g, "");
+    const cleaned = rejected
+      .replace(/\*/g, "")
+      .replace(/\/+/g, "/")
+      .replace(/\/+$/, "");
+    return cleaned ? `整个 ${cleaned} 目录` : "一些范围";
+  });
+  return labels.length > 0 ? labels : ["一些范围"];
+}
+
 /**
- * 唯一确认门禁（SSOT v2.0.2 §3.5）。
+ * TASK-J.3 / §15.5 三个范围拒绝码（判定顺序固定在 Demo 之后、OK 之前）。
+ * 返回 null 表示范围没问题，可以继续。
+ */
+function scopeGateDecision(
+  draft: SchemeDraft,
+  scopePlan: ScopePlan | null,
+  demoMode: SchemeConfirmationDecision["demo_mode"],
+): SchemeConfirmationDecision | null {
+  if (!scopePlan || scopePlan.scheme_revision !== draft.scheme_revision) {
+    return {
+      ok: false,
+      code: "E_SCOPE_NOT_READY",
+      message: "正在核对要改哪些地方…",
+      reasons: ["改动范围还没算好"],
+      demo_mode: demoMode,
+    };
+  }
+  if (!scopePlan.grade.ok) {
+    const labels = plainRejectedLabels(scopePlan);
+    return {
+      ok: false,
+      code: "E_SCOPE_POLICY",
+      message: `「${labels.join("」「")}」范围太大，我没法替你担保不误伤。请告诉我具体要改哪块，或把这部分拆成单独一轮。`,
+      reasons: [`范围过大：${labels.join("、")}`],
+      demo_mode: demoMode,
+    };
+  }
+  const pending = scopePlan.needs_approval.filter(
+    (item) => item.approved === null,
+  ).length;
+  if (pending > 0) {
+    return {
+      ok: false,
+      code: "E_SCOPE_APPROVAL_REQUIRED",
+      message: `还有 ${pending} 处敏感改动等你点头`,
+      reasons: [`${pending} 处敏感改动未表态`],
+      demo_mode: demoMode,
+    };
+  }
+  return null;
+}
+
+/**
+ * 唯一确认门禁（SSOT v2.0.2 §3.5 + v2.1 §15.5）。
  *
  * 允许：
  * - 从未生成 Demo（demo.status=none）；
@@ -340,8 +418,11 @@ function isReviewableScheme(draft: SchemeDraft): boolean {
 export function evaluateSchemeConfirmation(
   draft: SchemeDraft,
   demo: DemoGate = EMPTY_DEMO_GATE,
+  scopePlan: ScopePlan | null = null,
+  options: SchemeConfirmationOptions = {},
 ): SchemeConfirmationDecision {
   const reasons: string[] = [];
+  const scopeGate = options.scope_gate ?? SCOPE_GATE_ENABLED;
 
   if (draft.frozen) {
     return {
@@ -395,6 +476,10 @@ export function evaluateSchemeConfirmation(
   }
 
   if (demo.status === "none") {
+    const blocked = scopeGate
+      ? scopeGateDecision(draft, scopePlan, "none")
+      : null;
+    if (blocked) return blocked;
     return {
       ok: true,
       code: "OK",
@@ -428,6 +513,11 @@ export function evaluateSchemeConfirmation(
     };
   }
 
+  const blocked = scopeGate
+    ? scopeGateDecision(draft, scopePlan, demoMode)
+    : null;
+  if (blocked) return blocked;
+
   return {
     ok: true,
     code: "OK",
@@ -441,11 +531,16 @@ export function evaluateSchemeConfirmation(
 }
 
 /**
- * 向后兼容别名。只表达“静态方案本身是否可确认”，不代替完整门禁。
- * 新代码必须使用 `evaluateSchemeConfirmation`。
+ * 向后兼容别名。**新代码禁止使用**（TASK-J.3）。
+ *
+ * 它固定传 `null` 并强制打开范围门禁，因此结果恒为 `false`
+ *（`E_SCOPE_NOT_READY`）——目的是让任何遗留调用点在测试里立刻暴露。
+ * 真实门禁统一走 `evaluateSchemeConfirmation(draft, demo, scopePlan)`。
  */
 export function canConfirmScheme(draft: SchemeDraft): boolean {
-  return evaluateSchemeConfirmation(draft, EMPTY_DEMO_GATE).ok;
+  return evaluateSchemeConfirmation(draft, EMPTY_DEMO_GATE, null, {
+    scope_gate: true,
+  }).ok;
 }
 
 export function isEffectiveBusinessInput(text: string): boolean {
