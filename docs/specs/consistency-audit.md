@@ -70,6 +70,13 @@
 | OP-22 | J.8「施工·返工」行歧义：§16.2 第 1404 行用「→」把过程压成一行（`REWORK_REQUIRED → IMPLEMENTING`、`VERIFYING → EXECUTING`），返工回到 IMPLEMENTING 后快照上与首次施工同构，无法区分 | Tina 裁决；J.8 后续 | 裁决：代码按现状保留（返工仅在 REWORK_REQUIRED 瞬态可见，之后归「进行中」）；建议补充可观测标记（如快照字段 `rework_in_progress`），否则返工子态只能覆盖 REWORK_REQUIRED 瞬态 | PR #4（J.8）审核，`src/lib/state/journey-stage.ts` 的 `build_rework` 行注释；supervisor §16.2 第 1404 行 |
 | OP-23 | J.9 TM-G / TM-Z 的 oracle 为单人编写，未满足规格 §6.1 的独立编写要求 | 第三方复核人（待指定；非实现者、非 J.9 实施上下文） | J.9 转正式评审前 | `scheme-patch-engine.md` §6.1、§8 第 5 条；PR #5（草稿） |
 | OP-24 | J.8 瞬态行整组生产不可达：`JOURNEY_ROWS` 中依赖 `transient` 的行（交接 `plan_handoff`、Demo 构建、合并中）在生产路径永不命中，因为 `daemon/server.ts` 调用 `toStateChangedPayload` 时从未传入 `activity_transient`；J.8 实际只覆盖 lifecycle×presentation 的静态子集，§16.2 文档声称映射交接，口径与实现分叉 | 待指定（候选：J.5 签署链或 J.2 ScopePlan，负责产生瞬态事件） | 补 `activity_transient` 生产来源前，文档须把交接、Demo 构建、合并中的映射标为「待接线」；回放路径（`replayPresentationState`）不传 `on_journey_warning` 为有意取舍，表外告警防线在实时广播路径 | 核对 PR #3 时全量检索 main：`activity_transient` 仅出现于 delivery-state、journey-stage、projector 与测试；PR #4 评审时未发现 |
+| OP-25 | N-11 DAG 装载期缺少授权子集校验 | 待指定 | 已立卡待排期 | J.5 前置依赖 |
+| OP-26 | N-5 C.8～C.16 任务卡均未声明三项不变 | 待指定 | 已立卡待排期 | ADR-0001 纪律执行 |
+| OP-27 | N-1 任务图核销退出码由前端常量代填 | 待指定 | 已立卡待排期 | J.5 manual_confirmation 硬前置 |
+| OP-28 | N-2 右栏 ClaudeCodeAdapter 可写主干 | 待指定 | 已立卡待排期 | J.1 右栏只读化 |
+| OP-29 | J.1 上下文注入判别位未生效致 CLI 判别位误判的判例（事件：曾以"机器人身份致 CLI 不注入"解释，复核确认为判别位未注入；产出：verify-env --check-context） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
+| OP-30 | J.1 "无 tool_use 不算通过"裁决先例（事件：声称在真实 Claude CLI 执行的验证，无 tool_use 记录不予通过） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
+| OP-31 | J.1 沙箱 root 全绿不具真机外推效力的判例（事件：沙箱 root 权限可绕过权限类测试，须真实用户环境验证；关联 PR #3 分支真机 Glob 条款） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 
 ## 四、三层皮权威表
 
