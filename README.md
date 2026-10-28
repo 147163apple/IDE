@@ -99,7 +99,7 @@ Stagent 的本地子进程与路径白名单**不是对抗性沙箱**，定位�
 | 凭据            | API Key 仅存在于 Daemon 进程环境；日志先脱敏后截断                         | 无法防止用户在合同中显式写入秘密                                  |
 | Demo 隔离       | 独立 Origin（如 4100~4110）+ iframe `sandbox="allow-scripts"`（禁 same-origin） | 控制台可与 Daemon 同源托管；**Demo 绝不能**因此改成同源           |
 
-**平台矩阵**：macOS（已实测）· Linux / Windows（CI 矩阵已配置，尚未完成真机验证）。  
+**平台矩阵**：macOS（已实测）· Linux / Windows（ CI 矩阵已配置，尚未完成真机验证）。  
 高风险仓库（含生产凭据、不可信构建脚本）建议在容器/虚拟机中运行。
 
 ---
