@@ -21,6 +21,10 @@
 | C-3 | Fast Path 的施工载体（Worktree / VIBE 直改）口径不一致 | 免 Worktree **仅限非生产产物**（Demo 展示代码、图标/素材、`.stagent/` 内方案文档）；会进入可执行工程的生产代码（`src/`、`daemon/`、工具链产物）**一律走 Worktree**。VIBE 直改仅适用于上述非生产产物。 | Tina 裁决（2026-10-28）。非生产产物无交付风险；生产代码须可审计、可撤销，故走 Worktree。 | supervisor §16.11「免 Worktree 边界」；架构 §0.2.3.1 加例外指针 |
 | C-4 | 超时卡（D-3）仍请用户选「按 Bug 修复 / 按新需求演进」 | 出口改为白话二选【这是 Bug，免费修】/【我想要新功能，下一轮做】；分类由系统内部归，接 attributions 路由，不向用户暴露技术分类。**按钮文案已统一为 supervisor §16.7 文案，OP-19 已销项。** | Tina 裁决（2026-10-28）。 | 架构 §6.4 D-3 单元格 |
 | C-5 | 「三次上限」是否包含自动重试 | 三次上限**仅计用户手动触发的重试**；系统首次自动重试不计入，计数器只在用户手动重试时递增。 | Tina 裁决（2026-10-28）。原审计所指的冲突自动重试位于 supervisor 第三部分 §16.8。 | 架构 §6.4 D-1 单元格；supervisor §16.8 |
+| J9-1 | 墓地 A-04 与被拒建议（墓碑 `item_ref` 指向仍存活条目，(a) 按 id 命中导致自我违反不变量） | 保留豁免，不改墓碑结构：A-04 跳过 `item_ref` 指向且仍存活的那一条（用户选择保留的版本）；后续补丁仍由 P3 的 (a) 拦截。`item_ref` 是 K-4 回溯链，去掉会削弱 (a) 闸门 | K-4 回溯链；(a) 是后续同 id 复活的最强闸门 | `scheme-patch-engine.md` §5.5 A-04 行豁免条款；代码注释改指向该条款 |
+| J9-2 | 锚定判例 Q-16、Q-19 与 §3.3 步骤 5「先过滤后选取」冲突 | 以步骤 5 为准，判例改写：Q-16 取过滤后第 1 处，Q-19 判 `E_QUOTE_TOO_SHORT_UNBOUNDED`。规格勘误：判例与算法冲突时以算法为准，但判例必须同步修改，不得保留旧期望 | 步骤 5 是规范算法，`anchorQuote` 实现与之一致 | `scheme-patch-engine.md` §3.3 步骤 5 澄清、§3.4 勘误说明与 Q-16/Q-19 行；测试已按新口径 |
+| J9-3 | TM-Z-11 门禁墓碑的期望码（包装码 `E_PROPOSAL_PREVIOUSLY_REJECTED` 或 op 级码） | op 级码 `E_REVIVAL_SECURITY_LOCKED`。门禁墓碑永不复活，与用户否决墓碑的可复活路径是两类语义，包装码会模糊区分 | K-5 | `scheme-patch-engine.md` §5.3 码表注释；Z-11/Z-12 测试断言 |
+| J9-4 | 旧墓碑缺 `rejected_after_turn_seq` 时的迁移默认值 | 默认 0，登记为行为性默认值（偏宽放，不偏紧收）；复活仍须过 R1–R9 闸门 | 旧数据无法确知否决水位 | `scheme-patch-engine.md` §1.3 K-13 |
 
 
 ## 二、机械修复清单（本 PR）
@@ -63,6 +67,9 @@
 | ~~OP-19~~ | ~~按钮文案统一~~ | — | **已销项**：以 supervisor §16.7 与 §18 行为规范层文案为准，架构 §6.4 D-3 已同步为「这是 Bug，免费修 / 我想要新功能，下一轮做」（Tina 裁决，2026-10-28） | C-4 裁决落笔时发现 |
 | ~~OP-20~~ | 上一轮审计漏网：架构「低置信度降级」条目仍写用户点选「按缺陷修复 / 按新需求演进」，未随 OP-19 同步 | — | **已销项**（本 PR）：该条改为系统向用户提业务澄清问题，口径指向 supervisor §16.7；架构底部改判说明与 supervisor §16.7 的取代说明、禁止项保留 | 逐处核对 OP-19 相关 grep 命中时发现 |
 | ~~OP-21~~ | supervisor §16.7 内部口径冲突：低置信度时既写「系统问一个业务问题、不把技术分类推给用户」，又写「底部仍显示两按钮，上方加一行『我不确定是谁的问题，你定』」 | — | **已销项**（本 PR）：裁决为「以 supervisor §16.7 澄清问题口径为准，质询台规格段已同步，按钮保留为用户主动裁决入口」；底部按钮段改为低置信度先问业务澄清问题、按钮标注「我不确定是谁的问题」 | 本 PR 修架构时发现；后续提交已同步 supervisor 质询台规格段 |
+| OP-22 | J.8「施工·返工」行歧义：§16.2 第 1404 行用「→」把过程压成一行（`REWORK_REQUIRED → IMPLEMENTING`、`VERIFYING → EXECUTING`），返工回到 IMPLEMENTING 后快照上与首次施工同构，无法区分 | Tina 裁决；J.8 后续 | 裁决：代码按现状保留（返工仅在 REWORK_REQUIRED 瞬态可见，之后归「进行中」）；建议补充可观测标记（如快照字段 `rework_in_progress`），否则返工子态只能覆盖 REWORK_REQUIRED 瞬态 | PR #4（J.8）审核，`src/lib/state/journey-stage.ts` 的 `build_rework` 行注释；supervisor §16.2 第 1404 行 |
+| OP-23 | J.9 TM-G / TM-Z 的 oracle 为单人编写，未满足规格 §6.1 的独立编写要求 | 第三方复核人（待指定；非实现者、非 J.9 实施上下文） | J.9 转正式评审前 | `scheme-patch-engine.md` §6.1、§8 第 5 条；PR #5（草稿） |
+| OP-24 | J.8 瞬态行整组生产不可达：`JOURNEY_ROWS` 中依赖 `transient` 的行（交接 `plan_handoff`、Demo 构建、合并中）在生产路径永不命中，因为 `daemon/server.ts` 调用 `toStateChangedPayload` 时从未传入 `activity_transient`；J.8 实际只覆盖 lifecycle×presentation 的静态子集，§16.2 文档声称映射交接，口径与实现分叉 | 待指定（候选：J.5 签署链或 J.2 ScopePlan，负责产生瞬态事件） | 补 `activity_transient` 生产来源前，文档须把交接、Demo 构建、合并中的映射标为「待接线」；回放路径（`replayPresentationState`）不传 `on_journey_warning` 为有意取舍，表外告警防线在实时广播路径 | 核对 PR #3 时全量检索 main：`activity_transient` 仅出现于 delivery-state、journey-stage、projector 与测试；PR #4 评审时未发现 |
 
 ## 四、三层皮权威表
 

@@ -55,6 +55,7 @@
 | K-10 | §14.11 墓地命中判定（INV-LEDGER-03） | `matchesTombstone` 增第 (d) 条：`revival_keys` 中字素数 ≥ 4 的元素被 `matchNormalize(op 主文本)` 包含即命中；命中只进入复活判定，不直接 DROP（§4.2）。 | 复活判定认用户自己的说法，拦截原先只认指纹与 Dice，两者方向不一致，拦截比复活宽松。 |
 | K-11 | §14.3 `SchemeOp` 联合 | 新增 `reject_item` 操作（§2.3.2、§5.4）：聊天里的否决入墓；证据须为本批用户消息，锚定句含否定词且非问句（引擎词表判定）。 | 原先只有 UI 与卡片拒绝能入墓，聊天中「不要了」没有路径。 |
 | K-12 | §14.11 `TurnRef.occurrence`（编译器提示） | 复活判定路径忽略编译器 `occurrence`，锚点取最后一处，记 `W_REVIVAL_OCCURRENCE_IGNORED`（§4.4）。**显式风险**：确认判定路径（`mark_user_confirmed`，§3.4）同样接受 `occurrence`，存在同型洗白面（「我同意。算了不同意」+ `occurrence: 0`），修法待定。 | 允许编译器挑出现处，即可把 ILLEGAL 洗成 LEGAL（R-18）。 |
+| K-13 | §14.11 `RejectedAlternative.rejected_after_turn_seq`（旧数据迁移） | `migrateGraveyardEntry` 对缺失该字段的旧墓碑默认 0。含义：任何 seq > 0 的用户消息都满足 R2 的时间条件，复活判定的时间下界被放宽到几乎无约束；风险由 R1–R9 其余闸门（用户来源、批次内、关键词、否定、问句、肯定词、指纹）兜底。| 旧数据无法确知否决水位；取 0 偏宽放（可能让更早的用户话成为复活证据），而非偏紧收（不会误拦）。如实登记，实施期若需收紧须改本条。 |
 
 ---
 
@@ -291,6 +292,7 @@ function anchorQuote(turn: TranscriptTurn, ref: TurnRef, opts?: { requireQuote?:
      左侧是文本开头或句界符，右侧是文本结尾或句界符；
      句界符 = 空格 或 [。！？!?；;，,、…~]
    过滤后 0 处                     → 失败 E_QUOTE_TOO_SHORT_UNBOUNDED
+   （过滤先于选取：步骤 6 只在本步骤保留的候选中取值，不回头取被过滤掉的出现处。）
 6. 选取锚点：
      若 ref.occurrence 有值：越界 → 失败 E_QUOTE_OCCURRENCE_OUT_OF_RANGE；否则取第 occurrence 处
      否则取**最后一处**
@@ -312,6 +314,8 @@ function anchorQuote(turn: TranscriptTurn, ref: TurnRef, opts?: { requireQuote?:
 
 ### 3.4 边界判例
 
+> **勘误（2026-10-28，Tina 裁决）**：Q-16、Q-19 原判例与步骤 5「过滤后选取」冲突（Q-16 期望的第 2 处、Q-19 期望的「哈哈」均不满足整句边界）。以步骤 5 为准，判例已改写；台账 J9-2 登记。判例与算法冲突时以算法为准，但判例必须同步修改，不得保留旧期望。
+
 | # | 原文（`␤` 表示换行） | quote | 结果 | 原因 |
 | :-: | :--- | :--- | :--- | :--- |
 | Q-01 | `我要导出报表` | `导出报表` | 通过 | 精确子串 |
@@ -329,10 +333,10 @@ function anchorQuote(turn: TranscriptTurn, ref: TurnRef, opts?: { requireQuote?:
 | Q-13 | `对比一下` | `对` | 失败 `E_QUOTE_TOO_SHORT_UNBOUNDED` | 短引用不在整句边界 |
 | Q-14 | `对，就用假数据` | `对` | 通过 | 「对」后是句界符 |
 | Q-15 | `对` | `对` | 通过 | 整条消息 |
-| Q-16 | `导出，先导出再说` | `导出` | 通过，取第 2 处，`W_QUOTE_MULTI_MATCH` | 默认取最后一处 |
+| Q-16 | `导出，先导出再说` | `导出` | 通过：候选仅第 1 处（第 2 处「先导出」左侧非边界，被步骤 5 过滤），取第 1 处，附 `W_QUOTE_MULTI_MATCH`（原文出现 2 处） | 过滤后取最后一处（唯一候选即第 1 处） |
 | Q-17 | 同上 | `导出` + `occurrence: 0` | 通过，取第 1 处 | 显式指定 |
 | Q-18 | 同上 | `导出` + `occurrence: 5` | 失败 `E_QUOTE_OCCURRENCE_OUT_OF_RANGE` | 越界 |
-| Q-19 | `哈哈哈` | `哈哈` | 通过，2 处（重叠），取第 2 处 | 允许重叠 |
+| Q-19 | `哈哈哈` | `哈哈` | 失败 `E_QUOTE_TOO_SHORT_UNBOUNDED`：两处出现（重叠）均无整句边界，过滤后候选为空 | 短引用须整句边界 |
 | Q-20 | `👍🏽 好的` | `好的` | 通过；`raw_start` 按 UTF-16 计（emoji 占 4 码元 + 空格） | 偏移单位 |
 | Q-21 | 任意 | `"   "` | 失败 `E_QUOTE_EMPTY` | 规范化后为空 |
 | Q-22 | 任意 | 501 字 | 失败 `E_QUOTE_TOO_LONG` | 上限 |
@@ -693,7 +697,7 @@ export const OP_CODES = [
   "E_CONFIRM_QUESTION",             // 确认句是问句
   // P3 墓地（INV-LEDGER-03）
   "E_PROPOSAL_PREVIOUSLY_REJECTED",  // 门禁层码（runtime §8 L3），引擎以 DROP 裁决输出至 journal.verdicts，权威定义见 INV-LEDGER-03
-  "E_REVIVAL_SECURITY_LOCKED",
+  "E_REVIVAL_SECURITY_LOCKED",      // op 级：门禁墓碑永不复活，直接 DROP（K-5、Z-11/Z-12），不经包装码 E_PROPOSAL_PREVIOUSLY_REJECTED
   "E_REVIVAL_NOT_AFTER_REJECTION",
   "E_REVIVAL_TURN_NOT_IN_BATCH",
   "E_REVIVAL_FINGERPRINT_MISMATCH",
@@ -786,7 +790,7 @@ stageCommit(...)                               → applied | noop
 | A-01 | `source ∈ {user_said, user_confirmed}` 的条目至少有一条 `kind:"turn"` 证据，指向用户消息，且带 `anchor` 的锚点 `turn_text_sha256` 与对话记录一致 | INV-LEDGER-01 |
 | A-02 | `source === "user_edited"` 的条目至少有一条 `kind:"edit"` 证据 | INV-LEDGER-01 |
 | A-03 | `decisions[].status ∈ {accepted, changed}` ⇒ `source ∈ {user_confirmed, user_edited}` | INV-LEDGER-02 |
-| A-04 | 方案中不存在命中**活跃**、`disallow_revival:true` 墓碑的条目 | INV-LEDGER-03 |
+| A-04 | 方案中不存在命中**活跃**、`disallow_revival:true` 墓碑的条目。**豁免**：墓碑 `item_ref` 指向且仍存活的条目本身不视为命中（该条目是用户选择保留的版本；后续补丁仍由 P3 的 (a) 拦截） | INV-LEDGER-03 |
 | A-05 | 全部集合的条目 id 全局唯一 | §14.2 |
 | A-06 | `flows[].steps[].module_id` 都能解析；`conflicts[].chosen_id ∈ options[].id ∪ {null}` | §14.2 |
 | A-07 | 墓碑 `status === "revived"` ⇒ `revived` 字段存在且其 `turn_id` 是用户消息 | INV-LEDGER-03 |
@@ -1032,3 +1036,4 @@ stageCommit(...)                               → applied | noop
 2. 否定 / 问句 / 肯定词表是启发式；设计上只会把结果推向「问用户」，不会推向「自动复活」或「自动确认」。
 3. 字面牵连（tether）只挡张冠李戴，不挡牵强附会；「凭空捏造 = 0」仍以 §14.9 金标集为准。
 4. NFKC 与字素切分依赖运行时 ICU 版本；测试夹具避开新近 Unicode 字符。
+5. TM-G / TM-Z（§6.2、§6.8）的 oracle 由单人编写，违反下文 §6.1 的独立编写要求；J.9 转正式评审前须由非实现者、非本轮上下文的第三方独立复核（台账 OP-23）。

@@ -138,6 +138,12 @@ export interface StateChangedPayload {
   state_seq?: number;
   /** 强类型交付主态或轨 C 瞬态；不得与 DocumentAssetStatus 混用 */
   delivery_state?: string;
+  /** TASK-J.8 / SSOT §16.2：Daemon 投影的幕次；前端只消费，不得推导 */
+  journey_stage?: string;
+  /** 幕内子态（JourneySubstate） */
+  journey_substate?: string;
+  /** 「已合入」幕的「已归档」小标记 */
+  journey_archived?: boolean;
 }
 
 export interface ScopeAlertPayload {
