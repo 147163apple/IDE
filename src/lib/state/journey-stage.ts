@@ -157,7 +157,7 @@ export const JOURNEY_ROWS: readonly JourneyRow[] = [
     substate: "aborted",
     delivery: ["ABORTED"],
     lifecycle: ["ABORTED", null],
-    presentation: ["ABORTED", null],
+    presentation: ["ABORTED"],
   },
 ];
 

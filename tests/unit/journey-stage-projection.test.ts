@@ -188,11 +188,6 @@ const CASES: ReadonlyArray<{
     }),
     expect: { stage: "aborted", substate: "aborted", archived: false },
   },
-  {
-    name: "已放弃（无合同）",
-    input: base({ delivery_state: "ABORTED" }),
-    expect: { stage: "aborted", substate: "aborted", archived: false },
-  },
 ];
 
 describe("JourneyStage 投影 · SSOT §16.2 表驱动（J-01）", () => {
@@ -236,6 +231,16 @@ describe("JourneyStage 投影 · 表外组合与 DELIVERED", () => {
     );
     expect(got.warning).toBe("UNMAPPED_COMBINATION");
     expect(got.substate).toBe("waiting_for_you");
+  });
+
+  it("已放弃（无合同且展示态缺失）→ 表外：合同列「或无合同」不放宽展示态列（§16.2）", () => {
+    const got = projectJourneyStage(base({ delivery_state: "ABORTED" }));
+    expect(got).toEqual({
+      stage: "construction",
+      substate: "waiting_for_you",
+      archived: false,
+      warning: "UNMAPPED_COMBINATION",
+    });
   });
 
   it("展示态缺失（null）无法命中施工行 → 表外，不猜测", () => {
