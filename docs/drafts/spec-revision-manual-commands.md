@@ -210,9 +210,9 @@
 - **N-②（`manual_only` 收窄的边界：npm 项目没有脚本时怎么办）**：**【已裁决归档】** 引入项目类型检测器与命令模板表，绿野及支持类型走对应脚手架与真实命令验证，`manual_only` 仅在自动化验证手段穷尽证明后作为兜底。
 - **N-③（命令与人工确认能否同时存在）**：**【已裁决归档】** 优先执行真实自动化命令验证，`manual_confirmation` 仅在零命令且自动化手段穷尽证明后作为兜底路径生效，二者不作为常规并存模式。
 - **N-④（`buildL0Plan` 的默认命令是否在 D 的范围内）**：**【已裁决归档】** 纳入扩展类型检测器体系，按项目类型特征文件映射对应命令模板，不再统一强制注入 npm 默认命令。
-- **N-⑤（`1.2.0` 合同迁移后的目标版本）**：**【已裁决归档】** 裁决原文（R4）：「schema 版本升 1.3.1（语义扩展便于迁移/审计识别新旧合同）」。迁移目标直接写为 `1.3.1`。
+- **N-⑤（`1.2.0` 合同迁移后的目标版本）**：**【已裁决归档】** schema 版本升至 1.3.1——manual_confirmation 为可选字段、向后兼容，但属语义扩展，升版本便于迁移函数和存量审计识别新旧合同。
 - **N-⑥（架构 §9.4 的枚举取值与代码不一致）**：**【已裁决归档】** 废弃 `NONE` 模式，枚举全面向代码实现（`COMMAND`、`MANUAL` 等）对齐。
-- **N-⑦（人工点亮与自动推进冲突）**：**【已裁决归档】** N-⑦ 裁决本体：绿野及零命令项目默认走项目类型检测 + 自动生成真实命令（E 路径），不走批量人工确认；manual_confirmation 仅在自动化手段穷尽证明后作为兜底。（以下显式点击约束为兜底路径内的防伪造规则，保留原文。）裁决原文（R2 / R3c / §3.2.2）：「`manual_approved` 只能来自用户显式点击（依赖 N-1）」，「节点为 `MANUAL_REVIEW` 时（代码中验证模式为 `MANUAL`），只能由用户在 UI 上显式点击【确认此项】人工点亮，`manual_approved` 不得由前端代填或系统推断」。零命令兜底模式下所有施工步骤不以自动推进绕过显式人工确认。
+- **N-⑦（人工点亮与自动推进冲突）**：**【已裁决归档】** 绿野及零命令项目不走批量人工确认，走项目类型检测 + 自动生成真实命令路径。验证优先级链：①项目类型检测 → ②生成该类型最先进的真实命令验证（特征文件→命令模板映射表，可扩展）→ ③自动化手段穷尽证明后退回 manual_confirmation 兜底。
 - **N-⑧（N-1 没有任务卡编号）**：**【已裁决归档】** 确认作为 J.5 卡的硬前置依赖，补齐规范前置约束链。
 - **N-⑨（「绿野」判据的口径）**：**【已裁决归档】** 绿野判据收紧为没有任何项目声明，配合 L0 类型检测器；非 npm 绿野按对应类型脚手架/检测器处理，不再签 manual_only。
 - **N-⑩（零命令合同执行后的状态）**：**【已裁决归档】** `executeWithSignal` 遇零命令不判 PASSED，置为非 PASSED 的兜底阻断状态，直到补齐人工确认记录。
@@ -222,19 +222,18 @@
 > 本节只列本次改写中新发现的规格矛盾。每条原样引用两处冲突原文（引用格式为「文件 + 函数名/节号」，不写绝对行号），需运行时证据的标「需实机证据」，不给倾向结论。
 
 **新矛盾 1：类型检测器多语言扩展与既有绿野判据硬编码 `package.json` 的冲突**
-- **对应裁决/守卫编号**：裁决 R3b；守卫 G7、G8；对应归档项 N-⑨（涉及 §5.2、§5.3）
+- 标注：与 N-⑨ 同裁决——判据收紧为'没有任何项目声明'，不重复裁定。
 - `docs/specs/runtime-contract-and-safety.md` §4.1「通配符分级（判据钉死）」原文：「判据是「**仓库里有没有项目声明**」——`package.json` 缺失即绿野，与 `daemon/supervisor/rules-l0.ts::isGreenfieldRepo` 同一口径」。
 - `daemon/supervisor/rules-l0.ts::isGreenfieldRepo`（需实机证据）原文：「`return !fs.existsSync(path.join(repoRoot, "package.json"));`」。
 - 冲突事实说明：新增设计约束要求类型检测器支持 Python (`pyproject.toml`)、Rust (`Cargo.toml`)、Go (`go.mod`) 等特征文件；而既有规范与代码判据将缺失 `package.json` 硬编码等同于绿野，导致带 `pyproject.toml` 等声明的非 npm 项目在无 `package.json` 时会被误判为绿野，进而错误触发绿野脚手架逻辑。
 
 **新矛盾 2：零命令人工确认兜底参与合并与 ADR-0005 纯退出码门禁的冲突**
-- **对应裁决/守卫编号**：裁决 R2；守卫 G2、G3；对应归档项 N-①（涉及 §5.1、§7 G2/G3）
 - `docs/adr/0005-deterministic-verification-gate.md` §决策 1 原文：「`can_merge` 与任何验收结论只能由 Daemon 依据真实进程退出码派生。模型对 `can_merge` 无任何设定权；Worker 自报的通过/失败仅作为索引用途，结论必须由独立校验器重算。」
 - `docs/specs/runtime-contract-and-safety.md` §5.4 及本次修订 G2 守卫条款原文：「`deriveCanMerge` 入参增加「合同是否声明 `manual_confirmation`」与「人工确认记录是否齐全（`actor` / `confirmed_at` / `reason`）」两项；声明了但未齐全时返回 `false`……记录人工确认之后，才可能 `can_merge === true`。」
 - 冲突事实说明：ADR-0005 明确红线约束 `can_merge` 只能由真实退出码派生，而 `manual_confirmation` 兜底路径引入了用户人工确认记录作为 `can_merge` 放行的必要输入，二者在门禁判据的唯一物理来源定义上存在冲突。
 
 **新矛盾 3：`executeWithSignal` 空命令集默认放行与零命令禁止判 PASSED 守卫的冲突**
-- **对应裁决/守卫编号**：裁决 R2；守卫 G1；对应归档项 N-⑩（涉及 §5.1、§7 G1）
+- 标注：G1 守卫已覆盖此项，不单列裁定项，保留作交叉引用。
 - `daemon/pipeline/orchestrator.ts::Orchestrator.executeWithSignal`（需实机证据）计算 `allPassed` 原文：「`const allPassed = verificationResults.every((r) => r.exit_code === 0);`」。
 - `docs/specs/runtime-contract-and-safety.md` §5.4 及本次修订 G1 守卫条款原文：「严禁无证据或空验证集直接点亮；零命令合同的执行结果不得判为 PASSED……`verificationResults` 为空时不能取 `every` 的空真值；零命令合同的状态改为「等待人工确认」……`nextState` 不能进入 `AUDITED`。」
 - 冲突事实说明：在 JavaScript 运行时中空数组的 `.every()` 恒返回 `true`，导致零命令合同在实际执行时直接判为 `allPassed = true` 并流转至成功状态，与规范中严格禁止空验证集或零命令判定 PASSED 的安全守卫直接冲突。
