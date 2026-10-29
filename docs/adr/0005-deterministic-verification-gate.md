@@ -22,6 +22,8 @@
 3. **空验证集禁止点亮**：当节点关联的验证命令集合为空时，不得进入 ILLUMINATED（对应 `E_EMPTY_VERIFICATION_BLOCKED`），从机制上消灭「空检查假绿」。
 4. **失败/SKIP 不得计为通过**：`FAIL` / `BLOCKED` / `NOT RUN` / `SKIPPED` 必须如实记录，不得被折叠为「部分通过」。
 
+> **注**：`manual_confirmation` 人工确认记录为 `can_merge` 的前置必要条件（合同声明 `manual_confirmation` 时，确认记录不齐全则 `can_merge=false`），不构成退出码派生规则之外的第二种派生源。本 ADR 决策不变。
+
 ## 后果
 
 **正面**：点亮与合并获得了一个不依赖诚实性的物理定义，这是「非技术用户看灯判断进度」能成立的前提。
