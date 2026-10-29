@@ -14,7 +14,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite", "Task"]);
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "TodoWrite", "Task"]);
 const PROTECTED_SEGMENTS = [".git", ".stagent", ".claude"];
 
 /**
