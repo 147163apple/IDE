@@ -74,6 +74,7 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
       expect.arrayContaining(["Read", "Edit", "Write"]),
     );
     expect(tools.split(",")).not.toContain("Bash");
+    expect(tools.split(",")).not.toContain("LS");
     expect(launch.args).toContain("--strict-mcp-config");
     expect(launch.args[launch.args.indexOf("--settings") + 1]).toBe(
       launch.settingsPath,

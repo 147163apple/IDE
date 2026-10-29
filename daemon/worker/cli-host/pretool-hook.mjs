@@ -19,7 +19,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite", "Task"]);
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "TodoWrite", "Task"]);
 const PROTECTED_SEGMENTS = [".git", ".stagent", ".claude"];
 
 /** partner 角色只允许这三件事：读文件、按名或按模式找文件（含列目录）、按内容搜 */

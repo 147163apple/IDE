@@ -107,7 +107,6 @@ const BASE_TOOLS = [
   "Read",
   "Glob",
   "Grep",
-  "LS",
   "Edit",
   "Write",
   "MultiEdit",
