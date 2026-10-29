@@ -30,7 +30,7 @@ Stagent 通过子进程拉起 Claude Code CLI 作为受控 Worker。最初方案
 ```
 claude
   --setting-sources ""                      # 不加载 user / project / local 三层设置
-  --tools Read,Glob,Grep,LS,Edit,Write,MultiEdit,TodoWrite
+  --tools Read,Glob,Grep,Edit,Write,MultiEdit,TodoWrite
   -p <用户消息>
   --output-format stream-json --verbose --include-partial-messages
   --settings <tmp>/stagent-claude-XXXX/settings.json
