@@ -219,6 +219,14 @@ export function buildMergeCommitMessage(
   if (evidence.tests_modified === true) {
     trailers.push("Stagent-Tests-Modified: true");
   }
+  if (evidence.manual_confirmation) {
+    trailers.push(
+      `Stagent-Manual-Confirmation-Actor: ${evidence.manual_confirmation.actor}`,
+    );
+    trailers.push(
+      `Stagent-Manual-Confirmation-Confirmed-At: ${evidence.manual_confirmation.confirmed_at}`,
+    );
+  }
   return [
     `feat(${contract.contract_id.replace(/^contract_/, "")}): ${contract.intent.title}`,
     "",
@@ -426,6 +434,25 @@ async function mergeInternal(
       "E_CANNOT_MERGE",
       `Evidence verdict is ${snapshot.verdict.status} (can_merge=${snapshot.verdict.can_merge})`,
     );
+  }
+
+  // G2 / G3 守卫条款：若合同声明了 manual_confirmation，追加「确认记录齐全否则拒绝合并」闸门
+  if (contract.verification_spec.manual_confirmation !== undefined) {
+    const mc = snapshot.manual_confirmation;
+    const isComplete =
+      Boolean(mc) &&
+      typeof mc?.actor === "string" &&
+      mc.actor.trim().length > 0 &&
+      typeof mc?.confirmed_at === "string" &&
+      mc.confirmed_at.trim().length > 0 &&
+      typeof mc?.reason === "string" &&
+      mc.reason.trim().length > 0;
+    if (!isComplete) {
+      throw new MergeGateError(
+        "E_CANNOT_MERGE",
+        "Contract declares manual_confirmation but evidence snapshot lacks complete manual confirmation record (actor, confirmed_at, reason)",
+      );
+    }
   }
 
   // 3. Worktree 与分支必须存在

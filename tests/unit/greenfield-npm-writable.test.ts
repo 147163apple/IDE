@@ -9,6 +9,7 @@ import {
   buildL0Plan,
   commandsNeedNpmVerification,
   isGreenfieldRepo,
+  detectProjectType,
 } from "../../daemon/supervisor/rules-l0";
 import type { SupervisorMessage } from "../../daemon/supervisor/types";
 
@@ -93,5 +94,48 @@ describe("greenfield npm writable alignment", () => {
     expect(plan.writable_paths).toContain("tests/**");
     expect(plan.writable_paths).toContain("**/*.test.ts");
     expect(plan.budget.max_file_modifications).toBe(40);
+  });
+
+  it("非 npm 声明文件（如 pyproject.toml / Cargo.toml）存在时不再判为绿野", () => {
+    const root = emptyRepo();
+    expect(isGreenfieldRepo(root)).toBe(true);
+
+    fs.writeFileSync(path.join(root, "pyproject.toml"), "");
+    expect(isGreenfieldRepo(root)).toBe(false);
+    expect(detectProjectType(root)?.id).toBe("python");
+
+    const plan = buildL0Plan({
+      repoRoot: root,
+      messages: msgs("开发 python 模块"),
+    });
+    expect(plan.commands[0]?.executable).toBe("pytest");
+  });
+
+  it("Rust 声明文件 Cargo.toml 检测为 rust 类型并提供 cargo test 模板", () => {
+    const root = emptyRepo();
+    fs.writeFileSync(path.join(root, "Cargo.toml"), "");
+    expect(isGreenfieldRepo(root)).toBe(false);
+    expect(detectProjectType(root)?.id).toBe("rust");
+
+    const plan = buildL0Plan({
+      repoRoot: root,
+      messages: msgs("开发 rust 模块"),
+    });
+    expect(plan.commands[0]?.executable).toBe("cargo");
+    expect(plan.commands[0]?.args).toEqual(["test"]);
+  });
+
+  it("Go 声明文件 go.mod 检测为 go 类型并提供 go test 模板", () => {
+    const root = emptyRepo();
+    fs.writeFileSync(path.join(root, "go.mod"), "");
+    expect(isGreenfieldRepo(root)).toBe(false);
+    expect(detectProjectType(root)?.id).toBe("go");
+
+    const plan = buildL0Plan({
+      repoRoot: root,
+      messages: msgs("开发 go 模块"),
+    });
+    expect(plan.commands[0]?.executable).toBe("go");
+    expect(plan.commands[0]?.args).toEqual(["test", "./..."]);
   });
 });

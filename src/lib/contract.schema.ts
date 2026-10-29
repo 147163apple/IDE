@@ -30,13 +30,16 @@ import { FAST_PATH_APPROVER, validateStatePair } from "./state-machine";
  */
 
 /** 当前签发版本：新建合同一律使用此版本 */
-export const SOFTWARE_CONTRACT_SCHEMA_VERSION = "1.3.0" as const;
+export const SOFTWARE_CONTRACT_SCHEMA_VERSION = "1.3.1" as const;
+/** 存量兼容版本：v1.3.0 合同继续可解析 */
+export const LEGACY_CONTRACT_SCHEMA_VERSION_V130 = "1.3.0" as const;
 /** 存量兼容版本：v1.2.0 合同继续可解析、可迁移 */
 export const LEGACY_CONTRACT_SCHEMA_VERSION_V12 = "1.2.0" as const;
 
 /** 允许解析的合同 Schema 版本（白名单，未列出的版本一律拒绝） */
 export const SUPPORTED_CONTRACT_SCHEMA_VERSIONS = [
   LEGACY_CONTRACT_SCHEMA_VERSION_V12,
+  LEGACY_CONTRACT_SCHEMA_VERSION_V130,
   SOFTWARE_CONTRACT_SCHEMA_VERSION,
 ] as const;
 
@@ -161,6 +164,40 @@ export const executionPermissionsSchema = z.object({
 export type ExecutionPermissions = z.infer<typeof executionPermissionsSchema>;
 
 // --- 4. 结构化验证命令 (§9.1 verification_spec，杜绝 shell 注入歧义) ---
+
+export const manualConfirmationEvidenceFieldSchema = z.enum([
+  "actor",
+  "confirmed_at",
+  "reason",
+]);
+export type ManualConfirmationEvidenceField = z.infer<
+  typeof manualConfirmationEvidenceFieldSchema
+>;
+
+export const manualConfirmationSpecSchema = z.object({
+  reason_required: z.literal(true),
+  capture_evidence: z
+    .array(manualConfirmationEvidenceFieldSchema)
+    .superRefine((items, ctx) => {
+      const unique = new Set(items);
+      if (
+        items.length !== 3 ||
+        unique.size !== 3 ||
+        !unique.has("actor") ||
+        !unique.has("confirmed_at") ||
+        !unique.has("reason")
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            'capture_evidence must contain exactly ["actor", "confirmed_at", "reason"] in any order without omission or extra fields',
+        });
+      }
+    }),
+});
+export type ManualConfirmationSpec = z.infer<
+  typeof manualConfirmationSpecSchema
+>;
 
 export const verificationCommandSchema = z.object({
   alias: z.string().min(1),
@@ -418,9 +455,8 @@ export const softwareContractSchema = z
       execution_permissions: executionPermissionsSchema.default({}),
     }),
     verification_spec: z.object({
-      commands: z
-        .array(verificationCommandSchema)
-        .min(1, "At least one verification command is required"),
+      commands: z.array(verificationCommandSchema),
+      manual_confirmation: manualConfirmationSpecSchema.optional(),
     }),
     approval: approvalSchema,
   })
@@ -469,9 +505,35 @@ export const softwareContractSchema = z
       }
     }
 
-    // v1.3.0 必填字段：新合同必须显式声明 Git 授权凭证，
+    // §1.1：commands.length === 0 时必须提供 manual_confirmation
+    if (
+      contract.verification_spec.commands.length === 0 &&
+      !contract.verification_spec.manual_confirmation
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "At least one verification command is required unless manual_confirmation is declared",
+      });
+    }
+
+    // §1.3：manual_confirmation 只允许出现在 1.3.1 合同上。1.3.0 合同带有该字段时拒绝
+    if (
+      contract.verification_spec.manual_confirmation !== undefined &&
+      contract.schema_version !== SOFTWARE_CONTRACT_SCHEMA_VERSION
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `manual_confirmation is only allowed on schema_version ${SOFTWARE_CONTRACT_SCHEMA_VERSION}, got ${contract.schema_version}`,
+      });
+    }
+
+    // v1.3.0 / v1.3.1 必填字段：新合同必须显式声明 Git 授权凭证，
     // 不允许靠缺省值"看起来合规"。存量 1.2.0 合同不做追溯要求。
-    if (contract.schema_version === SOFTWARE_CONTRACT_SCHEMA_VERSION) {
+    if (
+      contract.schema_version === SOFTWARE_CONTRACT_SCHEMA_VERSION ||
+      contract.schema_version === LEGACY_CONTRACT_SCHEMA_VERSION_V130
+    ) {
       const git = contract.authorization.git;
       const requiredGitFields: Array<[string, unknown]> = [
         ["allowed_operations", git.allowed_operations],
@@ -484,7 +546,7 @@ export const softwareContractSchema = z
             code: z.ZodIssueCode.custom,
             message:
               `authorization.git.${field} is required for schema_version ` +
-              `${SOFTWARE_CONTRACT_SCHEMA_VERSION} (§9.1)`,
+              `${contract.schema_version} (§9.1)`,
           });
         }
       }
@@ -531,6 +593,7 @@ export function createContractDraft(params: {
   baseBranch?: string | undefined;
   targetBranch?: string | undefined;
   commands?: VerificationCommand[] | undefined;
+  manualConfirmation?: ManualConfirmationSpec | undefined;
   maxFileModifications?: number | undefined;
   maxVerificationRetries?: number | undefined;
   maxDurationSeconds?: number | undefined;
@@ -611,17 +674,22 @@ export function createContractDraft(params: {
     },
     verification_spec: {
       commands:
-        params.commands && params.commands.length > 0
+        params.commands !== undefined
           ? params.commands
-          : [
-              {
-                alias: "test",
-                executable: "npm",
-                args: ["test"],
-                expected_exit_code: 0,
-                timeout_seconds: 60,
-              },
-            ],
+          : params.manualConfirmation !== undefined
+            ? []
+            : [
+                {
+                  alias: "test",
+                  executable: "npm",
+                  args: ["test"],
+                  expected_exit_code: 0,
+                  timeout_seconds: 60,
+                },
+              ],
+      ...(params.manualConfirmation === undefined
+        ? {}
+        : { manual_confirmation: params.manualConfirmation }),
     },
     approval: {
       status: "DRAFT" as const,

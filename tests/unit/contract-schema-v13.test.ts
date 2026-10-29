@@ -76,10 +76,14 @@ function rawAtState(
 
 describe("版本白名单与签发值", () => {
   it("签发 1.3.0，兼容白名单为 1.2.0 + 1.3.0", () => {
-    expect(SOFTWARE_CONTRACT_SCHEMA_VERSION).toBe("1.3.0");
+    expect(SOFTWARE_CONTRACT_SCHEMA_VERSION).toBe("1.3.1");
     expect(LEGACY_CONTRACT_SCHEMA_VERSION_V12).toBe("1.2.0");
-    expect([...SUPPORTED_CONTRACT_SCHEMA_VERSIONS]).toEqual(["1.2.0", "1.3.0"]);
-    expect(draft().schema_version).toBe("1.3.0");
+    expect([...SUPPORTED_CONTRACT_SCHEMA_VERSIONS]).toEqual([
+      "1.2.0",
+      "1.3.0",
+      "1.3.1",
+    ]);
+    expect(draft().schema_version).toBe("1.3.1");
   });
 
   it("未列入白名单的版本一律拒绝（含 v1.2.1 / v1.1.3）", () => {
@@ -285,5 +289,97 @@ describe("既有不变式在 v1.3.0 下继续成立", () => {
   it("§9.1.1 组合矩阵：EXECUTING + PENDING_REVIEW 仍被拒绝", () => {
     const raw = rawAtState("EXECUTING", { status: "PENDING_REVIEW" });
     expect(softwareContractSchema.safeParse(raw).success).toBe(false);
+  });
+});
+
+describe("v1.3.1 manual_confirmation 兜底人工确认不变式", () => {
+  it("commands 为空但提供合法 manual_confirmation 时通过 Schema 解析", () => {
+    const raw = asRaw(draft());
+    raw["verification_spec"] = {
+      commands: [],
+      manual_confirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason"],
+      },
+    };
+    const parsed = softwareContractSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+  });
+
+  it("commands 为空且缺少 manual_confirmation 时被 Schema 拒绝", () => {
+    const raw = asRaw(draft());
+    raw["verification_spec"] = {
+      commands: [],
+    };
+    const parsed = softwareContractSchema.safeParse(raw);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain(
+        "At least one verification command is required unless manual_confirmation is declared",
+      );
+    }
+  });
+
+  it("1.3.0 存量合同若携带 manual_confirmation 则被拒绝（仅限 1.3.1）", () => {
+    const raw = asRaw(draft());
+    raw["schema_version"] = "1.3.0";
+    raw["verification_spec"] = {
+      commands: [
+        {
+          alias: "test",
+          executable: "npm",
+          args: ["test"],
+          expected_exit_code: 0,
+          timeout_seconds: 60,
+        },
+      ],
+      manual_confirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason"],
+      },
+    };
+    const parsed = softwareContractSchema.safeParse(raw);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain(
+        "manual_confirmation is only allowed on schema_version 1.3.1",
+      );
+    }
+  });
+
+  it("capture_evidence 字段缺漏或多出均被拒绝", () => {
+    const raw = asRaw(draft());
+    raw["verification_spec"] = {
+      commands: [],
+      manual_confirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at"],
+      },
+    };
+    expect(softwareContractSchema.safeParse(raw).success).toBe(false);
+
+    raw["verification_spec"] = {
+      commands: [],
+      manual_confirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason", "extra"],
+      },
+    };
+    expect(softwareContractSchema.safeParse(raw).success).toBe(false);
+  });
+
+  it("1.3.0 存量合同仍要求 Git 显式授权凭证", () => {
+    const raw = asRaw(draft());
+    raw["schema_version"] = "1.3.0";
+    delete (raw["authorization"] as Record<string, Record<string, unknown>>)[
+      "git"
+    ]!["allowed_operations"];
+    const parsed = softwareContractSchema.safeParse(raw);
+    expect(parsed.success).toBe(false);
+    if (!parsed.success) {
+      expect(parsed.error.issues[0]?.message).toContain(
+        "authorization.git.allowed_operations is required for schema_version 1.3.0",
+      );
+    }
   });
 });

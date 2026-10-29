@@ -237,4 +237,31 @@ describe("M5 / Test Integrity：Evidence tests_modified 留痕", () => {
     const outcome = await orchestrator.execute(contract.contract_id);
     expect(outcome.evidence.tests_modified).toBe(false);
   });
+
+  it("G1 守卫条款：零命令合同执行不判 PASSED、不进 AUDITED（置为 PENDING_RESUME/BLOCKED 兜底），且不计返工", async () => {
+    const draft = createContractDraft({
+      title: "零命令人工确认合同",
+      description: "无自动化命令",
+      acceptanceCriteria: ["人工核对"],
+      writablePaths: ["src/**"],
+      commands: [],
+      manualConfirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason"],
+      },
+    });
+    const contract = softwareContractSchema.parse({
+      ...draft,
+      lifecycle_state: "PENDING_APPROVAL",
+      approval: { status: "PENDING_REVIEW" },
+    });
+    store.save(contract);
+    await orchestrator.approve(contract.contract_id, "tina");
+    const outcome = await orchestrator.execute(contract.contract_id);
+
+    expect(outcome.evidence.verdict.status).toBe("BLOCKED");
+    expect(outcome.evidence.verdict.can_merge).toBe(false);
+    expect(outcome.contract.lifecycle_state).toBe("PENDING_RESUME");
+    expect(outcome.contract.lifecycle_state).not.toBe("AUDITED");
+  });
 });
