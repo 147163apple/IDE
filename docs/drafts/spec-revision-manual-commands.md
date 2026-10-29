@@ -228,6 +228,7 @@
 - 冲突事实说明：新增设计约束要求类型检测器支持 Python (`pyproject.toml`)、Rust (`Cargo.toml`)、Go (`go.mod`) 等特征文件；而既有规范与代码判据将缺失 `package.json` 硬编码等同于绿野，导致带 `pyproject.toml` 等声明的非 npm 项目在无 `package.json` 时会被误判为绿野，进而错误触发绿野脚手架逻辑。
 
 **新矛盾 2：零命令人工确认兜底参与合并与 ADR-0005 纯退出码门禁的冲突**
+- 标注：已裁决（前置条件处置）+ 实现 PR #16 已落地。
 - `docs/adr/0005-deterministic-verification-gate.md` §决策 1 原文：「`can_merge` 与任何验收结论只能由 Daemon 依据真实进程退出码派生。模型对 `can_merge` 无任何设定权；Worker 自报的通过/失败仅作为索引用途，结论必须由独立校验器重算。」
 - `docs/specs/runtime-contract-and-safety.md` §5.4 及本次修订 G2 守卫条款原文：「`deriveCanMerge` 入参增加「合同是否声明 `manual_confirmation`」与「人工确认记录是否齐全（`actor` / `confirmed_at` / `reason`）」两项；声明了但未齐全时返回 `false`……记录人工确认之后，才可能 `can_merge === true`。」
 - 冲突事实说明：ADR-0005 明确红线约束 `can_merge` 只能由真实退出码派生，而 `manual_confirmation` 兜底路径引入了用户人工确认记录作为 `can_merge` 放行的必要输入，二者在门禁判据的唯一物理来源定义上存在冲突。
