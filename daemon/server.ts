@@ -106,7 +106,10 @@ import {
 } from "./guard/gateway-violation-store";
 import { projectDeliveryState } from "../src/lib/state/delivery-state";
 import { ContractOrchestrator } from "./pipeline/orchestrator";
-import { TaskGraphEngine } from "./graph/graph-engine";
+import {
+  assertProposalWithinContractScope,
+  TaskGraphEngine,
+} from "./graph/graph-engine";
 import { collectWorktreeEvidence } from "./graph/evidence-collector";
 import type { IlluminationInput } from "./graph/illumination-verifier";
 import type { SupervisorProposalV1 } from "../src/lib/graph/task-graph";
@@ -2019,9 +2022,18 @@ export class StagentDaemon {
           });
           return;
         }
-        const graph = this.graphEngine.createFromProposal(
-          body.proposal as SupervisorProposalV1,
-        );
+        const proposal = body.proposal as SupervisorProposalV1;
+        // §9.4 DAG 权限不变式：装载期先核对父合同授权子集，越界整图拒载、不落盘
+        if (typeof proposal === "object" && proposal !== null) {
+          const contractId = proposal.contract_id;
+          if (typeof contractId === "string" && contractId !== "") {
+            const parentContract = /[\\/]|\.\./.test(contractId)
+              ? null
+              : this.orchestrator.getStore().get(contractId);
+            assertProposalWithinContractScope(proposal, parentContract);
+          }
+        }
+        const graph = this.graphEngine.createFromProposal(proposal);
         this.sendJson(res, 200, { graph });
         return;
       }

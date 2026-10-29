@@ -21,6 +21,15 @@ import {
 } from "../../src/lib/graph/task-graph";
 import { writeJsonAtomic } from "../../src/lib/state-machine";
 import {
+  checkWriteAccess,
+  ScopeViolationError,
+  type FileSystemScope,
+} from "../../src/lib/scope";
+import {
+  safePathString,
+  type SoftwareContract,
+} from "../../src/lib/contract.schema";
+import {
   evaluateIllumination,
   nodeTouchesPaths,
   E_EMPTY_VERIFICATION_BLOCKED,
@@ -233,6 +242,66 @@ function validateFunctionalTree(raw: unknown): FunctionalTreeNode[] {
     }
   }
   return tree;
+}
+
+/**
+ * §9.4「DAG 权限不变式（授权子集约束）」的装载期校验（TASK-OP-25）。
+ *
+ * 规则：提案中每个节点的 `target_files` 必须落在父合同
+ * `authorization.file_system_scope` 之内。判定复用 `src/lib/scope.ts` 的
+ * `checkWriteAccess`（strictly_forbidden_paths 优先，再匹配 writable_paths），
+ * 不另写路径规则。任一越界即抛 `ScopeViolationError`（code = E_SCOPE_VIOLATION），
+ * 整图拒载；必须在 `TaskGraphEngine.createFromProposal` 之前调用，禁止先写后纠正。
+ *
+ * 合同缺失或不可读时一律拒绝：没有可核对的授权即视为无任何可写授权。
+ * 形状错误（非数组、非字符串、contract_id 缺失）交由 `createFromProposal`
+ * 的既有校验统一报 E_PROPOSAL_INVALID，本函数跳过这些条目，不重复判定。
+ */
+export function assertProposalWithinContractScope(
+  proposal: SupervisorProposalV1,
+  contract: SoftwareContract | null,
+): void {
+  if (contract === null) {
+    throw new ScopeViolationError(
+      `合同 ${proposal.contract_id} 不存在或不可读，未声明可写授权，拒绝建图`,
+      "NOT_WRITABLE",
+    );
+  }
+  const fileScope = contract.authorization.file_system_scope;
+  const scope: FileSystemScope = {
+    writable_paths: fileScope.writable_paths,
+    strictly_forbidden_paths: fileScope.strictly_forbidden_paths,
+  };
+  if (!Array.isArray(proposal.nodes)) return;
+  for (const node of proposal.nodes) {
+    if (typeof node !== "object" || node === null) continue;
+    if (!Array.isArray(node.target_files)) continue;
+    for (const target of node.target_files) {
+      if (typeof target !== "string") continue;
+      if (!isContainedRelativePath(target)) {
+        throw new ScopeViolationError(
+          `节点 ${node.node_id} 的目标路径 ${target} 不是合法的仓库相对路径`,
+          "NOT_WRITABLE",
+          target,
+        );
+      }
+      const access = checkWriteAccess(target, scope);
+      if (!access.allowed) {
+        throw new ScopeViolationError(
+          `节点 ${node.node_id} 声明的目标路径 ${target} 超出合同授权子集`,
+          access.reason ?? "NOT_WRITABLE",
+          target,
+          access.pattern,
+        );
+      }
+    }
+  }
+}
+
+/** 复用 contract.schema 的 safePathString，并补上结尾为 `..` 的段（它只拦 `../`） */
+function isContainedRelativePath(target: string): boolean {
+  if (!safePathString.safeParse(target).success) return false;
+  return !target.split(/[\\/]/).includes("..");
 }
 
 export class TaskGraphEngine {
