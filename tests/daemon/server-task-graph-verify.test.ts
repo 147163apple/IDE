@@ -14,7 +14,16 @@ import {
 import { ContractStore } from "../../daemon/pipeline/contract-store";
 import { E_UNAUTHORIZED_COMMAND } from "../../daemon/runner/command-runner";
 
-function postJson<T = Record<string, any>>(
+interface ErrorResponseBody {
+  code?: string;
+}
+
+interface VerifyResponseBody {
+  illuminated?: boolean;
+  code?: string;
+}
+
+function postJson<T = Record<string, unknown>>(
   url: string,
   body: unknown,
   headers: Record<string, string> = {},
@@ -198,7 +207,7 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
   it("拒收请求体携带的 command_results（防造假门禁，返回 E_UNAUTHORIZED_COMMAND）", async () => {
     const { info, headers } = await startAndInitGraph();
 
-    const res = await postJson(
+    const res = await postJson<ErrorResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       {
         node_id: "node-cmd-pass",
@@ -208,13 +217,13 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
 
     expect(res.statusCode).toBe(400);
-    expect((res.body as any).code).toBe(E_UNAUTHORIZED_COMMAND);
+    expect(res.body.code).toBe(E_UNAUTHORIZED_COMMAND);
   });
 
   it("拒收请求体携带的 execution_exit_code（防造假门禁，返回 E_UNAUTHORIZED_COMMAND）", async () => {
     const { info, headers } = await startAndInitGraph();
 
-    const res = await postJson(
+    const res = await postJson<ErrorResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       {
         node_id: "node-cmd-pass",
@@ -224,13 +233,13 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
 
     expect(res.statusCode).toBe(400);
-    expect((res.body as any).code).toBe(E_UNAUTHORIZED_COMMAND);
+    expect(res.body.code).toBe(E_UNAUTHORIZED_COMMAND);
   });
 
   it("指定合同外命令别名时拒绝（E_UNAUTHORIZED_COMMAND）", async () => {
     const { info, headers } = await startAndInitGraph();
 
-    const res = await postJson(
+    const res = await postJson<ErrorResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       {
         node_id: "node-cmd-pass",
@@ -240,7 +249,7 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
 
     expect(res.statusCode).toBe(400);
-    expect((res.body as any).code).toBe(E_UNAUTHORIZED_COMMAND);
+    expect(res.body.code).toBe(E_UNAUTHORIZED_COMMAND);
   });
 
   it("在 Worktree 内真实执行验证命令：实测非零退出码不点亮", async () => {
@@ -275,7 +284,7 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
       stdio: "ignore",
     });
 
-    const verifyRes = await postJson(
+    const verifyRes = await postJson<VerifyResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       { node_id: "node-cmd-fail" },
       headers,
@@ -283,8 +292,8 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
 
     expect(verifyRes.statusCode).toBe(200);
     // test-fail 产生 exit code 2，期望 0，故不点亮
-    expect((verifyRes.body as any).illuminated).toBe(false);
-    expect((verifyRes.body as any).code).toBe("E_COMMAND_FAILED");
+    expect(verifyRes.body.illuminated).toBe(false);
+    expect(verifyRes.body.code).toBe("E_COMMAND_FAILED");
   });
 
   it("在 Worktree 内真实执行验证命令：实测零码且文件就绪点亮", async () => {
@@ -319,14 +328,14 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
       stdio: "ignore",
     });
 
-    const verifyRes = await postJson(
+    const verifyRes = await postJson<VerifyResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       { node_id: "node-cmd-pass" },
       headers,
     );
 
     expect(verifyRes.statusCode).toBe(200);
-    expect((verifyRes.body as any).illuminated).toBe(true);
+    expect(verifyRes.body.illuminated).toBe(true);
   });
 
   it("MANUAL 节点 manual_approved 放行路径保留且正常核销", async () => {
@@ -361,7 +370,7 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     });
 
     // 显式点击确认 (ui_click)
-    const verifyApproved = await postJson(
+    const verifyApproved = await postJson<VerifyResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       {
         node_id: "node-manual",
@@ -371,7 +380,7 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
       headers,
     );
     expect(verifyApproved.statusCode).toBe(200);
-    expect((verifyApproved.body as any).illuminated).toBe(true);
+    expect(verifyApproved.body.illuminated).toBe(true);
   });
 
   it("MANUAL 节点未确认时不放行（illuminated=false, E_MANUAL_APPROVAL_MISSING）", async () => {
@@ -404,15 +413,13 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
       stdio: "ignore",
     });
 
-    const verifyUnapproved = await postJson(
+    const verifyUnapproved = await postJson<VerifyResponseBody>(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
       { node_id: "node-manual" },
       headers,
     );
     expect(verifyUnapproved.statusCode).toBe(200);
-    expect((verifyUnapproved.body as any).illuminated).toBe(false);
-    expect((verifyUnapproved.body as any).code).toBe(
-      "E_MANUAL_APPROVAL_MISSING",
-    );
+    expect(verifyUnapproved.body.illuminated).toBe(false);
+    expect(verifyUnapproved.body.code).toBe("E_MANUAL_APPROVAL_MISSING");
   });
 });
