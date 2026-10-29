@@ -70,15 +70,17 @@
 | OP-22 | J.8「施工·返工」行歧义：§16.2 第 1404 行用「→」把过程压成一行（`REWORK_REQUIRED → IMPLEMENTING`、`VERIFYING → EXECUTING`），返工回到 IMPLEMENTING 后快照上与首次施工同构，无法区分 | Tina 裁决；J.8 后续 | 裁决：代码按现状保留（返工仅在 REWORK_REQUIRED 瞬态可见，之后归「进行中」）；建议补充可观测标记（如快照字段 `rework_in_progress`），否则返工子态只能覆盖 REWORK_REQUIRED 瞬态 | PR #4（J.8）审核，`src/lib/state/journey-stage.ts` 的 `build_rework` 行注释；supervisor §16.2 第 1404 行 |
 | OP-23 | J.9 TM-G / TM-Z 的 oracle 为单人编写，未满足规格 §6.1 的独立编写要求 | 第三方复核人（待指定；非实现者、非 J.9 实施上下文） | 已销项-TM-G/TM-Z 独立复核完成，证据见 PR #5 评论 | `scheme-patch-engine.md` §6.1、§8 第 5 条；PR #5（草稿）；缺口 3 项与 TM-Y/TM-P 抽查并入 PR #5 转正评审清单 |
 | OP-24 | J.8 瞬态行整组生产不可达：`JOURNEY_ROWS` 中依赖 `transient` 的行（交接 `plan_handoff`、Demo 构建、合并中）在生产路径永不命中，因为 `daemon/server.ts` 调用 `toStateChangedPayload` 时从未传入 `activity_transient`；J.8 实际只覆盖 lifecycle×presentation 的静态子集，§16.2 文档声称映射交接，口径与实现分叉 | 待指定（候选：J.5 签署链或 J.2 ScopePlan，负责产生瞬态事件） | 补 `activity_transient` 生产来源前，文档须把交接、Demo 构建、合并中的映射标为「待接线」；回放路径（`replayPresentationState`）不传 `on_journey_warning` 为有意取舍，表外告警防线在实时广播路径 | 核对 PR #3 时全量检索 main：`activity_transient` 仅出现于 delivery-state、journey-stage、projector 与测试；PR #4 评审时未发现 |
-| OP-25 | N-11 DAG 装载期缺少授权子集校验 | 待指定 | 已立卡待排期 | J.5 前置依赖 |
-| OP-26 | N-5 C.8～C.16 任务卡均未声明三项不变 | 待指定 | 已立卡待排期 | ADR-0001 纪律执行 |
+| OP-25 | N-11 DAG 装载期缺少授权子集校验 | 待指定 | 已实现（PR #24） | J.5 前置依赖 |
+| OP-26 | N-5 C.8～C.16 任务卡均未声明三项不变 | 待指定 | 已实现（PR #23） | ADR-0001 纪律执行 |
 | OP-27 | N-1 任务图核销退出码由前端常量代填 | 待指定 | 已立卡待排期 | J.5 manual_confirmation 硬前置 |
-| OP-28 | N-2 右栏 ClaudeCodeAdapter 可写主干 | 待指定 | 已裁决-只读白名单（PR #25） | J.1 右栏只读化；右栏自由脑暴裁决同批回写；实机证据（J.1）为前置关键路径；失败分支=停用非静默回退 |
+| OP-28 | N-2 右栏 ClaudeCodeAdapter 可写主干 | 待指定 | 已实现（PR #29 右栏 partner 只读化 + PR #30 LS 残留清理）；真 Key 行为验证与 Glob 目录模式真机补验挂账中 | J.1 右栏只读化；右栏自由脑暴裁决同批回写；实机证据（J.1）为前置关键路径；失败分支=停用非静默回退 |
 | OP-29 | J.1 上下文注入判别位未生效致 CLI 判别位误判的判例（事件：曾以"机器人身份致 CLI 不注入"解释，复核确认为判别位未注入；产出：verify-env --check-context） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-30 | J.1 "无 tool_use 不算通过"裁决先例（事件：声称在真实 Claude CLI 执行的验证，无 tool_use 记录不予通过） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-31 | J.1 沙箱 root 全绿不具真机外推效力的判例（事件：沙箱 root 权限可绕过权限类测试，须真实用户环境验证；关联 PR #3 分支真机 Glob 条款） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-32 | 验证证据升级为实测/可信证据（exit_code 实采 + API 级确认防伪造） | 待指定 | 已裁决-A 已实现(PR #19)/B 缓议 | 关联 OP-27；设计先决：执行环境/超时/白名单边界；SYNTAX_CHECK/IMPLICIT_SIDE_EFFECT 实采通道待补 |
 | OP-33 | Windows 单测既有红（main 基线 45 项/20 文件；每次都失败的稳定层 26 项：spawn/信号、符号链接、合并、迁移、worktree 等；WS/auth/Origin/端口类为抖动层） | 待指定 | 已登记-挂账 | 关联 PR #19 合并；基线 run 40821117113；PR 重跑 run 40838762021 |
+| OP-34 | macOS CI runner 不稳定（多次出现 job 排队后零步骤取消，PR #28/#29/#30 均发生，判定为 GitHub 平台侧问题非测试失败；main 同 job 在 95c6698/4144a201 为绿） | 待指定 | 已登记-挂账 | 与 OP-33 Windows 债并列独立；关联 PR #28/#29/#30 判定声明 |
+| OP-35 | 跨平台测试偶发抖动（ipc-stream.test.ts 期望 ERROR 帧先收到 BASELINE_PROGRESS 帧的 WS 竞态；Ubuntu 与 macOS 均有发生，重跑即转绿） | 待指定 | 已登记-挂账 | 与 OP-33/OP-34 分开登记；见 PR #28/#29/#30 CI 运行记录 |
 
 ## 四、三层皮权威表
 
