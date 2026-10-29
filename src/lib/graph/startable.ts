@@ -62,9 +62,8 @@ export function resolveVerifiableNode(
 /**
  * 组装 verify 请求体里的 command_results。
  *
- * C.7 口径：命令退出码仍由调用方提交；文件写入 / Scope / HEAD 由 Daemon 现算。
- * UI 核销入口按节点声明的别名提交 exit_code=0——若目标文件未写入或 Scope
- * 越界，Daemon 仍会拒绝点亮（不假绿）。
+ * 命令退出码属于声明性证据；实测采集见 OP-32。
+ * 文件写入 / Scope / HEAD 仍由 Daemon 现算。
  */
 export function buildCommandResultsForVerify(
   node: TaskNode,
