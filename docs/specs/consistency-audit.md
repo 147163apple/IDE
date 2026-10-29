@@ -78,6 +78,7 @@
 | OP-30 | J.1 "无 tool_use 不算通过"裁决先例（事件：声称在真实 Claude CLI 执行的验证，无 tool_use 记录不予通过） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-31 | J.1 沙箱 root 全绿不具真机外推效力的判例（事件：沙箱 root 权限可绕过权限类测试，须真实用户环境验证；关联 PR #3 分支真机 Glob 条款） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-32 | 验证证据升级为实测/可信证据（exit_code 实采 + API 级确认防伪造） | 待指定 | 已裁决-A 已实现(PR #19)/B 缓议 | 关联 OP-27；设计先决：执行环境/超时/白名单边界；SYNTAX_CHECK/IMPLICIT_SIDE_EFFECT 实采通道待补 |
+| OP-33 | Windows 单测既有红（main 基线 45 项/20 文件；每次都失败的稳定层 26 项：spawn/信号、符号链接、合并、迁移、worktree 等；WS/auth/Origin/端口类为抖动层） | 待指定 | 已登记-挂账 | 关联 PR #19 合并；基线 run 40821117113；PR 重跑 run 40838762021 |
 
 ## 四、三层皮权威表
 
