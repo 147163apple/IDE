@@ -1,8 +1,9 @@
 /**
- * TASK-C.10o：任务图谱开工 / 核销入口的纯函数助手。
+ * TASK-C.10o / OP-32-A：任务图谱开工 / 核销入口的纯函数助手。
  *
- * 只描述「谁可以点」——真正改状态仍走 Daemon `start` / `verify`。
+ * 只描述「谁可以点」——真正改状态仍走 Daemon start / verify。
  * 点亮只认物理证据：本模块不伪造写入、Scope 或 Commit SHA。
+ * 验证命令退出码由 Daemon 在 Worktree 内实采，不再在前端伪造 exit 0。
  */
 
 import type { TaskGraph, TaskNode, TaskNodeState } from "./task-graph";
@@ -57,20 +58,4 @@ export function resolveVerifiableNode(
     if (selected && isNodeVerifiable(selected)) return selected;
   }
   return graph.nodes.find(isNodeVerifiable) ?? null;
-}
-
-/**
- * 组装 verify 请求体里的 command_results。
- *
- * 命令退出码属于声明性证据；实测采集见 OP-32。
- * 文件写入 / Scope / HEAD 仍由 Daemon 现算。
- */
-export function buildCommandResultsForVerify(
-  node: TaskNode,
-): Array<{ alias: string; exit_code: number }> {
-  if (node.verification_mode !== "COMMAND") return [];
-  return node.verification_commands.map((alias) => ({
-    alias,
-    exit_code: 0,
-  }));
 }

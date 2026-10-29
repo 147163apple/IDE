@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildCommandResultsForVerify,
   dependenciesIlluminated,
   isNodeStartable,
   isNodeVerifiable,
@@ -83,16 +82,8 @@ describe("graph startable helpers (C.10o)", () => {
     expect(resolveVerifiableNode(g, "n1")?.node_id).toBe("n2");
   });
 
-  it("COMMAND 核销组装声明别名 exit 0；其它模式不塞 command_results", () => {
+  it("OP-32-A：前端不再组装 command_results，实测退出码交由 Daemon 实采", () => {
     const command = node("n1", "RUNNING");
-    expect(buildCommandResultsForVerify(command)).toEqual([
-      { alias: "verify", exit_code: 0 },
-    ]);
-    const manual: TaskNode = {
-      ...command,
-      verification_mode: "MANUAL",
-      verification_commands: [],
-    };
-    expect(buildCommandResultsForVerify(manual)).toEqual([]);
+    expect(isNodeVerifiable(command)).toBe(true);
   });
 });
