@@ -80,7 +80,7 @@
 | OP-32 | 验证证据升级为实测/可信证据（exit_code 实采 + API 级确认防伪造） | 待指定 | 已裁决-A 已实现(PR #19)/B 缓议 | 关联 OP-27；设计先决：执行环境/超时/白名单边界；SYNTAX_CHECK/IMPLICIT_SIDE_EFFECT 实采通道待补 |
 | OP-33 | Windows 单测既有红（main 基线 45 项/20 文件；每次都失败的稳定层 26 项：spawn/信号、符号链接、合并、迁移、worktree 等；WS/auth/Origin/端口类为抖动层） | 待指定 | 已登记-挂账 | 关联 PR #19 合并；基线 run 40821117113；PR 重跑 run 40838762021 |
 | OP-34 | macOS CI runner 不稳定（多次出现 job 排队后零步骤取消，PR #28/#29/#30 均发生，判定为 GitHub 平台侧问题非测试失败；main 同 job 在 95c6698/4144a201 为绿） | 待指定 | 已登记-挂账 | 与 OP-33 Windows 债并列独立；关联 PR #28/#29/#30 判定声明 |
-| OP-35 | 跨平台测试偶发抖动（ipc-stream.test.ts 期望 ERROR 帧先收到 BASELINE_PROGRESS 帧的 WS 竞态；Ubuntu 与 macOS 均有发生，重跑即转绿） | 待指定 | 已登记-挂账 | 与 OP-33/OP-34 分开登记；见 PR #28/#29/#30 CI 运行记录 |
+| OP-35 | 跨平台测试偶发抖动（① ipc-stream.test.ts 期望 ERROR 帧先收到 BASELINE_PROGRESS 帧的 WS 竞态，Ubuntu 与 macOS 均有发生，重跑即转绿；② scheme-confirm-scope-drift.test.ts 的 git index.lock 并发竞态，全量跑 2 条失败、单文件复跑 4/4 通过） | 待指定 | 已登记-挂账 | 与 OP-33/OP-34 分开登记；见 PR #28/#29/#30 CI 记录与 e7f57b4 本地实机基线验证 |
 
 ## 四、三层皮权威表
 
