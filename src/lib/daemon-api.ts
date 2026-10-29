@@ -1357,17 +1357,22 @@ export async function undoProtectionRound(
 export interface TaskGraphVerifyRequest {
   node_id: string;
   /**
-   * 验证命令结果由执行器（orchestrator / CLI）提交。
-   * 文件写入、SHA-256、Scope 与 Commit SHA 一律由 Daemon 在 Worktree 上现算，
-   * 这里刻意不提供对应字段——前端不得自造证据。
+   * OP-32-A：可选命令别名；若指定则执行并校验特定命令，缺省执行该节点全部 verification_commands。
    */
-  command_results: Array<{ alias: string; exit_code: number }>;
-  execution_exit_code?: number;
-  expected_exit_code?: number;
-  /** MANUAL 仅在用户明确确认后提交；不提交代表未确认。 */
+  command_alias?: string;
+  /**
+   * OP-32-A：验证命令退出码由 Daemon 在 Worktree 内实采（runCommand），
+   * 前端不再提交 command_results / execution_exit_code / syntax_check_exit_code。
+   *
+   * MANUAL 仅在用户明确确认后提交；不提交代表未确认。
+   */
   manual_approved?: boolean;
   /** 来源标记便于证据审计；Daemon 无法独立验证浏览器点击事件。 */
   manual_approved_source?: "ui_click";
+  /** 兼容遗留调用；若携带将被 Daemon 以 E_UNAUTHORIZED_COMMAND 硬拒绝 */
+  command_results?: Array<{ alias: string; exit_code: number }>;
+  execution_exit_code?: number;
+  expected_exit_code?: number;
   syntax_check_exit_code?: number;
   side_effects?: Array<{
     path: string;

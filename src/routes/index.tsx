@@ -160,7 +160,6 @@ import {
 } from "@/components/studio/DisputeConsolePane";
 import { SupervisorTab } from "@/components/supervisor/SupervisorTab";
 import { SettingsTab } from "@/components/settings/SettingsTab";
-import { buildCommandResultsForVerify } from "@/lib/graph/startable";
 import { applyTaskGraphFrame } from "@/components/graph/graph-view-model";
 import {
   FileTreeSpecsSection,
@@ -2013,22 +2012,15 @@ ${trimmed}`
             : false;
         if (node.verification_mode === "MANUAL" && !manualApproved) return;
 
+        // OP-32-A：前端只传 node_id，实采命令退出码由 Daemon 在 Worktree 执行；
+        // MANUAL 节点保留 manual_approved 显式点击标记。
         const response = await verifyTaskGraphNode(conn, {
           node_id: nodeId,
-          command_results: buildCommandResultsForVerify(node),
           ...(manualApproved
             ? {
                 manual_approved: true,
                 manual_approved_source: "ui_click" as const,
               }
-            : {}),
-          // 声明性证据：真实语法检查采集归 OP-32。
-          ...(node.verification_mode === "SYNTAX_CHECK"
-            ? { syntax_check_exit_code: 0 }
-            : {}),
-          // 声明性证据：真实副作用采集归 OP-32。
-          ...(node.verification_mode === "IMPLICIT_SIDE_EFFECT"
-            ? { execution_exit_code: 0 }
             : {}),
         });
         setTaskGraph(response.graph);

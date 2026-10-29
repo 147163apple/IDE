@@ -141,6 +141,7 @@ import {
   setContractLockLeaseObserver,
 } from "./core/contract-mutex";
 import { killProcessTree } from "./runner/process-tree";
+import { runCommand, E_UNAUTHORIZED_COMMAND } from "./runner/command-runner";
 import {
   addProtectionEntry,
   closeRound,
@@ -2059,8 +2060,22 @@ export class StagentDaemon {
           return;
         }
 
-        // 证据采集：文件写入、SHA-256、Scope、HEAD 全部由 Daemon 现算。
-        // 请求体里即使带了这些字段也会被忽略——前端不得自造证据。
+        // OP-32-A：命令退出码由 Daemon 在 Worktree 内实采，禁止前端伪造。
+        // 入参若包含 command_results 或 execution_exit_code，直接拒绝；
+        // MANUAL 节点的 manual_approved / manual_approved_source 放行路径除外。
+        const hasForbiddenFields =
+          body["command_results"] !== undefined ||
+          body["execution_exit_code"] !== undefined;
+        if (hasForbiddenFields) {
+          this.sendJson(res, 400, {
+            error: "forged_verification_fields_forbidden",
+            code: E_UNAUTHORIZED_COMMAND,
+            message:
+              "客户端不得伪造 command_results 或 execution_exit_code；退出码必须由 Daemon 在 Worktree 内实采",
+          });
+          return;
+        }
+
         const snapshot = this.graphEngine.getGraph();
         if (!snapshot) {
           this.sendJson(res, 404, {
@@ -2098,6 +2113,101 @@ export class StagentDaemon {
           return;
         }
 
+        const worktreePath = getWorktreePath(
+          this.repoRoot,
+          snapshot.contract_id,
+        );
+
+        // OP-32-A：安全边界与白名单匹配
+        // 合同白名单：verification_spec.commands
+        const contractCommands = contract.verification_spec.commands ?? [];
+        const allowedCommands = contractCommands.map((spec) =>
+          [spec.executable, ...spec.args].join(" ").trim(),
+        );
+
+        // 如果请求携带了可选命令别名 command_alias，查表并校验
+        const requestedAlias =
+          typeof body["command_alias"] === "string" &&
+          body["command_alias"].trim() !== ""
+            ? body["command_alias"].trim()
+            : undefined;
+
+        if (requestedAlias !== undefined) {
+          const aliasInContract = contractCommands.some(
+            (c) => c.alias === requestedAlias,
+          );
+          if (!aliasInContract) {
+            this.sendJson(res, 400, {
+              error: "unauthorized_command_alias",
+              code: E_UNAUTHORIZED_COMMAND,
+              message: `命令别名 ${requestedAlias} 不在合同白名单中`,
+            });
+            return;
+          }
+        }
+
+        // 实采命令退出码：对 COMMAND 模式节点运行其声明命令（或指定别名命令）
+        const collectedCommandResults: Array<{
+          alias: string;
+          exit_code: number;
+        }> = [];
+
+        if (node.verification_mode === "COMMAND") {
+          const targetAliases = requestedAlias
+            ? [requestedAlias]
+            : node.verification_commands;
+
+          for (const alias of targetAliases) {
+            const spec = contractCommands.find((c) => c.alias === alias);
+            if (!spec) {
+              this.sendJson(res, 400, {
+                error: "unauthorized_command_alias",
+                code: E_UNAUTHORIZED_COMMAND,
+                message: `节点所需命令别名 ${alias} 不在合同白名单中`,
+              });
+              return;
+            }
+
+            const commandStr = [spec.executable, ...spec.args].join(" ").trim();
+            const cmdCwd = spec.working_directory
+              ? path.resolve(worktreePath, spec.working_directory)
+              : worktreePath;
+
+            try {
+              const runRes = await runCommand(commandStr, {
+                cwd: cmdCwd,
+                argv: {
+                  executable: spec.executable,
+                  args: spec.args,
+                },
+                allowedCommands,
+                timeoutMs: 30_000,
+                maxOutputChars: 20_000,
+                networkPolicy:
+                  contract.authorization.execution_permissions.network_policy,
+              });
+              collectedCommandResults.push({
+                alias,
+                exit_code: runRes.exitCode,
+              });
+            } catch (err: unknown) {
+              const exitCode =
+                typeof (err as { exitCode?: number })?.exitCode === "number"
+                  ? (err as { exitCode: number }).exitCode
+                  : (err as { code?: string })?.code === "E_COMMAND_TIMEOUT"
+                    ? 124
+                    : (err as { code?: string })?.code ===
+                        E_UNAUTHORIZED_COMMAND
+                      ? 126
+                      : 1;
+              collectedCommandResults.push({
+                alias,
+                exit_code: exitCode,
+              });
+            }
+          }
+        }
+
         const collected = await collectWorktreeEvidence({
           repoRoot: this.repoRoot,
           contractId: snapshot.contract_id,
@@ -2112,22 +2222,6 @@ export class StagentDaemon {
           });
           return;
         }
-
-        const commandResults = Array.isArray(body["command_results"])
-          ? body["command_results"]
-              .filter(
-                (item): item is Record<string, unknown> =>
-                  typeof item === "object" && item !== null,
-              )
-              .map((item) => ({
-                alias: typeof item["alias"] === "string" ? item["alias"] : "",
-                exit_code:
-                  typeof item["exit_code"] === "number"
-                    ? item["exit_code"]
-                    : Number.NaN,
-              }))
-              .filter((item) => item.alias !== "")
-          : [];
 
         const sideEffects = Array.isArray(body["side_effects"])
           ? body["side_effects"]
@@ -2154,10 +2248,7 @@ export class StagentDaemon {
           file_hashes: collected.file_hashes,
           scope_valid: collected.scope_valid,
           commit_sha: collected.commit_sha,
-          command_results: commandResults,
-          ...(typeof body["execution_exit_code"] === "number"
-            ? { execution_exit_code: body["execution_exit_code"] }
-            : {}),
+          command_results: collectedCommandResults,
           ...(typeof body["expected_exit_code"] === "number"
             ? { expected_exit_code: body["expected_exit_code"] }
             : {}),
