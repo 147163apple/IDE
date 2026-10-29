@@ -144,6 +144,15 @@ export type Verdict = z.infer<typeof verdictSchema>;
 /** 外部写入证据时使用的 verdict 类型：剥离派生字段 */
 export type DraftVerdict = Omit<Verdict, "can_merge">;
 
+export const manualConfirmationRecordSchema = z.object({
+  actor: z.string().min(1),
+  confirmed_at: z.string().min(1),
+  reason: z.string().min(1),
+});
+export type ManualConfirmationRecord = z.infer<
+  typeof manualConfirmationRecordSchema
+>;
+
 export const evidenceBundleSchema = z
   .object({
     evidence_id: z.string().min(1),
@@ -172,6 +181,11 @@ export const evidenceBundleSchema = z
      * 属已登记的规格外扩展（待 A 文档回写后转正）。
      */
     tests_modified: z.boolean().optional(),
+    /**
+     * 【非 §9.2 字段】人工确认留痕记录（G2 守卫条款 / 兜底语义）：
+     * 零命令合同在完成人工确认记录（actor / confirmed_at / reason 齐全）后方可放行。
+     */
+    manual_confirmation: manualConfirmationRecordSchema.optional(),
   })
   .superRefine((bundle, ctx) => {
     // §9.2 Schema 不变式一：status !== "PASSED" 时 can_merge 必须为 false
@@ -215,7 +229,33 @@ export function deriveCanMerge(input: {
   scopePassed: boolean;
   budgetExhausted: boolean;
   forbiddenViolationCount: number;
+  /** 合同是否声明 manual_confirmation（兜底语义：在穷尽自动化手段证明后凭人工确认放行） */
+  manualConfirmationDeclared?: boolean | undefined;
+  /** 人工确认记录（需 actor / confirmed_at / reason 齐全） */
+  manualConfirmationRecord?:
+    | {
+        actor?: string;
+        confirmed_at?: string;
+        reason?: string;
+      }
+    | null
+    | undefined;
 }): boolean {
+  if (input.manualConfirmationDeclared) {
+    const rec = input.manualConfirmationRecord;
+    const isComplete =
+      Boolean(rec) &&
+      typeof rec?.actor === "string" &&
+      rec.actor.trim().length > 0 &&
+      typeof rec?.confirmed_at === "string" &&
+      rec.confirmed_at.trim().length > 0 &&
+      typeof rec?.reason === "string" &&
+      rec.reason.trim().length > 0;
+    if (!isComplete) {
+      return false;
+    }
+  }
+
   return (
     input.status === "PASSED" &&
     input.scopePassed &&

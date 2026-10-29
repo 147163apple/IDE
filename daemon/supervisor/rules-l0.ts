@@ -98,10 +98,112 @@ export const GREENFIELD_NPM_WRITABLE_DEFAULTS: readonly string[] = [
   "**/*.spec.ts",
 ];
 
-/** 绿野：仓库根尚无 package.json（无法直接跑 npm 验收） */
+/** 项目声明特征文件：只要存在任意一种，就不是绿野仓库（N-⑨ 裁决：收紧为「没有任何项目声明」） */
+export const PROJECT_DECLARATION_FILES: readonly string[] = [
+  "package.json",
+  "pyproject.toml",
+  "setup.py",
+  "requirements.txt",
+  "Cargo.toml",
+  "go.mod",
+];
+
+export interface ProjectTypeDetector {
+  readonly id: string;
+  readonly markerFiles: readonly string[];
+  readonly defaultCommands: readonly VerificationCommand[];
+}
+
+/**
+ * 项目类型检测器与命令模板映射表（G7/G8 守卫条款，对齐 N-⑦/N-⑨ 裁决）。
+ * 顺序敏感：匹配首个命中的特征文件，提供最先进的对应语言验证命令模板。
+ */
+export const PROJECT_TYPE_DETECTORS: readonly ProjectTypeDetector[] = [
+  {
+    id: "npm",
+    markerFiles: ["package.json"],
+    defaultCommands: [
+      {
+        alias: "typecheck",
+        executable: "npm",
+        args: ["run", "typecheck"],
+        expected_exit_code: 0,
+        timeout_seconds: 120,
+      },
+      {
+        alias: "test",
+        executable: "npm",
+        args: ["test"],
+        expected_exit_code: 0,
+        timeout_seconds: 300,
+      },
+    ],
+  },
+  {
+    id: "python",
+    markerFiles: ["pyproject.toml", "setup.py", "requirements.txt"],
+    defaultCommands: [
+      {
+        alias: "test",
+        executable: "pytest",
+        args: [],
+        expected_exit_code: 0,
+        timeout_seconds: 180,
+      },
+    ],
+  },
+  {
+    id: "rust",
+    markerFiles: ["Cargo.toml"],
+    defaultCommands: [
+      {
+        alias: "test",
+        executable: "cargo",
+        args: ["test"],
+        expected_exit_code: 0,
+        timeout_seconds: 300,
+      },
+    ],
+  },
+  {
+    id: "go",
+    markerFiles: ["go.mod"],
+    defaultCommands: [
+      {
+        alias: "test",
+        executable: "go",
+        args: ["test", "./..."],
+        expected_exit_code: 0,
+        timeout_seconds: 180,
+      },
+    ],
+  },
+];
+
+/** 检测仓库类型：按检测器顺序匹配首个命中的特征文件 */
+export function detectProjectType(
+  repoRoot: string,
+): ProjectTypeDetector | null {
+  try {
+    for (const detector of PROJECT_TYPE_DETECTORS) {
+      for (const marker of detector.markerFiles) {
+        if (fs.existsSync(path.join(repoRoot, marker))) {
+          return detector;
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** 绿野（收紧判据，对齐 N-⑨ / G7）：仓库根没有任何项目声明文件 */
 export function isGreenfieldRepo(repoRoot: string): boolean {
   try {
-    return !fs.existsSync(path.join(repoRoot, "package.json"));
+    return !PROJECT_DECLARATION_FILES.some((file) =>
+      fs.existsSync(path.join(repoRoot, file)),
+    );
   } catch {
     return false;
   }
@@ -310,10 +412,13 @@ export function buildL0Plan(input: L0DraftInput): L0DraftPlan {
     mergeBaselineProtectIntoForbidden(input.repoRoot, baseForbidden),
   );
 
+  const detectedType = detectProjectType(input.repoRoot);
   const commands =
     input.commands !== undefined && input.commands.length > 0
       ? input.commands
-      : [...DEFAULT_DRAFT_COMMANDS];
+      : detectedType !== null
+        ? [...detectedType.defaultCommands]
+        : [...DEFAULT_DRAFT_COMMANDS];
 
   // 绿野 + npm 验收：可写范围与 package.json / 测试路径对齐，避免验收要求写不了的文件
   const effectiveWritable = alignWritableWithNpmVerification({

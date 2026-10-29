@@ -47,11 +47,11 @@ export function buildProposalFromContract(
   const areaId = `area-${slugify(contract.intent.title, "main")}`;
   const writable = contract.authorization.file_system_scope.writable_paths;
   const criteria = contract.intent.acceptance_criteria;
-  const commandAliases = (contract.verification_spec?.commands ?? [])
+  const declaredCommands = contract.verification_spec?.commands ?? [];
+  const commandAliases = declaredCommands
     .map((c) => c.alias)
     .filter((a): a is string => typeof a === "string" && a.length > 0);
-  const verificationCommands =
-    commandAliases.length > 0 ? commandAliases : ["verify"];
+  const isManualOnly = declaredCommands.length === 0;
 
   const targets: Array<{ title: string; files: string[] }> = [];
   if (writable.length > 0) {
@@ -77,6 +77,22 @@ export function buildProposalFromContract(
 
   const nodes: SupervisorProposalNode[] = targets.map((target, index) => {
     const prev = index === 0 ? [] : [`n${index}`];
+    if (isManualOnly) {
+      // G4 守卫条款（对齐架构 §6.4 D-5 与 N-⑦ 裁决）：
+      // commands 为空时，生成 MANUAL_REVIEW 节点（verification_mode: "MANUAL"），
+      // 不挂占位 verify 命令，由用户在 UI 上显式确认。
+      return {
+        node_id: `n${index + 1}`,
+        title: target.title,
+        kind: "MANUAL_REVIEW",
+        depends_on: prev,
+        functional_area: areaId,
+        target_files: target.files,
+        verification_mode: "MANUAL",
+        verification_commands: [],
+      };
+    }
+
     return {
       node_id: `n${index + 1}`,
       title: target.title,
@@ -85,7 +101,8 @@ export function buildProposalFromContract(
       functional_area: areaId,
       target_files: target.files,
       verification_mode: "COMMAND",
-      verification_commands: [...verificationCommands],
+      verification_commands:
+        commandAliases.length > 0 ? [...commandAliases] : ["verify"],
     };
   });
 

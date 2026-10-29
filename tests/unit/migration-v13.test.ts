@@ -64,6 +64,7 @@ const APPROVED_LEGACY = {
 describe("needsV13Migration", () => {
   it("只识别 1.2.0", () => {
     expect(needsV13Migration({ schema_version: "1.2.0" })).toBe(true);
+    expect(needsV13Migration({ schema_version: "1.3.1" })).toBe(false);
     expect(needsV13Migration({ schema_version: "1.3.0" })).toBe(false);
     expect(needsV13Migration({ schema_version: "1.1.3" })).toBe(false);
     expect(needsV13Migration(null)).toBe(false);
@@ -199,9 +200,9 @@ describe("版本与失败路径", () => {
     const result = migrateContractToV13(v12Raw("DRAFT", { status: "DRAFT" }));
     expect(result.from).toBe("1.2.0");
     expect(result.to).toBe(SOFTWARE_CONTRACT_SCHEMA_VERSION);
-    expect(result.contract.schema_version).toBe("1.3.0");
+    expect(result.contract.schema_version).toBe("1.3.1");
     expect(softwareContractSchema.parse(result.contract).schema_version).toBe(
-      "1.3.0",
+      "1.3.1",
     );
   });
 

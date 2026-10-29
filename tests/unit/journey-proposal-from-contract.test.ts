@@ -48,4 +48,23 @@ describe("TASK-S.6 buildProposalFromContract（全灰建图原料）", () => {
     expect(proposal.nodes[0]!.verification_commands).toEqual(["test"]);
     expect(proposal.nodes[0]!.target_files).toEqual(["src/feature/a.ts"]);
   });
+
+  it("commands 为空时生成 MANUAL_REVIEW 节点（MANUAL 模式，无占位命令）", () => {
+    const contract = createContractDraft({
+      title: "人工确认需求",
+      description: "兜底人工确认",
+      acceptanceCriteria: ["人工验证界面"],
+      writablePaths: ["src/ui/manual.tsx"],
+      commands: [],
+      manualConfirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason"],
+      },
+    });
+    const proposal = buildProposalFromContract(contract);
+    expect(proposal.nodes.length).toBe(1);
+    expect(proposal.nodes[0]!.kind).toBe("MANUAL_REVIEW");
+    expect(proposal.nodes[0]!.verification_mode).toBe("MANUAL");
+    expect(proposal.nodes[0]!.verification_commands).toEqual([]);
+  });
 });

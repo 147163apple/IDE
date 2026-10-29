@@ -45,7 +45,10 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
         {
           alias: "verify",
           executable: "node",
-          args: ["-e", "process.exit(0)"],
+          args: [
+            "-e",
+            "require('fs').writeFileSync('src/a.ts', 'export const a = 2;');process.exit(0)",
+          ],
           expected_exit_code: 0,
           timeout_seconds: 30,
         },
@@ -636,5 +639,88 @@ describe("M8 / TASK-D.2 Squash-Merge 与 Git Trailer", () => {
       TargetBranchAdvancedError,
     );
     expect(dirtyOutsideStagent(repo)).toEqual([]);
+  });
+
+  it("G2/G3 守卫条款：声明 manual_confirmation 的合同，证据快照缺少确认记录时拒绝合并；齐全时打上 Trailer", async () => {
+    const draft = createContractDraft({
+      title: "人工确认合并测试",
+      description: "merge with manual confirmation",
+      acceptanceCriteria: ["manual review"],
+      writablePaths: ["src/**"],
+      commands: [
+        {
+          alias: "verify",
+          executable: "node",
+          args: ["-e", "process.exit(0)"],
+          expected_exit_code: 0,
+          timeout_seconds: 30,
+        },
+      ],
+      manualConfirmation: {
+        reason_required: true,
+        capture_evidence: ["actor", "confirmed_at", "reason"],
+      },
+    });
+    const contract = softwareContractSchema.parse({
+      ...draft,
+      lifecycle_state: "PENDING_APPROVAL",
+      approval: { status: "PENDING_REVIEW" },
+    });
+    store.save(contract);
+    await orchestrator.approve(contract.contract_id, "tina");
+
+    const worktree = path.join(
+      repo,
+      ".stagent",
+      "worktrees",
+      `task-${contract.contract_id}`,
+    );
+    fs.mkdirSync(path.join(worktree, "src"), { recursive: true });
+    fs.writeFileSync(
+      path.join(worktree, "src", "b.ts"),
+      "export const b = 2;\n",
+    );
+
+    const { evidence } = await orchestrator.execute(contract.contract_id);
+
+    // 缺少 manual_confirmation 记录时拒绝合并
+    await expect(
+      squashMerge({
+        repoRoot: repo,
+        contractId: contract.contract_id,
+        evidence,
+        reviewer: "tina",
+      }),
+    ).rejects.toThrow(/E_CANNOT_MERGE/);
+
+    // 补齐 manual_confirmation 记录后写入快照
+    const evidencePath = path.join(
+      repo,
+      ".stagent",
+      "evidence",
+      `${contract.contract_id}-${evidence.evidence_id}.json`,
+    );
+    const snap = JSON.parse(fs.readFileSync(evidencePath, "utf-8"));
+    snap.manual_confirmation = {
+      actor: "tina",
+      confirmed_at: "2026-10-28T12:00:00.000Z",
+      reason: "人工验收全部通过",
+    };
+    snap.verdict.can_merge = true;
+    fs.writeFileSync(evidencePath, JSON.stringify(snap, null, 2));
+
+    const result = await squashMerge({
+      repoRoot: repo,
+      contractId: contract.contract_id,
+      evidence: snap,
+      reviewer: "tina",
+    });
+    expect(result.commitSha).toBeTruthy();
+
+    const commitMsg = git(repo, ["log", "-1", "--pretty=%B"]);
+    expect(commitMsg).toContain("Stagent-Manual-Confirmation-Actor: tina");
+    expect(commitMsg).toContain(
+      "Stagent-Manual-Confirmation-Confirmed-At: 2026-10-28T12:00:00.000Z",
+    );
   });
 });

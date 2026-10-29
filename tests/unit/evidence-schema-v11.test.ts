@@ -32,7 +32,10 @@ const OPTIONAL_TOP_LEVEL = [
 ] as const;
 
 /** 非 §9.2 字段：已登记的规格外扩展（Test Integrity Guard） */
-const REGISTERED_EXTENSIONS = ["tests_modified"] as const;
+const REGISTERED_EXTENSIONS = [
+  "tests_modified",
+  "manual_confirmation",
+] as const;
 
 function evidence(
   overrides: Partial<EvidenceBundleV11> = {},
@@ -283,6 +286,47 @@ describe("can_merge 派生不变式（§9.2）", () => {
           forbiddenViolationCount: 0,
         },
         expected: false,
+      },
+      {
+        input: {
+          status: "PASSED",
+          scopePassed: true,
+          budgetExhausted: false,
+          forbiddenViolationCount: 0,
+          manualConfirmationDeclared: true,
+          manualConfirmationRecord: undefined,
+        },
+        expected: false,
+      },
+      {
+        input: {
+          status: "PASSED",
+          scopePassed: true,
+          budgetExhausted: false,
+          forbiddenViolationCount: 0,
+          manualConfirmationDeclared: true,
+          manualConfirmationRecord: {
+            actor: "alice",
+            confirmed_at: "2026-10-28T00:00:00Z",
+            reason: "", // 空理由
+          },
+        },
+        expected: false,
+      },
+      {
+        input: {
+          status: "PASSED",
+          scopePassed: true,
+          budgetExhausted: false,
+          forbiddenViolationCount: 0,
+          manualConfirmationDeclared: true,
+          manualConfirmationRecord: {
+            actor: "alice",
+            confirmed_at: "2026-10-28T00:00:00Z",
+            reason: "人工核实无误",
+          },
+        },
+        expected: true,
       },
       {
         input: {

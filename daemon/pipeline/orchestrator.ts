@@ -9,6 +9,7 @@ import type {
 import {
   evidenceBundleSchema,
   deriveCanMerge,
+  type ManualConfirmationRecord,
   type EvidenceBundle,
 } from "../../src/lib/evidence.schema";
 import { ContractStore } from "./contract-store";
@@ -861,7 +862,10 @@ export class ContractOrchestrator {
     const modifiedFiles = [...gateway.getModifiedFiles()];
     const testsModified =
       gateway.wasTestsModified() || worktreeChanged.some(isTestPath);
-    const allPassed = verificationResults.every((r) => r.passed);
+    const zeroCommands = verificationResults.length === 0;
+    // G1 守卫条款：verificationResults 为空时不能取 every 的空真值 true（防假绿）
+    const allPassed =
+      !zeroCommands && verificationResults.every((r) => r.passed);
     const tripped = loopGuard.isTripped() || costMonitor.isTripped();
     // 只有「除端口冲突外没有别的失败」时，才把整轮归因为端口冲突；
     // 若同时存在断言失败，仍按 FAILED/UNSAFE_EXECUTION 处理。
@@ -879,6 +883,10 @@ export class ContractOrchestrator {
         current.contract_revision,
       ) !== null;
 
+    // 零命令合同（兜底语义）：不得判 PASSED，置为非 PASSED 的兜底阻断状态，
+    // 直到补齐人工确认记录（对齐 N-⑩ 与 G1 守卫条款）。
+    const zeroCommandsBlocked = zeroCommands;
+
     // 端口冲突属于环境问题，不按断言失败处理：BLOCKED + E_PORT_CONFLICT，
     // 由用户清理端口后重跑，而不是让 Worker 误以为用例写错去改代码。
     const status = interceptorBlocked
@@ -887,24 +895,28 @@ export class ContractOrchestrator {
         ? "BLOCKED"
         : portConflict
           ? "BLOCKED"
-          : allPassed
-            ? "PASSED"
-            : tripped
-              ? "BLOCKED"
-              : "FAILED";
+          : zeroCommandsBlocked
+            ? "BLOCKED"
+            : allPassed
+              ? "PASSED"
+              : tripped
+                ? "BLOCKED"
+                : "FAILED";
     const reasonCode = interceptorBlocked
       ? ("UNSAFE_EXECUTION" as const)
       : threatBlocked
         ? ("UNSAFE_EXECUTION" as const)
         : portConflict
           ? ("UNSAFE_EXECUTION" as const)
-          : allPassed
+          : zeroCommandsBlocked
             ? undefined
-            : costMonitor.isTripped()
-              ? ("BUDGET_EXHAUSTED" as const)
-              : loopGuard.isTripped()
-                ? ("VERIFICATION_RETRY_LIMIT" as const)
-                : ("UNSAFE_EXECUTION" as const);
+            : allPassed
+              ? undefined
+              : costMonitor.isTripped()
+                ? ("BUDGET_EXHAUSTED" as const)
+                : loopGuard.isTripped()
+                  ? ("VERIFICATION_RETRY_LIMIT" as const)
+                  : ("UNSAFE_EXECUTION" as const);
 
     const evidence = await this.writeEvidence(
       current,
@@ -920,9 +932,11 @@ export class ContractOrchestrator {
             ? `验证被威胁守卫阻断（${threatBlockedAliases.join(", ")}）：命令可能在受控边界之外，已拒绝执行且未产生子进程`
             : portConflict
               ? `验证被端口占用阻断（${portConflictAliases.join(", ")}）：这是环境冲突，不是断言失败。请停止占用端口的进程后重试`
-              : allPassed
-                ? `All ${verificationResults.length} verification command(s) passed`
-                : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
+              : zeroCommandsBlocked
+                ? "零命令合同处于兜底等待人工确认状态，未执行自动化验证"
+                : allPassed
+                  ? `All ${verificationResults.length} verification command(s) passed`
+                  : `Verification failed (${verificationResults.filter((r) => !r.passed).length} command(s))`,
         verificationResults,
         // 由 TASK-W.2b 的未跟踪文件审计派生，不再写死 true
         scopePassed: postVerifyScope.passed,
@@ -940,8 +954,14 @@ export class ContractOrchestrator {
     let reworkSnap: ReworkCounterSnapshot | undefined;
     let escalated = false;
     let reworkRequired = false;
+    // TASK-C.15b：断言未过（非端口/威胁/拦截/零命令兜底）→ 返工计数；超限升 ESCALATED。
+    // 注意：零命令合同不对其计返工（G1 守卫条款与 N-⑩ 裁决）。
     const assertionFailed =
-      !allPassed && !portConflict && !threatBlocked && !interceptorBlocked;
+      !allPassed &&
+      !portConflict &&
+      !threatBlocked &&
+      !interceptorBlocked &&
+      !zeroCommandsBlocked;
     if (assertionFailed) {
       reworkSnap = recordVerificationRoundFailure(
         this.repoRoot,
@@ -955,11 +975,14 @@ export class ContractOrchestrator {
       if (existing) reworkSnap = existing.snapshot();
     }
 
+    // G1 守卫条款：零命令合同 nextState 绝不能进入 AUDITED
     const nextState = allPassed
       ? "AUDITED"
       : tripped || escalated
         ? "PENDING_RESUME"
-        : "EXECUTING";
+        : zeroCommandsBlocked
+          ? "PENDING_RESUME"
+          : "EXECUTING";
 
     if (nextState === "PENDING_RESUME") {
       this.revokeExecTokenFor(contractId);
@@ -1416,6 +1439,7 @@ export class ContractOrchestrator {
       modifiedFiles: string[];
       /** 本任务是否修改过测试文件（写入 Evidence 供核销人预警复核） */
       testsModified?: boolean;
+      manualConfirmationRecord?: ManualConfirmationRecord;
       /** TASK-W.4：运行时降级后 Evidence 记录实际控制模式 */
       workerControlMode?: "GATEWAY_ENFORCED" | "UNCONTROLLED_EXTERNAL";
     },
@@ -1478,6 +1502,9 @@ export class ContractOrchestrator {
           scopePassed: input.scopePassed,
           budgetExhausted: costMonitor?.isTripped() ?? false,
           forbiddenViolationCount: input.forbiddenViolations.length,
+          manualConfirmationDeclared:
+            contract.verification_spec.manual_confirmation !== undefined,
+          manualConfirmationRecord: input.manualConfirmationRecord,
         }),
         summary: input.summary,
         ...(input.reasonCode === undefined
@@ -1509,6 +1536,9 @@ export class ContractOrchestrator {
           passed: r.passed,
         })),
       tests_modified: input.testsModified ?? false,
+      ...(input.manualConfirmationRecord === undefined
+        ? {}
+        : { manual_confirmation: input.manualConfirmationRecord }),
       git_info: {
         base_commit_sha:
           this.syncGit(this.repoRoot, [
