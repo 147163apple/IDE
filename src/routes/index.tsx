@@ -1992,8 +1992,8 @@ ${trimmed}`
 
   /**
    * C.10o：提交核销 → Daemon 现算写入/Scope/SHA，再判定点亮。
-   * COMMAND 退出码按节点声明别名由本入口提交（与 C.7 API 口径一致）；
-   * 未写入仍会黄条拒绝，不假绿。
+   * COMMAND、SYNTAX_CHECK 与 IMPLICIT_SIDE_EFFECT 的退出码暂为声明性证据，
+   * 真实采集归 OP-32；MANUAL 必须经 UI 单独明确确认（OP-27）。
    */
   const handleVerifyGraphNode = useCallback(
     async (nodeId: string) => {
@@ -2006,15 +2006,27 @@ ${trimmed}`
           setTaskGraphError(`图中不存在节点 ${nodeId}`);
           return;
         }
+        // MANUAL 节点必须经过独立的 UI 明确确认；取消时完全不提交 verify。
+        const manualApproved =
+          node.verification_mode === "MANUAL"
+            ? window.confirm(`确认已完成此人工检查：${node.title}？`)
+            : false;
+        if (node.verification_mode === "MANUAL" && !manualApproved) return;
+
         const response = await verifyTaskGraphNode(conn, {
           node_id: nodeId,
           command_results: buildCommandResultsForVerify(node),
-          ...(node.verification_mode === "MANUAL"
-            ? { manual_approved: true }
+          ...(manualApproved
+            ? {
+                manual_approved: true,
+                manual_approved_source: "ui_click" as const,
+              }
             : {}),
+          // 声明性证据：真实语法检查采集归 OP-32。
           ...(node.verification_mode === "SYNTAX_CHECK"
             ? { syntax_check_exit_code: 0 }
             : {}),
+          // 声明性证据：真实副作用采集归 OP-32。
           ...(node.verification_mode === "IMPLICIT_SIDE_EFFECT"
             ? { execution_exit_code: 0 }
             : {}),

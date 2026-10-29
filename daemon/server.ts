@@ -2161,8 +2161,11 @@ export class StagentDaemon {
           ...(typeof body["expected_exit_code"] === "number"
             ? { expected_exit_code: body["expected_exit_code"] }
             : {}),
-          ...(body["manual_approved"] === true
-            ? { manual_approved: true }
+          ...(typeof body["manual_approved"] === "boolean"
+            ? { manual_approved: body["manual_approved"] }
+            : {}),
+          ...(body["manual_approved_source"] === "ui_click"
+            ? { manual_approved_source: "ui_click" as const }
             : {}),
           ...(typeof body["syntax_check_exit_code"] === "number"
             ? { syntax_check_exit_code: body["syntax_check_exit_code"] }

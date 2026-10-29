@@ -427,6 +427,35 @@ describe("点亮充要条件（§3.2.2）", () => {
 });
 
 describe("隐式副作用 / 人工复核 / Fast Path 模式", () => {
+  it("MANUAL 节点未显式确认时 verify 不点亮", () => {
+    const proposal = baseProposal();
+    proposal.nodes = [
+      {
+        node_id: "manual",
+        title: "人工复核",
+        kind: "MANUAL_REVIEW",
+        depends_on: [],
+        functional_area: "auth",
+        target_files: ["src/auth/migration.ts"],
+        verification_mode: "MANUAL",
+        verification_commands: [],
+      },
+    ];
+    const engine = new TaskGraphEngine({ repoRoot });
+    engine.createFromProposal(proposal);
+    engine.startNode("manual");
+
+    const result = engine.verifyNode(
+      "manual",
+      passingEvidence(["src/auth/migration.ts"], { manual_approved: false }),
+    );
+    expect(result.result.illuminated).toBe(false);
+    if (!result.result.illuminated) {
+      expect(result.result.code).toBe("E_MANUAL_APPROVAL_MISSING");
+    }
+    expect(nodeOf(result.graph, "manual").state).not.toBe("ILLUMINATED");
+  });
+
   it("COMMAND_EXECUTION 隐式模式：无后验命令时必须有副作用变化", () => {
     const proposal = baseProposal();
     proposal.nodes = [

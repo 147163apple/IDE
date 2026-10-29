@@ -65,6 +65,8 @@ export interface IlluminationInput {
   commit_sha: string | null;
   /** MANUAL_REVIEW：用户是否显式点击【确认此项】 */
   manual_approved?: boolean;
+  /** 来源声明；Daemon 无法独立鉴别浏览器事件，仅记录 UI 提交的来源标记。 */
+  manual_approved_source?: "ui_click";
   /** FAST_PATH：轻量语法/类型检查退出码 */
   syntax_check_exit_code?: number;
   /** COMMAND_EXECUTION 隐式模式：预期物理副作用 */

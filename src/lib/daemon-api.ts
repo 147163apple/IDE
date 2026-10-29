@@ -1364,7 +1364,10 @@ export interface TaskGraphVerifyRequest {
   command_results: Array<{ alias: string; exit_code: number }>;
   execution_exit_code?: number;
   expected_exit_code?: number;
+  /** MANUAL 仅在用户明确确认后提交；不提交代表未确认。 */
   manual_approved?: boolean;
+  /** 来源标记便于证据审计；Daemon 无法独立验证浏览器点击事件。 */
+  manual_approved_source?: "ui_click";
   syntax_check_exit_code?: number;
   side_effects?: Array<{
     path: string;
