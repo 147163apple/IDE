@@ -63,12 +63,27 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "stagent-op32-test-"));
     // Init git repo
-    execFileSync("git", ["init", "-b", "main"], { cwd: tempDir, stdio: "ignore" });
-    execFileSync("git", ["config", "user.name", "Tester"], { cwd: tempDir, stdio: "ignore" });
-    execFileSync("git", ["config", "user.email", "tester@example.com"], { cwd: tempDir, stdio: "ignore" });
+    execFileSync("git", ["init", "-b", "main"], {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["config", "user.name", "Tester"], {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["config", "user.email", "tester@example.com"], {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
     fs.writeFileSync(path.join(tempDir, "README.md"), "# Test\n");
-    execFileSync("git", ["add", "README.md"], { cwd: tempDir, stdio: "ignore" });
-    execFileSync("git", ["commit", "-m", "initial commit"], { cwd: tempDir, stdio: "ignore" });
+    execFileSync("git", ["add", "README.md"], {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["commit", "-m", "initial commit"], {
+      cwd: tempDir,
+      stdio: "ignore",
+    });
 
     // Store a valid contract via ContractStore using createContractDraft
     const store = new ContractStore(tempDir);
@@ -240,11 +255,25 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     expect(startRes.statusCode).toBe(200);
 
     // 在 Worktree 中写入 target_file，使文件存在
-    const worktreePath = path.join(tempDir, ".stagent", "worktrees", `task-${contractId}`);
+    const worktreePath = path.join(
+      tempDir,
+      ".stagent",
+      "worktrees",
+      `task-${contractId}`,
+    );
     fs.mkdirSync(path.join(worktreePath, "src"), { recursive: true });
-    fs.writeFileSync(path.join(worktreePath, "src", "index.ts"), "export const a = 1;\n");
-    execFileSync("git", ["add", "src/index.ts"], { cwd: worktreePath, stdio: "ignore" });
-    execFileSync("git", ["commit", "-m", "write index.ts"], { cwd: worktreePath, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(worktreePath, "src", "index.ts"),
+      "export const a = 1;\n",
+    );
+    execFileSync("git", ["add", "src/index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["commit", "-m", "write index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
 
     const verifyRes = await postJson(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
@@ -270,11 +299,25 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     expect(startRes.statusCode).toBe(200);
 
     // 在 Worktree 中写入 target_file 并提交
-    const worktreePath = path.join(tempDir, ".stagent", "worktrees", `task-${contractId}`);
+    const worktreePath = path.join(
+      tempDir,
+      ".stagent",
+      "worktrees",
+      `task-${contractId}`,
+    );
     fs.mkdirSync(path.join(worktreePath, "src"), { recursive: true });
-    fs.writeFileSync(path.join(worktreePath, "src", "index.ts"), "export const ok = true;\n");
-    execFileSync("git", ["add", "src/index.ts"], { cwd: worktreePath, stdio: "ignore" });
-    execFileSync("git", ["commit", "-m", "feat: pass index.ts"], { cwd: worktreePath, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(worktreePath, "src", "index.ts"),
+      "export const ok = true;\n",
+    );
+    execFileSync("git", ["add", "src/index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["commit", "-m", "feat: pass index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
 
     const verifyRes = await postJson(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
@@ -297,11 +340,25 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
     expect(startRes.statusCode).toBe(200);
 
-    const worktreePath = path.join(tempDir, ".stagent", "worktrees", `task-${contractId}`);
+    const worktreePath = path.join(
+      tempDir,
+      ".stagent",
+      "worktrees",
+      `task-${contractId}`,
+    );
     fs.mkdirSync(path.join(worktreePath, "src"), { recursive: true });
-    fs.writeFileSync(path.join(worktreePath, "src", "index.ts"), "export const m = true;\n");
-    execFileSync("git", ["add", "src/index.ts"], { cwd: worktreePath, stdio: "ignore" });
-    execFileSync("git", ["commit", "-m", "manual commit"], { cwd: worktreePath, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(worktreePath, "src", "index.ts"),
+      "export const m = true;\n",
+    );
+    execFileSync("git", ["add", "src/index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["commit", "-m", "manual commit"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
 
     // 显式点击确认 (ui_click)
     const verifyApproved = await postJson(
@@ -327,11 +384,25 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
     expect(startRes.statusCode).toBe(200);
 
-    const worktreePath = path.join(tempDir, ".stagent", "worktrees", `task-${contractId}`);
+    const worktreePath = path.join(
+      tempDir,
+      ".stagent",
+      "worktrees",
+      `task-${contractId}`,
+    );
     fs.mkdirSync(path.join(worktreePath, "src"), { recursive: true });
-    fs.writeFileSync(path.join(worktreePath, "src", "index.ts"), "export const m = true;\n");
-    execFileSync("git", ["add", "src/index.ts"], { cwd: worktreePath, stdio: "ignore" });
-    execFileSync("git", ["commit", "-m", "manual commit"], { cwd: worktreePath, stdio: "ignore" });
+    fs.writeFileSync(
+      path.join(worktreePath, "src", "index.ts"),
+      "export const m = true;\n",
+    );
+    execFileSync("git", ["add", "src/index.ts"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["commit", "-m", "manual commit"], {
+      cwd: worktreePath,
+      stdio: "ignore",
+    });
 
     const verifyUnapproved = await postJson(
       `http://127.0.0.1:${info.port}/api/graph/verify`,
@@ -340,7 +411,8 @@ describe("OP-32-A: daemon task-graph verify command execution", () => {
     );
     expect(verifyUnapproved.statusCode).toBe(200);
     expect((verifyUnapproved.body as any).illuminated).toBe(false);
-    expect((verifyUnapproved.body as any).code).toBe("E_MANUAL_APPROVAL_MISSING");
+    expect((verifyUnapproved.body as any).code).toBe(
+      "E_MANUAL_APPROVAL_MISSING",
+    );
   });
-
 });
