@@ -190,6 +190,7 @@
 - **空验证集不得点亮**；Worker「我说完成」不够——须 Evidence 核销后由 Supervisor 提案点亮，Daemon 裁决。
 - 红队质询：查假测试/空断言、既有回归、未跟踪文件是否进 Scope；超时**不静默放行**。
 - `can_merge` 只能由 Daemon 依据真实退出码派生（ADR-0005）。
+  - 注：`manual_confirmation` 人工确认记录为 `can_merge` 的前置必要条件（合同声明 `manual_confirmation` 时，确认记录不齐全则 `can_merge=false`），不构成退出码派生规则之外的第二种派生源。
 
 ---
 
