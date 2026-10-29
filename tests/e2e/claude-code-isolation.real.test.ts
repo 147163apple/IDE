@@ -113,6 +113,8 @@ function run(prompt: string, control: boolean, opts: RunOpts = {}): RunOut {
   const t = plant(opts);
   const launch = new ClaudeCodeAdapter({
     tmpRoot: t.root,
+    // TASK-J.1：本套件验证 W.5a 的 Worker 隔离口径，显式声明可写角色
+    role: "worker",
     ...(opts.allowBash ? { allowBash: true } : {}),
   }).buildLaunch({
     prompt,
@@ -312,6 +314,8 @@ describe.skipIf(!REAL)(
         const a = new ClaudeCodeAdapter({
           tmpRoot: os.tmpdir(),
           configDir: cfgDir,
+          // TASK-J.1：续接用例验证 Worker 配置目录，与右栏只读无关
+          role: "worker",
         });
         const l = a.buildLaunch({ prompt, cwd: proj, nativeSessionId: sid });
         // 子进程不继承 CLAUDE_CONFIG_DIR 以外的配置位置：只靠适配器给的 env

@@ -12,6 +12,8 @@ export class BaselineChatAdapter implements ChatAdapter {
     return {
       id: "baseline",
       label: "自研保底 Agent（OpenAI 兼容，只聊天）",
+      // TASK-J.1：只出文本、不改文件 → 右栏可用的只读搭档
+      tool_mode: "read_only",
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: !!key,

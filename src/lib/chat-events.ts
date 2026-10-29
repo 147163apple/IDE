@@ -40,11 +40,20 @@ export interface ChatAdapterInfo {
   id: string;
   label: string;
   control_mode: "GATEWAY_ENFORCED" | "UNCONTROLLED_EXTERNAL";
+  /**
+   * TASK-J.1：该适配器在方案工作台里能做什么。
+   * `read_only` = 只读工具集（可作右栏搭档）；`read_write` = 具备写/Shell 能力，
+   * 不允许被选为右栏搭档。历史持久化数据可能没有此字段，按未知处理（不当作 read_write）。
+   */
+  tool_mode?: ChatToolMode;
   /** 黑盒实测通过的版本与日期；空字符串 = 未实测 */
   verified_on: string;
   available: boolean;
   unavailable_reason?: string;
 }
+
+/** TASK-J.1：适配器工具能力（右栏只允许 read_only） */
+export type ChatToolMode = "read_only" | "read_write";
 
 export interface ChatSessionSummary {
   id: string;

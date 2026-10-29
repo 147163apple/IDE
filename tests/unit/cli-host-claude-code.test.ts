@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   CLAUDE_CODE_VERIFIED_ON,
   ClaudeCodeAdapter,
+  type ClaudeCodeAdapterOptions,
   FORWARD_ENV,
   HOOK_SCRIPT,
   redactSecret,
@@ -53,6 +54,8 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
   const adapter = new ClaudeCodeAdapter({
     apiKey: () => KEY,
     tmpRoot: os.tmpdir(),
+    // TASK-J.1 起默认角色是 partner（只读）；本节沿用 W.5a 的 Worker 口径
+    role: "worker",
   });
   const launch = adapter.buildLaunch({
     prompt: "hi",
@@ -141,6 +144,97 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
     expect(
       new ClaudeCodeAdapter({ apiKey: () => undefined }).info().available,
     ).toBe(false);
+  });
+});
+
+describe("TASK-J.1 右栏搭档只读（partner）argv 与 settings", () => {
+  const build = (opts: Partial<ClaudeCodeAdapterOptions> = {}) =>
+    new ClaudeCodeAdapter({
+      apiKey: () => KEY,
+      tmpRoot: os.tmpdir(),
+      ...opts,
+    }).buildLaunch({ prompt: "hi", cwd: "/repo", nativeSessionId: null });
+  const settingsOf = (l: ReturnType<typeof build>) =>
+    JSON.parse(fs.readFileSync(l.settingsPath, "utf8")) as {
+      permissions: { deny: string[]; defaultMode: string };
+    };
+
+  it("默认角色是 partner：--tools / --allowedTools 恰为 Read,Glob,Grep，且没有 LS", () => {
+    const l = build();
+    const tools = l.args[l.args.indexOf("--tools") + 1] ?? "";
+    expect(tools.split(",")).toEqual(["Read", "Glob", "Grep"]);
+    expect(l.args[l.args.indexOf("--allowedTools") + 1]).toBe(tools);
+    expect(tools.split(",")).not.toContain("LS");
+  });
+
+  it("--disallowedTools 覆盖写类工具、Shell 与网络/子代理；--permission-mode 不是 acceptEdits", () => {
+    const l = build();
+    const disallowed = (
+      l.args[l.args.indexOf("--disallowedTools") + 1] ?? ""
+    ).split(",");
+    for (const tool of [
+      "Edit",
+      "Write",
+      "MultiEdit",
+      "NotebookEdit",
+      "Bash",
+      "Task",
+      "TodoWrite",
+      "WebFetch",
+      "WebSearch",
+    ]) {
+      expect(disallowed, `--disallowedTools 应含 ${tool}`).toContain(tool);
+    }
+    const mode = l.args[l.args.indexOf("--permission-mode") + 1];
+    expect(mode).toBe("default");
+    expect(mode).not.toBe("acceptEdits");
+  });
+
+  it("settings.permissions.deny 含全部写类工具与 Bash，defaultMode=default", () => {
+    const s = settingsOf(build());
+    expect(s.permissions.deny).toEqual(
+      expect.arrayContaining([
+        "Edit",
+        "Write",
+        "MultiEdit",
+        "NotebookEdit",
+        "Bash",
+        "TodoWrite",
+        "Task",
+        "WebFetch",
+        "WebSearch",
+      ]),
+    );
+    expect(s.permissions.defaultMode).toBe("default");
+  });
+
+  it("env 标记 partner；误传 allowBash 也不能放宽只读", () => {
+    const l = build({ allowBash: true });
+    expect(l.env["STAGENT_HOOK_ROLE"]).toBe("partner");
+    expect(l.env["STAGENT_HOOK_ALLOW_BASH"]).toBeUndefined();
+    expect((l.args[l.args.indexOf("--tools") + 1] ?? "").split(",")).toEqual([
+      "Read",
+      "Glob",
+      "Grep",
+    ]);
+    expect(new ClaudeCodeAdapter({ apiKey: () => KEY }).info().tool_mode).toBe(
+      "read_only",
+    );
+  });
+
+  it("worker 角色保持可写：既有 W.5a 行为不回归", () => {
+    const l = build({ role: "worker" });
+    const tools = (l.args[l.args.indexOf("--tools") + 1] ?? "").split(",");
+    expect(tools).toEqual(expect.arrayContaining(["Read", "Edit", "Write"]));
+    expect(tools).not.toContain("Bash");
+    expect(tools).not.toContain("LS");
+    expect(l.args[l.args.indexOf("--permission-mode") + 1]).toBe("acceptEdits");
+    expect(settingsOf(l).permissions.defaultMode).toBe("acceptEdits");
+    expect(l.env["STAGENT_HOOK_ROLE"]).toBeUndefined();
+    expect(
+      new ClaudeCodeAdapter({ apiKey: () => KEY, role: "worker" }).info()
+        .tool_mode,
+    ).toBe("read_write");
   });
 });
 

@@ -25,18 +25,28 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
  *
  * control_mode 在 4 类绕过负例于真实 CLI 版本实测通过前恒为 UNCONTROLLED_EXTERNAL，
  * verified_on 为空。
+ *
+ * TASK-J.1：新增 `role`（默认 `partner`）。partner 是右栏搭档的唯一形态——
+ * `--tools` 仅 Read/Glob/Grep、`--permission-mode default`（不再 acceptEdits）、
+ * `--disallowedTools` 与 settings.permissions.deny 覆盖全部写类工具与 Shell；
+ * worker 角色保持 W.5a 既有行为。默认值取 partner 是失败关闭：漏传角色时宁可只读。
  */
 export interface ClaudeCodeAdapterOptions {
   /** CLI 可执行文件，默认 "claude"（命名可配置） */
   command?: string;
   /** API Key 来源，默认读取 Daemon 进程的 ANTHROPIC_API_KEY；只注入子进程环境 */
   apiKey?: () => string | undefined;
-  /** 允许 Bash（默认否） */
+  /** 允许 Bash（默认否；仅 worker 角色生效，partner 恒禁） */
   allowBash?: boolean;
   /** 实测通过记录（CLI 版本 + 日期），未实测保持空 */
   verifiedOn?: string;
   /** 测试可替换 spawn */
   spawn?: typeof spawnManaged;
+  /**
+   * TASK-J.1：运行角色。默认 `partner`（失败关闭）——右栏搭档只读；
+   * Worker 路径必须显式传 `worker` 才会拿到写工具与 acceptEdits。
+   */
+  role?: ClaudeCodeRole;
   /** 临时配置目录 */
   tmpRoot?: string;
   /**
@@ -69,17 +79,54 @@ export const HOOK_SCRIPT = fileURLToPath(
   new URL("./pretool-hook.mjs", import.meta.url),
 );
 
-const BASE_TOOLS = [
+/**
+ * TASK-J.1：右栏搭档只读工具集。
+ * LS 在 Claude Code 2.1.296 已不存在（列目录统一走 Glob），保留会在 argv 里
+ * 声明一个 CLI 不认识的工具，故两处残留一并删除。
+ */
+const PARTNER_TOOLS = ["Read", "Glob", "Grep"] as const;
+/**
+ * partner 角色必须挡掉的全部工具：CLI 参数层（--tools / --disallowedTools）与
+ * settings.permissions.deny 同时写，hook 只是第三层兜底。
+ */
+const PARTNER_DENY_TOOLS = [
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "NotebookEdit",
+  "Bash",
+  "TodoWrite",
+  "Task",
+  "WebFetch",
+  "WebSearch",
+] as const;
+/** worker 角色沿用 W.5a 工具集（去掉已不存在的 LS） */
+const WORKER_TOOLS = [
   "Read",
   "Glob",
   "Grep",
-  "LS",
   "Edit",
   "Write",
   "MultiEdit",
   "TodoWrite",
-];
+] as const;
 const ALWAYS_DENY = ["WebFetch", "WebSearch", "NotebookEdit", "Task"];
+const WRITE_PATH_DENY = [
+  "Edit(./.git/**)",
+  "Edit(./.stagent/**)",
+  "Edit(./.claude/**)",
+  "Write(./.git/**)",
+  "Write(./.stagent/**)",
+  "Write(./.claude/**)",
+];
+const CONFIG_READ_DENY = [
+  // 专用配置目录（含会话记录）：不许读，也不许写（写已被 .stagent/** 覆盖）
+  "Read(./.stagent/claude-config/**)",
+  "Read(./.stagent/session-token)",
+];
+
+/** TASK-J.1：右栏搭档（只读）与 Worker（可写）两种运行角色 */
+export type ClaudeCodeRole = "partner" | "worker";
 
 export function redactSecret(text: string, secret: string | undefined): string {
   let out = secret ? text.split(secret).join("[REDACTED]") : text;
@@ -93,10 +140,31 @@ export interface BuiltLaunch {
   env: NodeJS.ProcessEnv;
   settingsPath: string;
   mcpPath: string;
+  /** 与 spawn 和 STAGENT_HOOK_ROOT 共用的收窄后 cwd（realpath） */
+  cwd: string;
 }
 
 export class ClaudeCodeAdapter implements ChatAdapter {
   constructor(private readonly opts: ClaudeCodeAdapterOptions = {}) {}
+
+  /** TASK-J.1：默认 partner——配置缺失时按只读处理，不允许静默退回可写。 */
+  private role(): ClaudeCodeRole {
+    return this.opts.role ?? "partner";
+  }
+
+  /**
+   * TASK-J.1「cwd 收窄」：spawn 的 cwd 与把守它的 hook root 必须是同一个真实路径。
+   * 否则相对路径 / symlink 会让 hook 按一个 root 判定、进程却按另一个 root 读写。
+   * 目录不存在或不可解析时回退原值（保持既有测试与 Worker 行为）。
+   */
+  private narrowCwd(cwd: string): string {
+    try {
+      const real = fs.realpathSync(cwd);
+      return fs.statSync(real).isDirectory() ? real : cwd;
+    } catch {
+      return cwd;
+    }
+  }
 
   private key(): string | undefined {
     return (this.opts.apiKey ?? (() => process.env["ANTHROPIC_API_KEY"]))();
@@ -107,6 +175,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     return {
       id: "claude-code",
       label: "Claude Code",
+      tool_mode: this.role() === "partner" ? "read_only" : "read_write",
       control_mode: this.opts.verifiedOn
         ? "GATEWAY_ENFORCED"
         : "UNCONTROLLED_EXTERNAL",
@@ -123,22 +192,23 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     const dir = fs.mkdtempSync(
       path.join(this.opts.tmpRoot ?? os.tmpdir(), "stagent-claude-"),
     );
-    const allowBash = this.opts.allowBash === true;
-    const deny = [
-      ...ALWAYS_DENY,
-      ...(allowBash ? [] : ["Bash"]),
-      "Edit(./.git/**)",
-      "Edit(./.stagent/**)",
-      "Edit(./.claude/**)",
-      "Write(./.git/**)",
-      "Write(./.stagent/**)",
-      "Write(./.claude/**)",
-      // 专用配置目录（含会话记录）：不许读，也不许写（写已被 .stagent/** 覆盖）
-      "Read(./.stagent/claude-config/**)",
-      "Read(./.stagent/session-token)",
-    ];
+    const role = this.role();
+    const partner = role === "partner";
+    // partner 永远没有 Bash：即使调用方误传 allowBash 也不放宽（失败关闭）
+    const allowBash = !partner && this.opts.allowBash === true;
+    const deny = partner
+      ? [...PARTNER_DENY_TOOLS, ...WRITE_PATH_DENY, ...CONFIG_READ_DENY]
+      : [
+          ...ALWAYS_DENY,
+          ...(allowBash ? [] : ["Bash"]),
+          ...WRITE_PATH_DENY,
+          ...CONFIG_READ_DENY,
+        ];
     const settings = {
-      permissions: { deny, defaultMode: "acceptEdits" },
+      permissions: {
+        deny,
+        defaultMode: partner ? "default" : "acceptEdits",
+      },
       hooks: {
         PreToolUse: [
           {
@@ -165,7 +235,13 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     // 并把工具集缩成 Bash/Edit/Read，PreToolUse 兜底会静默失效。
     // 改为 --setting-sources "" 忽略用户/项目/本地配置，只加载 Stagent 生成的 settings，
     // 并用 --tools 显式限定可用工具集。
-    const tools = [...BASE_TOOLS, ...(allowBash ? ["Bash"] : [])];
+    // TASK-J.1：partner 只读——CLI 参数层先拦（工具不存在），hook 与 permissions.deny 兜底。
+    const tools = partner
+      ? [...PARTNER_TOOLS]
+      : [...WORKER_TOOLS, ...(allowBash ? ["Bash"] : [])];
+    const disallowed = partner
+      ? [...PARTNER_DENY_TOOLS]
+      : [...ALWAYS_DENY, ...(allowBash ? [] : ["Bash"])];
     const args = [
       "--setting-sources",
       "",
@@ -183,21 +259,24 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       mcpPath,
       "--strict-mcp-config",
       "--permission-mode",
-      "acceptEdits",
+      partner ? "default" : "acceptEdits",
       "--allowedTools",
       tools.join(","),
       "--disallowedTools",
-      [...ALWAYS_DENY, ...(allowBash ? [] : ["Bash"])].join(","),
+      disallowed.join(","),
     ];
     if (input.nativeSessionId) args.push("--resume", input.nativeSessionId);
 
+    const cwd = this.narrowCwd(input.cwd);
     const key = this.key();
     const env: NodeJS.ProcessEnv = {
       PATH: process.env["PATH"] ?? "",
       HOME: process.env["HOME"] ?? "",
       LANG: process.env["LANG"] ?? "en_US.UTF-8",
-      STAGENT_HOOK_ROOT: input.cwd,
+      STAGENT_HOOK_ROOT: cwd,
       STAGENT_HOOK_LOG: path.join(dir, "hook.log"),
+      // partner 角色写进 hook 环境：hook 层对写类工具与 Shell 直接 block（双保险）
+      ...(partner ? { STAGENT_HOOK_ROLE: "partner" } : {}),
       ...(allowBash ? { STAGENT_HOOK_ALLOW_BASH: "1" } : {}),
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
       // 兼容端点（如 DeepSeek 的 Anthropic 兼容接口）：只转发这几个白名单变量
@@ -212,6 +291,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       env,
       settingsPath,
       mcpPath,
+      cwd,
     };
   }
 
@@ -222,7 +302,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     const proc: ManagedProcess = (this.opts.spawn ?? spawnManaged)({
       command: launch.command,
       args: launch.args,
-      cwd: input.cwd,
+      cwd: launch.cwd,
       env: launch.env,
       signal: input.signal,
     });

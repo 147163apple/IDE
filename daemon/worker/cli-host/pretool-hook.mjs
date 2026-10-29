@@ -8,13 +8,25 @@
  *     也另有两道门禁：核心元数据路径（.stagent/.git/.claude/.cursor/.env）一律拒绝，
  *     命令中经 `..` 或绝对路径指向工作目录之外的重定向/写目标一律拒绝；
  *  3. 不得触碰 .git / .stagent / .claude / .mcp.json，也不得经 ../ 访问主工作树；
- *  4. 不在白名单内的工具（含未知 MCP 工具）一律拒绝。
+ *  4. 不在白名单内的工具（含未知 MCP 工具）一律拒绝；
+ *  5. TASK-J.1：STAGENT_HOOK_ROLE=partner（右栏搭档）时，任何写类工具、Shell、
+ *     TodoWrite/Task/WebFetch/WebSearch 一律 block——与 CLI 参数层形成双保险。
  */
 import fs from "node:fs";
 import path from "node:path";
 
 const WRITE_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
-const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS", "TodoWrite", "Task"]);
+// TASK-J.1：LS 在 Claude Code 2.1.296 不存在（列目录走 Glob），残留会被当成未知工具
+const READ_TOOLS = new Set(["Read", "Glob", "Grep", "TodoWrite", "Task"]);
+/** partner 角色下全部禁止的工具：写类 + Shell + 网络/子代理/待办 */
+const PARTNER_DENY_TOOLS = new Set([
+  ...WRITE_TOOLS,
+  "Bash",
+  "TodoWrite",
+  "Task",
+  "WebFetch",
+  "WebSearch",
+]);
 const PROTECTED_SEGMENTS = [".git", ".stagent", ".claude"];
 
 /**
@@ -289,6 +301,15 @@ try {
   const mainRoot = mainRepoRootOf(realRoot);
   const tool = String(input.tool_name ?? "");
   const ti = input.tool_input ?? {};
+
+  // TASK-J.1：右栏搭档只读——CLI 参数层已把写类工具从工具集移除；
+  // 这里再挡一次，防止 hook 配置漂移或 CLI 行为变化时静默放行。
+  if (
+    process.env.STAGENT_HOOK_ROLE === "partner" &&
+    PARTNER_DENY_TOOLS.has(tool)
+  ) {
+    deny(`右栏搭档只读：${tool} 被禁止`);
+  }
 
   if (tool === "Bash") {
     if (process.env.STAGENT_HOOK_ALLOW_BASH !== "1")

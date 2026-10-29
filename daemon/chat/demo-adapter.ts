@@ -12,6 +12,8 @@ export class DemoChatAdapter implements ChatAdapter {
     return {
       id: "demo",
       label: "练习沙箱（可选）",
+      // TASK-J.1：本地回声，不读不写 → read_only
+      tool_mode: "read_only",
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: true,

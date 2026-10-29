@@ -4679,6 +4679,8 @@ export class StagentDaemon {
 function defaultChatAdapters(repoRoot: string): ChatAdapter[] {
   return [
     new ClaudeCodeAdapter({
+      // TASK-J.1：右栏搭档只读（不传 role 也默认 partner，这里显式写出来防回退）
+      role: "partner",
       configDir: path.join(repoRoot, ".stagent", "claude-config"),
       verifiedOn: CLAUDE_CODE_VERIFIED_ON,
     }),

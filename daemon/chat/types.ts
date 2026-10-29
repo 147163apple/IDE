@@ -1,4 +1,7 @@
-import type { ChatAdapterInfo } from "../../src/lib/chat-events";
+import type { ChatAdapterInfo, ChatToolMode } from "../../src/lib/chat-events";
+
+/** TASK-J.1：右栏适配器只读/可写能力（字段由共享的 ChatAdapterInfo 承载） */
+export type { ChatToolMode };
 
 /** 适配器向会话管理器报告的原始事件（不带 session/turn/seq） */
 export type AdapterEvent =
