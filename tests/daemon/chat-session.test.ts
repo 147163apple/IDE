@@ -30,6 +30,8 @@ class FakeAdapter implements ChatAdapter {
       control_mode: "GATEWAY_ENFORCED" as const,
       verified_on: "",
       available: true,
+      // TASK-J.1：假适配器只吐文本，标只读以便被右栏选中
+      tool_mode: "read_only" as const,
     };
   }
   async *run(input: AdapterRunInput): AsyncIterable<AdapterEvent> {

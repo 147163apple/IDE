@@ -36,6 +36,13 @@ export type ChatEventBody =
 
 export type ChatEvent = ChatEventBase & ChatEventBody;
 
+/**
+ * TASK-J.1 适配器工具权限：
+ * - `read_only`：只能读、搜、列目录（方案工作台右栏搭档的唯一合法形态）；
+ * - `read_write`：能改文件 / 跑命令，只允许 Worker 路径使用，右栏永不选中。
+ */
+export type ChatToolMode = "read_only" | "read_write";
+
 export interface ChatAdapterInfo {
   id: string;
   label: string;
@@ -43,6 +50,8 @@ export interface ChatAdapterInfo {
   /** 黑盒实测通过的版本与日期；空字符串 = 未实测 */
   verified_on: string;
   available: boolean;
+  /** 工具权限（必填：漏填会在编译期暴露，避免右栏误选可写适配器） */
+  tool_mode: ChatToolMode;
   unavailable_reason?: string;
 }
 

@@ -23,15 +23,28 @@ import { spawnManaged, type ManagedProcess } from "./process-host";
  * 硬限制不只靠 hook（hook 崩溃 / 超时 / exit 1 会放行）：同时用 --disallowedTools 与
  * permissions.deny 收窄；永不使用 bypassPermissions；续接只用 `--resume <session_id>`。
  *
+ * TASK-J.1（P0 安全）：角色分档。`partner`（默认）= 方案工作台右栏搭档，工具集恒为
+ * Read/Glob/Grep（列目录经 Glob；LS 不由 CLI 2.1.296 提供），permission-mode 恒为 default（绝不用 acceptEdits），写类工具进
+ * --disallowedTools 与 permissions.deny；`worker` = 施工路径，保持既有可写行为。
+ * 右栏永远由 `defaultChatAdapters` 显式以 partner 构造，不依赖调用方记得传参。
+ *
  * control_mode 在 4 类绕过负例于真实 CLI 版本实测通过前恒为 UNCONTROLLED_EXTERNAL，
  * verified_on 为空。
  */
+/** 角色：`partner` = 右栏只读搭档（默认）；`worker` = 施工工人（可写，仅 Worker 路径） */
+export type ClaudeCodeRole = "partner" | "worker";
+
 export interface ClaudeCodeAdapterOptions {
   /** CLI 可执行文件，默认 "claude"（命名可配置） */
   command?: string;
   /** API Key 来源，默认读取 Daemon 进程的 ANTHROPIC_API_KEY；只注入子进程环境 */
   apiKey?: () => string | undefined;
-  /** 允许 Bash（默认否） */
+  /**
+   * 角色，默认 "partner"（失败关闭：忘记传参时按右栏只读处理）。
+   * worker 仅供合同执行路径使用，不得进右栏。
+   */
+  role?: ClaudeCodeRole;
+  /** 允许 Bash（默认否）；partner 角色下恒被忽略 */
   allowBash?: boolean;
   /** 实测通过记录（CLI 版本 + 日期），未实测保持空 */
   verifiedOn?: string;
@@ -69,6 +82,27 @@ export const HOOK_SCRIPT = fileURLToPath(
   new URL("./pretool-hook.mjs", import.meta.url),
 );
 
+/**
+ * hook 命令里使用的脚本路径：统一为正斜杠。
+ * Windows 上反斜杠交给 shell 时会被当作转义符（JSON.stringify 会把它再转义成双反斜杠），
+ * 正斜杠不会被 shell 当作转义符，且 Node 在 Windows 上接受正斜杠路径。
+ */
+export const HOOK_COMMAND_PATH = HOOK_SCRIPT.replace(/\\/g, "/");
+
+/** 右栏搭档的全部可用工具：只读、可搜、可列目录 */
+export const PARTNER_TOOLS = ["Read", "Glob", "Grep"] as const;
+
+/** partner 角色在三个层面（--tools / --disallowedTools / permissions.deny）一并封禁的工具 */
+export const PARTNER_DENIED_TOOLS = [
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "NotebookEdit",
+  "Bash",
+  "TodoWrite",
+] as const;
+
+/** worker 角色的可写工具集（既有行为，仅供合同执行路径） */
 const BASE_TOOLS = [
   "Read",
   "Glob",
@@ -102,6 +136,11 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     return (this.opts.apiKey ?? (() => process.env["ANTHROPIC_API_KEY"]))();
   }
 
+  /** 默认 partner：没显式声明就是右栏只读搭档 */
+  private role(): ClaudeCodeRole {
+    return this.opts.role ?? "partner";
+  }
+
   info(): ChatAdapterInfo {
     const hasKey = !!this.key();
     return {
@@ -112,6 +151,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
         : "UNCONTROLLED_EXTERNAL",
       verified_on: this.opts.verifiedOn ?? "",
       available: hasKey,
+      tool_mode: this.role() === "partner" ? "read_only" : "read_write",
       ...(hasKey ? {} : { unavailable_reason: "还差一步：去设置里配模型钥匙" }),
     };
   }
@@ -123,10 +163,23 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     const dir = fs.mkdtempSync(
       path.join(this.opts.tmpRoot ?? os.tmpdir(), "stagent-claude-"),
     );
-    const allowBash = this.opts.allowBash === true;
+    const role = this.role();
+    const partner = role === "partner";
+    // partner 硬约束：allowBash 一律忽略（右栏不允许 shell），不靠调用方自觉
+    const allowBash = !partner && this.opts.allowBash === true;
+    // partner 永不接受编辑：默认模式下未授权工具直接拒绝，而不是 acceptEdits 放行
+    const permissionMode = partner ? "default" : "acceptEdits";
+    // 工具名层面的封禁：ALWAYS_DENY ∪ 无 Bash 授权时的 Bash ∪ partner 全部写类工具。
+    // 去重是为了让 argv / settings 可逐字断言（NotebookEdit 会同时出现在两处）。
+    const deniedToolNames = [
+      ...new Set([
+        ...ALWAYS_DENY,
+        ...(allowBash ? [] : ["Bash"]),
+        ...(partner ? PARTNER_DENIED_TOOLS : []),
+      ]),
+    ];
     const deny = [
-      ...ALWAYS_DENY,
-      ...(allowBash ? [] : ["Bash"]),
+      ...deniedToolNames,
       "Edit(./.git/**)",
       "Edit(./.stagent/**)",
       "Edit(./.claude/**)",
@@ -138,7 +191,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       "Read(./.stagent/session-token)",
     ];
     const settings = {
-      permissions: { deny, defaultMode: "acceptEdits" },
+      permissions: { deny, defaultMode: permissionMode },
       hooks: {
         PreToolUse: [
           {
@@ -146,7 +199,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
             hooks: [
               {
                 type: "command",
-                command: `node ${JSON.stringify(HOOK_SCRIPT)}`,
+                command: `node "${HOOK_COMMAND_PATH}"`,
                 timeout: 10,
                 onFailure: "block",
               },
@@ -165,7 +218,11 @@ export class ClaudeCodeAdapter implements ChatAdapter {
     // 并把工具集缩成 Bash/Edit/Read，PreToolUse 兜底会静默失效。
     // 改为 --setting-sources "" 忽略用户/项目/本地配置，只加载 Stagent 生成的 settings，
     // 并用 --tools 显式限定可用工具集。
-    const tools = [...BASE_TOOLS, ...(allowBash ? ["Bash"] : [])];
+    // TASK-J.1：partner 的 --tools 是**精确白名单**（不是「默认集减去禁止项」），
+    // 因此即便 CLI 未来新增写类工具，右栏也拿不到。
+    const tools = partner
+      ? [...PARTNER_TOOLS]
+      : [...BASE_TOOLS, ...(allowBash ? ["Bash"] : [])];
     const args = [
       "--setting-sources",
       "",
@@ -183,11 +240,11 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       mcpPath,
       "--strict-mcp-config",
       "--permission-mode",
-      "acceptEdits",
+      permissionMode,
       "--allowedTools",
       tools.join(","),
       "--disallowedTools",
-      [...ALWAYS_DENY, ...(allowBash ? [] : ["Bash"])].join(","),
+      deniedToolNames.join(","),
     ];
     if (input.nativeSessionId) args.push("--resume", input.nativeSessionId);
 
@@ -198,6 +255,8 @@ export class ClaudeCodeAdapter implements ChatAdapter {
       LANG: process.env["LANG"] ?? "en_US.UTF-8",
       STAGENT_HOOK_ROOT: input.cwd,
       STAGENT_HOOK_LOG: path.join(dir, "hook.log"),
+      // TASK-J.1：hook 按角色二次判定（partner 只放行读类工具），与 CLI 参数互为双保险
+      STAGENT_HOOK_ROLE: role,
       ...(allowBash ? { STAGENT_HOOK_ALLOW_BASH: "1" } : {}),
       ...(key ? { ANTHROPIC_API_KEY: key } : {}),
       // 兼容端点（如 DeepSeek 的 Anthropic 兼容接口）：只转发这几个白名单变量

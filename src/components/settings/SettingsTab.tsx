@@ -18,7 +18,10 @@ import {
   type SettingsDeepFocus,
 } from "@/lib/middle-yield";
 import type { ChatAdapterInfo, ChatSessionSummary } from "@/lib/chat-events";
-import { pickPreferredAdapterId } from "@/lib/pick-chat-adapter";
+import {
+  pickPreferredAdapterId,
+  rightPaneRejectionReason,
+} from "@/lib/pick-chat-adapter";
 
 /**
  * 设置页（中央 Tab）。
@@ -413,17 +416,25 @@ export function SettingsTab({
                   onChange={(e) => setAdapterId(e.target.value)}
                   className="w-full rounded border border-border bg-background px-2 py-1 outline-none"
                 >
-                  {chatSession.adapters.map((a) => (
-                    <option key={a.id} value={a.id} disabled={!a.available}>
-                      {a.label}
-                      {a.control_mode === "UNCONTROLLED_EXTERNAL"
-                        ? "（未受控）"
-                        : ""}
-                      {a.available
-                        ? ""
-                        : `（${a.unavailable_reason ?? "不可用"}）`}
-                    </option>
-                  ))}
+                  {chatSession.adapters.map((a) => {
+                    const readWriteHint = rightPaneRejectionReason(a);
+                    return (
+                      <option
+                        key={a.id}
+                        value={a.id}
+                        disabled={!a.available || readWriteHint !== null}
+                      >
+                        {a.label}
+                        {a.control_mode === "UNCONTROLLED_EXTERNAL"
+                          ? "（未受控）"
+                          : ""}
+                        {a.available
+                          ? ""
+                          : `（${a.unavailable_reason ?? "不可用"}）`}
+                        {readWriteHint ? `（${readWriteHint}）` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </Row>
               <div className="flex flex-wrap items-center gap-2">

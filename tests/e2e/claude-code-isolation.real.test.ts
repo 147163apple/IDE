@@ -113,6 +113,8 @@ function run(prompt: string, control: boolean, opts: RunOpts = {}): RunOut {
   const t = plant(opts);
   const launch = new ClaudeCodeAdapter({
     tmpRoot: t.root,
+    // TASK-J.1 起默认角色是只读 partner；本套件测的是 Worker 路径（可写 + 4 类绕过）
+    role: "worker",
     ...(opts.allowBash ? { allowBash: true } : {}),
   }).buildLaunch({
     prompt,
@@ -312,6 +314,8 @@ describe.skipIf(!REAL)(
         const a = new ClaudeCodeAdapter({
           tmpRoot: os.tmpdir(),
           configDir: cfgDir,
+          // 续接用例验证的是 Worker 会话记录，不是右栏只读约束
+          role: "worker",
         });
         const l = a.buildLaunch({ prompt, cwd: proj, nativeSessionId: sid });
         // 子进程不继承 CLAUDE_CONFIG_DIR 以外的配置位置：只靠适配器给的 env

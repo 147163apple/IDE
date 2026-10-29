@@ -243,6 +243,7 @@ describe("设置页 C.10l：高级里可选会话/适配器", () => {
         available: true,
         control_mode: "GATEWAY_ENFORCED" as const,
         verified_on: "2026-10-01",
+        tool_mode: "read_only" as const,
       },
       {
         id: "demo",
@@ -250,6 +251,7 @@ describe("设置页 C.10l：高级里可选会话/适配器", () => {
         available: true,
         control_mode: "GATEWAY_ENFORCED" as const,
         verified_on: "",
+        tool_mode: "read_only" as const,
       },
     ],
     sessions: [
@@ -289,6 +291,37 @@ describe("设置页 C.10l：高级里可选会话/适配器", () => {
     expect(screen.getByLabelText("历史会话")).toBeTruthy();
     expect(screen.getByTestId("settings-advanced-summary")).toHaveTextContent(
       "对话助手",
+    );
+  });
+
+  it("TASK-J.1：read_write 适配器在设置页被灰置，并显示白话原因", () => {
+    renderSettings({
+      chatSession: {
+        ...chatSession,
+        adapters: [
+          ...chatSession.adapters,
+          {
+            id: "claude-code-worker",
+            label: "Claude Code（施工）",
+            available: true,
+            control_mode: "GATEWAY_ENFORCED" as const,
+            verified_on: "",
+            tool_mode: "read_write" as const,
+          },
+        ],
+      },
+    });
+    fireEvent.click(screen.getByTestId("settings-advanced-summary"));
+    const blocked = screen.getByRole("option", {
+      name: /会直接改你的文件/,
+    });
+    expect(blocked).toBeDisabled();
+    expect(blocked).toHaveTextContent(
+      "会直接改你的文件，右栏只允许只看不改的助手",
+    );
+    // 右栏默认仍落在只读助手上，不会滑向 read_write
+    expect(screen.getByTestId("settings-chat-adapter")).toHaveValue(
+      "claude-code",
     );
   });
 

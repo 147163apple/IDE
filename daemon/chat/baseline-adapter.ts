@@ -15,6 +15,8 @@ export class BaselineChatAdapter implements ChatAdapter {
       control_mode: "GATEWAY_ENFORCED",
       verified_on: "",
       available: !!key,
+      // 只聊天、不改文件（TASK-J.1）：右栏允许选中
+      tool_mode: "read_only",
       ...(key ? {} : { unavailable_reason: "还差一步：去设置里配模型钥匙" }),
     };
   }
