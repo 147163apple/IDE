@@ -141,10 +141,7 @@ import {
   setContractLockLeaseObserver,
 } from "./core/contract-mutex";
 import { killProcessTree } from "./runner/process-tree";
-import {
-  runCommand,
-  E_UNAUTHORIZED_COMMAND,
-} from "./runner/command-runner";
+import { runCommand, E_UNAUTHORIZED_COMMAND } from "./runner/command-runner";
 import {
   addProtectionEntry,
   closeRound,
@@ -2123,10 +2120,9 @@ export class StagentDaemon {
 
         // OP-32-A：安全边界与白名单匹配
         // 合同白名单：verification_spec.commands
-        const contractCommands =
-          contract.verification_spec.commands ?? [];
-        const allowedCommands = contractCommands.map(
-          (spec) => [spec.executable, ...spec.args].join(" ").trim(),
+        const contractCommands = contract.verification_spec.commands ?? [];
+        const allowedCommands = contractCommands.map((spec) =>
+          [spec.executable, ...spec.args].join(" ").trim(),
         );
 
         // 如果请求携带了可选命令别名 command_alias，查表并校验
@@ -2200,7 +2196,8 @@ export class StagentDaemon {
                   ? (err as { exitCode: number }).exitCode
                   : (err as { code?: string })?.code === "E_COMMAND_TIMEOUT"
                     ? 124
-                    : (err as { code?: string })?.code === E_UNAUTHORIZED_COMMAND
+                    : (err as { code?: string })?.code ===
+                        E_UNAUTHORIZED_COMMAND
                       ? 126
                       : 1;
               collectedCommandResults.push({
