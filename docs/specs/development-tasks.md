@@ -2670,9 +2670,10 @@ TASK-J.2 ScopePlan 纯函数 + 预检构建器      TASK-J.1 右栏搭档只读 
   2. `defaultChatAdapters` 构造右栏适配器时显式传 `role: "partner"`。
   3. `ChatAdapterInfo` 增加 `tool_mode: "read_only" | "read_write"`；`BaselineChatAdapter` / `DemoChatAdapter` 标 `read_only`。右栏适配器选择（`pick-chat-adapter`）**拒绝**选中 `read_write` 适配器，并在设置页显示白话原因。
   4. PreToolUse hook（`pretool-hook.mjs`）在 `partner` 角色下对任何写类工具调用返回 block（双保险：hook 失败时 CLI 参数仍拦截）。
+  5. 同步删除两处 LS 残留（LS 在 CLI 2.1.296 不存在）：`claude-code-adapter.ts` `BASE_TOOLS` 中的 `"LS"`；`pretool-hook.mjs` `READ_TOOLS` 中的 `"LS"`。
 * **非目标**：不改 Worker 适配器行为；不做施工对话分流（第二批）；不改 `BaselineChatAdapter` 的提示词。
 * **验收（PASS）**：
-  - `tests/unit/cli-host-claude-code.test.ts` 新增用例：`role: "partner"` 生成的 argv 中 `--tools` 与 `--allowedTools` 恰为 `Read,Glob,Grep`；`--disallowedTools` 含 `Edit`、`Write`、`MultiEdit`、`Bash`；`--permission-mode` 不是 `acceptEdits`；settings 的 `permissions.deny` 含全部写类工具。
+  - `tests/unit/cli-host-claude-code.test.ts` 新增用例：`role: "partner"` 生成的 argv 中 `--tools` 与 `--allowedTools` 恰为 `Read,Glob,Grep`；`--disallowedTools` 含 `Edit`、`Write`、`MultiEdit`、`Bash`、`Task`、`WebFetch`、`WebSearch`；`--permission-mode` 不是 `acceptEdits`；settings 的 `permissions.deny` 含全部写类工具。
   - `tests/unit/pick-chat-adapter.test.ts` 新增用例：`tool_mode: "read_write"` 的适配器不会被选为右栏适配器。
   - 新增 `tests/integration/partner-readonly.test.ts`（对应 SSOT `P-01`）：用替身 spawn 捕获启动参数并模拟一次 `Write` 工具调用经 hook，断言被 block、仓库内目标文件不存在。
   - `worker` 角色既有用例全部不回归。
