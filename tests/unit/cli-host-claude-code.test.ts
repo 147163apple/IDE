@@ -11,6 +11,7 @@ import {
   HOOK_SCRIPT,
   redactSecret,
   translate,
+  type ClaudeCodeAdapterOptions,
 } from "../../daemon/worker/cli-host/claude-code-adapter";
 import { spawnManaged } from "../../daemon/worker/cli-host/process-host";
 import type { AdapterEvent } from "../../daemon/chat/types";
@@ -50,9 +51,12 @@ async function collect(it: AsyncIterable<AdapterEvent>) {
 }
 
 describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
+  // 这些用例测的是 Worker 路径的既有行为（可写 + 隔离），显式声明 worker：
+  // TASK-J.1 起默认角色已改为只读 partner，右栏不再继承可写工具集。
   const adapter = new ClaudeCodeAdapter({
     apiKey: () => KEY,
     tmpRoot: os.tmpdir(),
+    role: "worker",
   });
   const launch = adapter.buildLaunch({
     prompt: "hi",
@@ -127,6 +131,7 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
         "LANG",
         "PATH",
         "STAGENT_HOOK_LOG",
+        "STAGENT_HOOK_ROLE",
         "STAGENT_HOOK_ROOT",
       ].sort(),
     );
@@ -141,6 +146,131 @@ describe("TASK-W.5a 启动参数（配置隔离 / 续接）", () => {
     expect(
       new ClaudeCodeAdapter({ apiKey: () => undefined }).info().available,
     ).toBe(false);
+  });
+});
+
+/**
+ * TASK-J.1（P0 安全）：方案工作台右栏以 partner 角色运行。
+ * 三层同时收窄（--tools 精确白名单 / --disallowedTools + permissions.deny / hook 角色），
+ * 且默认值即 partner——忘记传参不会退化成可写。
+ */
+describe("TASK-J.1 partner 角色：右栏只读工具集", () => {
+  const build = (opts: ClaudeCodeAdapterOptions = {}) =>
+    new ClaudeCodeAdapter({
+      apiKey: () => KEY,
+      tmpRoot: os.tmpdir(),
+      ...opts,
+    }).buildLaunch({ prompt: "hi", cwd: "/repo", nativeSessionId: null });
+  const argOf = (args: string[], flag: string) =>
+    args[args.indexOf(flag) + 1] ?? "";
+  const settingsOf = (launch: { settingsPath: string }) =>
+    JSON.parse(fs.readFileSync(launch.settingsPath, "utf8"));
+
+  it("默认角色即 partner（失败关闭）：--tools 与 --allowedTools 恰为 Read,Glob,Grep", () => {
+    const launch = build();
+    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep");
+    expect(argOf(launch.args, "--allowedTools")).toBe("Read,Glob,Grep");
+  });
+
+  it("--disallowedTools 追加写类 / Shell / Todo 工具；--permission-mode 不是 acceptEdits", () => {
+    const launch = build();
+    const disallowed = argOf(launch.args, "--disallowedTools").split(",");
+    for (const tool of [
+      "Edit",
+      "Write",
+      "MultiEdit",
+      "NotebookEdit",
+      "Bash",
+      "TodoWrite",
+    ]) {
+      expect(disallowed, `应封禁 ${tool}`).toContain(tool);
+    }
+    expect(argOf(launch.args, "--permission-mode")).toBe("default");
+    expect(launch.args.join(" ")).not.toContain("acceptEdits");
+  });
+
+  it("联网工具 WebFetch / WebSearch 在 partner 下不可用（工具集与禁止清单双向确认）", () => {
+    const launch = build();
+    const tools = argOf(launch.args, "--tools").split(",");
+    const allowed = argOf(launch.args, "--allowedTools").split(",");
+    const disallowed = argOf(launch.args, "--disallowedTools").split(",");
+    const denied = settingsOf(launch).permissions.deny as string[];
+    for (const netTool of ["WebFetch", "WebSearch"]) {
+      expect(tools, `${netTool} 不应在工具集里`).not.toContain(netTool);
+      expect(allowed, `${netTool} 不应在 allowedTools 里`).not.toContain(
+        netTool,
+      );
+      expect(disallowed, `${netTool} 应进 --disallowedTools`).toContain(
+        netTool,
+      );
+      expect(denied, `${netTool} 应进 permissions.deny`).toContain(netTool);
+    }
+  });
+
+  it("settings 的 permissions.deny 同步封禁写类工具，defaultMode 为 default", () => {
+    const settings = settingsOf(build());
+    expect(settings.permissions.defaultMode).toBe("default");
+    expect(settings.permissions.deny).toEqual(
+      expect.arrayContaining([
+        "Edit",
+        "Write",
+        "MultiEdit",
+        "NotebookEdit",
+        "Bash",
+        "TodoWrite",
+      ]),
+    );
+    // 既有保护不变：元数据与配置目录仍不许碰
+    expect(settings.permissions.deny).toEqual(
+      expect.arrayContaining(["Edit(./.stagent/**)", "Write(./.git/**)"]),
+    );
+  });
+
+  it("MCP：只挂 Stagent 生成的空集合 + strict，用户配置的 MCP 服务器一律不加载", () => {
+    const launch = build();
+    // --strict-mcp-config 是 Claude Code 2.1.296 的实际参数（见 claude --help）
+    expect(launch.args).toContain("--strict-mcp-config");
+    expect(argOf(launch.args, "--mcp-config")).toBe(launch.mcpPath);
+    expect(argOf(launch.args, "--setting-sources")).toBe("");
+    expect(JSON.parse(fs.readFileSync(launch.mcpPath, "utf8"))).toEqual({
+      mcpServers: {},
+    });
+    // 只允许这一个 mcp-config，不额外把用户/项目配置塞进来
+    expect(
+      launch.args.filter((a) => a === "--mcp-config"),
+      "只能有一个 --mcp-config",
+    ).toHaveLength(1);
+  });
+
+  it("partner 忽略 allowBash，并把只读角色交给 hook 做第二重保险", () => {
+    const launch = build({ allowBash: true });
+    expect(argOf(launch.args, "--tools")).toBe("Read,Glob,Grep");
+    expect(argOf(launch.args, "--allowedTools")).not.toContain("Bash");
+    expect(launch.env["STAGENT_HOOK_ROLE"]).toBe("partner");
+    expect(launch.env["STAGENT_HOOK_ALLOW_BASH"]).toBeUndefined();
+  });
+
+  it("info().tool_mode：partner=read_only，worker=read_write", () => {
+    expect(new ClaudeCodeAdapter({ apiKey: () => KEY }).info().tool_mode).toBe(
+      "read_only",
+    );
+    expect(
+      new ClaudeCodeAdapter({ apiKey: () => KEY, role: "partner" }).info()
+        .tool_mode,
+    ).toBe("read_only");
+    expect(
+      new ClaudeCodeAdapter({ apiKey: () => KEY, role: "worker" }).info()
+        .tool_mode,
+    ).toBe("read_write");
+  });
+
+  it("worker 角色保持既有可写行为（仅施工路径，不进右栏）", () => {
+    const launch = build({ role: "worker" });
+    expect(argOf(launch.args, "--tools").split(",")).toEqual(
+      expect.arrayContaining(["Read", "Edit", "Write", "MultiEdit"]),
+    );
+    expect(argOf(launch.args, "--permission-mode")).toBe("acceptEdits");
+    expect(launch.env["STAGENT_HOOK_ROLE"]).toBe("worker");
   });
 });
 
@@ -334,6 +464,94 @@ describe("TASK-W.5a PreToolUse hook：4 类绕过在 hook 层失败关闭（确�
     expect(metaReason.stdout).toContain("系统保护元数据");
     const escapeReason = bash("echo pwn > ../outside.txt");
     expect(escapeReason.stdout).toContain("路径越界");
+  });
+});
+
+describe("TASK-J.1 hook：partner 角色只放行读类工具（第二重保险）", () => {
+  const runPartnerHook = (
+    tool: string,
+    toolInput: Record<string, unknown>,
+    extraEnv: Record<string, string> = {},
+  ) =>
+    spawnSync(process.execPath, [HOOK_SCRIPT], {
+      input: JSON.stringify({ tool_name: tool, tool_input: toolInput }),
+      env: {
+        PATH: process.env["PATH"] ?? "",
+        STAGENT_HOOK_ROOT: tmp,
+        STAGENT_HOOK_ROLE: "partner",
+        ...extraEnv,
+      },
+      encoding: "utf8",
+    });
+
+  it("写类 / Shell / Todo / 未知工具 → exit 2 + deny，且理由说清「右栏只读」", () => {
+    fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "src", "a.ts"), "export const a = 1;\n");
+    for (const [tool, input] of [
+      ["Write", { file_path: "src/a.ts", content: "pwn" }],
+      ["Edit", { file_path: "src/a.ts", old_string: "a", new_string: "b" }],
+      ["MultiEdit", { file_path: "src/a.ts", edits: [] }],
+      ["NotebookEdit", { notebook_path: "src/a.ipynb" }],
+      ["Bash", { command: "echo hi" }],
+      ["TodoWrite", { todos: [] }],
+      ["WebFetch", { url: "https://example.invalid" }],
+      ["WebSearch", { query: "secret" }],
+      ["mcp__other__write", {}],
+    ] as const) {
+      const r = runPartnerHook(tool, input as Record<string, unknown>);
+      expect(r.status, `应拦截 ${tool}`).toBe(2);
+      expect(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision).toBe(
+        "deny",
+      );
+      expect(r.stdout).toContain("只读");
+    }
+    // 写类工具即使落在仓库内、平时会被放行，partner 下也一律不落地
+    expect(fs.readFileSync(path.join(tmp, "src", "a.ts"), "utf8")).toBe(
+      "export const a = 1;\n",
+    );
+  });
+
+  it("读类工具照常放行（右栏仍能读、搜，并用 Glob 模式列目录）", () => {
+    fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmp, "src", "a.ts"), "export const a = 1;\n");
+    for (const [tool, input] of [
+      ["Read", { file_path: "src/a.ts" }],
+      ["Glob", { pattern: "src/**/*.ts" }],
+      ["Grep", { pattern: "export" }],
+      ["Glob", { pattern: "src/*" }],
+    ] as const) {
+      expect(
+        runPartnerHook(tool, input as Record<string, unknown>).status,
+        `应放行 ${tool}`,
+      ).toBe(0);
+    }
+  });
+
+  it("LS 不在 partner 白名单（CLI 2.1.296 不提供，列目录改由 Glob 承担）", () => {
+    expect(runPartnerHook("LS", { path: "src" }).status, "应拦截 LS").toBe(2);
+  });
+
+  it("partner 下即便注入 STAGENT_HOOK_ALLOW_BASH=1 也拦 Shell（角色优先）", () => {
+    const r = runPartnerHook(
+      "Bash",
+      { command: "rm -rf src" },
+      { STAGENT_HOOK_ALLOW_BASH: "1" },
+    );
+    expect(r.status).toBe(2);
+    expect(r.stdout).toContain("只读");
+  });
+
+  it("未收到角色声明时保持既有行为：仓库内写文件仍放行（worker/存量进程兼容）", () => {
+    fs.mkdirSync(path.join(tmp, "src"), { recursive: true });
+    const r = spawnSync(process.execPath, [HOOK_SCRIPT], {
+      input: JSON.stringify({
+        tool_name: "Write",
+        tool_input: { file_path: "src/b.ts", content: "ok" },
+      }),
+      env: { PATH: process.env["PATH"] ?? "", STAGENT_HOOK_ROOT: tmp },
+      encoding: "utf8",
+    });
+    expect(r.status).toBe(0);
   });
 });
 

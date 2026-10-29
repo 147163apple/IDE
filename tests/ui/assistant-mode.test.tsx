@@ -16,6 +16,7 @@ function transportWith(opts: {
         label: "Claude Code",
         control_mode: "GATEWAY_ENFORCED" as const,
         verified_on: "x",
+        tool_mode: "read_only" as const,
         available: opts.realAvailable,
         unavailable_reason: opts.realAvailable
           ? undefined
@@ -26,6 +27,7 @@ function transportWith(opts: {
         label: "练习沙箱（可选）",
         control_mode: "GATEWAY_ENFORCED" as const,
         verified_on: "",
+        tool_mode: "read_only" as const,
         available: true,
       },
     ]),

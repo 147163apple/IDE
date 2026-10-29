@@ -77,6 +77,7 @@ describe("TASK-C.9a 三态单一主 CTA（UI）", () => {
           label: "Claude Code",
           control_mode: "UNCONTROLLED_EXTERNAL" as const,
           verified_on: "",
+          tool_mode: "read_only" as const,
           available: true,
         },
       ],

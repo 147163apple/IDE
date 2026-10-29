@@ -4678,7 +4678,10 @@ export class StagentDaemon {
 
 function defaultChatAdapters(repoRoot: string): ChatAdapter[] {
   return [
+    // TASK-J.1：右栏是方案搭档，不是施工工人——显式声明 partner（只读工具集）。
+    // 不依赖 ClaudeCodeAdapter 的默认值：这一行就是「右栏绝不写主干」的唯一定义处。
     new ClaudeCodeAdapter({
+      role: "partner",
       configDir: path.join(repoRoot, ".stagent", "claude-config"),
       verifiedOn: CLAUDE_CODE_VERIFIED_ON,
     }),
