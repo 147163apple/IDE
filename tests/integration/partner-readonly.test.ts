@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { safeRmSync } from "../helpers/tmp";
 import {
   ClaudeCodeAdapter,
+  HOOK_COMMAND_PATH,
   HOOK_SCRIPT,
   PARTNER_DENIED_TOOLS,
   PARTNER_TOOLS,
@@ -211,7 +212,7 @@ describe("TASK-J.1 右栏搭档只读（P-01）", () => {
     // hook 不是外部脚本：它就是这份 settings 里注册的 PreToolUse
     const settings = JSON.parse(fs.readFileSync(launch.settingsPath, "utf8"));
     expect(settings.hooks.PreToolUse[0].hooks[0].command).toContain(
-      HOOK_SCRIPT,
+      HOOK_COMMAND_PATH,
     );
     expect(settings.hooks.PreToolUse[0].hooks[0].onFailure).toBe("block");
 
@@ -284,6 +285,29 @@ describe("TASK-J.1 右栏搭档只读（P-01）", () => {
 });
 
 /**
+ * daemon 停机后，Windows 上目录句柄可能晚于 stop() 才释放：删除遇到 EBUSY / ENOTEMPTY / EPERM 时
+ * 异步退避重试（最长约 5 秒），等句柄释放后再删；超时仍失败则原样抛出。
+ */
+async function removeWhenReleased(
+  dir: string,
+  timeoutMs = 5000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      safeRmSync(dir);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const transient =
+        code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
+      if (!transient || Date.now() >= deadline) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+}
+
+/**
  * Daemon 实际注册的右栏集合（不是本文件自建的适配器）：
  * GET /api/chat/adapters 返回的每个候选都必须是 read_only，
  * 否则「标签只读、实际可写」的适配器仍会进右栏。
@@ -301,7 +325,7 @@ describe("TASK-J.1 右栏注册集合（Daemon）：全部只读", () => {
   afterEach(async () => {
     if (daemon?.isRunning) await daemon.stop();
     daemon = null;
-    safeRmSync(repo);
+    await removeWhenReleased(repo);
   });
 
   it("adapters 接口里没有任何 read_write 适配器", async () => {

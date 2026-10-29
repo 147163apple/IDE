@@ -82,6 +82,13 @@ export const HOOK_SCRIPT = fileURLToPath(
   new URL("./pretool-hook.mjs", import.meta.url),
 );
 
+/**
+ * hook 命令里使用的脚本路径：统一为正斜杠。
+ * Windows 上反斜杠交给 shell 时会被当作转义符（JSON.stringify 会把它再转义成双反斜杠），
+ * 正斜杠不会被 shell 当作转义符，且 Node 在 Windows 上接受正斜杠路径。
+ */
+export const HOOK_COMMAND_PATH = HOOK_SCRIPT.replace(/\\/g, "/");
+
 /** 右栏搭档的全部可用工具：只读、可搜、可列目录 */
 export const PARTNER_TOOLS = ["Read", "Glob", "Grep"] as const;
 
@@ -192,7 +199,7 @@ export class ClaudeCodeAdapter implements ChatAdapter {
             hooks: [
               {
                 type: "command",
-                command: `node ${JSON.stringify(HOOK_SCRIPT)}`,
+                command: `node "${HOOK_COMMAND_PATH}"`,
                 timeout: 10,
                 onFailure: "block",
               },
