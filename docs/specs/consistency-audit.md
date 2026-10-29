@@ -73,7 +73,7 @@
 | OP-25 | N-11 DAG 装载期缺少授权子集校验 | 待指定 | 已立卡待排期 | J.5 前置依赖 |
 | OP-26 | N-5 C.8～C.16 任务卡均未声明三项不变 | 待指定 | 已立卡待排期 | ADR-0001 纪律执行 |
 | OP-27 | N-1 任务图核销退出码由前端常量代填 | 待指定 | 已立卡待排期 | J.5 manual_confirmation 硬前置 |
-| OP-28 | N-2 右栏 ClaudeCodeAdapter 可写主干 | 待指定 | 已裁决-只读白名单（PR #待填） | J.1 右栏只读化；右栏自由脑暴裁决同批回写；实机证据（J.1）为前置关键路径；失败分支=停用非静默回退 |
+| OP-28 | N-2 右栏 ClaudeCodeAdapter 可写主干 | 待指定 | 已裁决-只读白名单（PR #25） | J.1 右栏只读化；右栏自由脑暴裁决同批回写；实机证据（J.1）为前置关键路径；失败分支=停用非静默回退 |
 | OP-29 | J.1 上下文注入判别位未生效致 CLI 判别位误判的判例（事件：曾以"机器人身份致 CLI 不注入"解释，复核确认为判别位未注入；产出：verify-env --check-context） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-30 | J.1 "无 tool_use 不算通过"裁决先例（事件：声称在真实 Claude CLI 执行的验证，无 tool_use 记录不予通过） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
 | OP-31 | J.1 沙箱 root 全绿不具真机外推效力的判例（事件：沙箱 root 权限可绕过权限类测试，须真实用户环境验证；关联 PR #3 分支真机 Glob 条款） | — | 已裁决-入标准 | docs/specs/evidence-and-acceptance-criteria.md §3.2 |
