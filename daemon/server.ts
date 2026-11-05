@@ -140,6 +140,7 @@ import {
 } from "./guard/gateway-violation-store";
 import { projectDeliveryState } from "../src/lib/state/delivery-state";
 import { ContractOrchestrator } from "./pipeline/orchestrator";
+import { IllegalContractTransitionError } from "./pipeline/contract-store";
 import { TaskGraphEngine } from "./graph/graph-engine";
 import { collectWorktreeEvidence } from "./graph/evidence-collector";
 import type { IlluminationInput } from "./graph/illumination-verifier";
@@ -198,7 +199,11 @@ import {
   getCheckpoint,
   undoLatestCheckpoint,
 } from "./protection/auto-checkpoint";
-import { softwareContractSchema } from "../src/lib/contract.schema";
+import {
+  softwareContractSchema,
+  applyContractScopeChange,
+  ScopeChangeForbiddenError,
+} from "../src/lib/contract.schema";
 import { DeadlockResilience } from "./state/deadlock-resilience";
 import {
   loadPresentationSnapshot,
@@ -2116,9 +2121,13 @@ export class StagentDaemon {
         // TASK-C.7 §3.4：外部改码不只让 Evidence 失效，也要把相关节点
         // 由绿变灰（STALE_REVERIFY）；这是 Node 级与 Evidence 级的同源降级。
         this.graphEngine.markStale(changed);
+        const relativeChanged = changed.map((p) => {
+          const rel = path.relative(worktreePath, p);
+          return rel.split(path.sep).join("/");
+        });
         for (const hit of results) {
           if (!hit.stale) continue;
-          // 规范 §6.1 帧：证据失效的权威通知通道
+          // 规范 §6.1 帧：证据失效的权威通知通道（C.4 扩展超集：包含 worktree_path 与 changed_paths）
           this.broadcast("EVIDENCE_STATUS_CHANGED", {
             contract_id: hit.contractId,
             evidence_id: evidenceId,
@@ -2126,6 +2135,8 @@ export class StagentDaemon {
             reason_code: "EVIDENCE_STALE",
             message:
               "Worktree changed after verification; evidence marked STALE and merge disabled",
+            worktree_path: worktreePath,
+            changed_paths: relativeChanged,
           });
           // 历史扩展帧：保留至 C.x 完成迁移（协议"至少包括"允许扩展帧并存）
           this.broadcast("SCOPE_ALERT", {
@@ -5554,6 +5565,77 @@ export class StagentDaemon {
               code: err.code,
               rejected: err.rejected,
             });
+            return;
+          }
+          this.sendJson(res, 400, { error: (err as Error).message });
+        }
+        return;
+      }
+
+      // TASK-C.4: Scope 变更派生新 Revision 生产接口 (同 contract_id + 修订历史)
+      const scopeRevisionMatch = pathname.match(
+        /^\/api\/contracts\/([^/]+)\/scope-revision$/,
+      );
+      if (scopeRevisionMatch) {
+        let contractId: string;
+        try {
+          contractId = decodeURIComponent(scopeRevisionMatch[1] as string);
+        } catch {
+          this.sendJson(res, 400, { error: "Invalid URL encoding" });
+          return;
+        }
+        if (method !== "POST") {
+          this.sendJson(res, 405, { error: "Method not allowed" });
+          return;
+        }
+        try {
+          const body = (await this.readJsonBody(req)) as {
+            writable_paths?: string[];
+          };
+          if (!body || !Array.isArray(body.writable_paths)) {
+            this.sendJson(res, 400, {
+              error: "writable_paths array is required",
+            });
+            return;
+          }
+          const current = store.get(contractId);
+          if (!current) {
+            this.sendJson(res, 404, { error: "Contract not found" });
+            return;
+          }
+          assertContractScopeAllowed(this.repoRoot, body.writable_paths);
+          // Fail-Closed 裁决在 applyContractScopeChange 内（终态 / 执行中 / 非法边 → 抛错，不落盘）
+          const result = applyContractScopeChange(current, body.writable_paths);
+          const saved =
+            result.mode === "draft"
+              ? store.save(result.contract)
+              : store.transition({
+                  contractId,
+                  lifecycleState: "PENDING_APPROVAL",
+                  approvalStatus: "PENDING_REVIEW",
+                  nextContract: result.contract,
+                });
+          this.emitContractUpdate(saved);
+          this.sendJson(res, 200, {
+            contract: saved,
+            mode: result.mode,
+            previous_revision: result.previousRevision,
+            new_revision: result.newRevision,
+          });
+        } catch (err) {
+          if (err instanceof WritableScopePolicyError) {
+            this.sendJson(res, 403, {
+              error: err.message,
+              code: err.code,
+              rejected: err.rejected,
+            });
+            return;
+          }
+          if (
+            err instanceof ScopeChangeForbiddenError ||
+            err instanceof IllegalContractTransitionError
+          ) {
+            this.sendJson(res, 409, { error: err.message, code: err.code });
             return;
           }
           this.sendJson(res, 400, { error: (err as Error).message });
